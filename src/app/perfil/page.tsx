@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/ProfileForm";
+import VoltarButton from "@/components/VoltarButton";
 import type { Profile } from "@/types/database";
 
 export default async function PerfilPage() {
@@ -21,6 +22,7 @@ export default async function PerfilPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
+      <VoltarButton href="/" />
       <h1 className="mb-1 text-2xl font-bold">
         {perfil ? "Meu perfil" : "Complete seu cadastro"}
       </h1>

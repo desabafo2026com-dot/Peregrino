@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Modo claro/escuro manual: a variante `dark:` passa a reagir à classe
+   "dark" na tag <html> (alternada pelo ThemeToggle), em vez de só seguir
+   a preferência do sistema. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #fafaf9;
   --foreground: #1c1917;
@@ -12,11 +17,9 @@
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0c0a09;
-    --foreground: #fafaf9;
-  }
+:root.dark {
+  --background: #0c0a09;
+  --foreground: #fafaf9;
 }
 
 body {

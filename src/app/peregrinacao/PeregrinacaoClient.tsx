@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { intervalToDuration, formatDuration } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Flag, MapPin, CheckCircle2, Radio, Award, Footprints, Bike } from "lucide-react";
+import { Flag, MapPin, CheckCircle2, Radio, Award, Footprints, Bike, Route as RouteIcon } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
-import type { Peregrinacao, PontoApoio, Profile, Rota, MeioTransporte } from "@/types/database";
+import AlertaProximidade from "@/components/AlertaProximidade";
+import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte } from "@/types/database";
 
 interface Props {
   perfil: Profile;
@@ -15,6 +17,8 @@ interface Props {
   pontosApoio: PontoApoio[];
   rotas: Rota[];
   checkinsCount: number;
+  pontosCheckin: PontoCheckin[];
+  checkinsFeitosIds: string[];
 }
 
 function formatarDuracao(inicio: string | null, fim: Date) {
@@ -36,22 +40,41 @@ function gerarCodigoCertificado() {
   return "PGR-" + raw.replace(/-/g, "").slice(0, 8).toUpperCase();
 }
 
+function obterPosicaoAtual(): Promise<GeolocationPosition | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve(pos),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
 export default function PeregrinacaoClient({
   perfil,
   peregrinacaoInicial,
   pontosApoio,
   rotas,
   checkinsCount: checkinsCountInicial,
+  pontosCheckin,
+  checkinsFeitosIds: checkinsFeitosIdsInicial,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
 
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
   const [checkinsCount, setCheckinsCount] = useState(checkinsCountInicial);
+  const [checkinsFeitosIds, setCheckinsFeitosIds] = useState(checkinsFeitosIdsInicial);
   const [diasPrevistos, setDiasPrevistos] = useState("3");
   const [dataInicioPrevista, setDataInicioPrevista] = useState("");
   const [meioTransporte, setMeioTransporte] = useState<MeioTransporte>("a_pe");
   const [rotaId, setRotaId] = useState(rotas[0]?.id ?? "");
+  const [emGrupo, setEmGrupo] = useState(false);
+  const [nomeGrupo, setNomeGrupo] = useState("");
   const [compartilhando, setCompartilhando] = useState(false);
   const [pontoSelecionado, setPontoSelecionado] = useState("");
   const [loading, setLoading] = useState(false);
@@ -74,6 +97,7 @@ export default function PeregrinacaoClient({
       data: { user },
     } = await supabase.auth.getUser();
     const agora = new Date().toISOString();
+
     const { data, error } = await supabase
       .from("peregrinacoes")
       .insert({
@@ -84,15 +108,40 @@ export default function PeregrinacaoClient({
         data_inicio: iniciarAgora ? agora : null,
         meio_transporte: meioTransporte,
         rota_id: rotaId || null,
+        em_grupo: emGrupo,
+        nome_grupo: emGrupo ? nomeGrupo || null : null,
       })
       .select()
       .single();
-    setLoading(false);
+
     if (error) {
+      setLoading(false);
       setErro(error.message);
       return;
     }
-    setPeregrinacao(data as Peregrinacao);
+
+    const novaPeregrinacao = data as Peregrinacao;
+
+    if (iniciarAgora && rotaId) {
+      // O início da peregrinação já conta como o primeiro check-in.
+      const primeiroPonto = pontosCheckin.find((p) => p.rota_id === rotaId && p.ordem === 1);
+      if (primeiroPonto) {
+        const pos = await obterPosicaoAtual();
+        await supabase.from("checkins").insert({
+          peregrinacao_id: novaPeregrinacao.id,
+          user_id: user!.id,
+          ponto_checkin_id: primeiroPonto.id,
+          latitude: pos?.coords.latitude ?? primeiroPonto.latitude,
+          longitude: pos?.coords.longitude ?? primeiroPonto.longitude,
+        });
+      }
+      setLoading(false);
+      router.push("/peregrinacao/trajeto");
+      return;
+    }
+
+    setLoading(false);
+    setPeregrinacao(novaPeregrinacao);
   }
 
   async function iniciarCaminhada() {
@@ -105,12 +154,36 @@ export default function PeregrinacaoClient({
       .eq("id", peregrinacao.id)
       .select()
       .single();
-    setLoading(false);
+
     if (error) {
+      setLoading(false);
       setErro(error.message);
       return;
     }
-    setPeregrinacao(data as Peregrinacao);
+
+    const atualizada = data as Peregrinacao;
+
+    if (atualizada.rota_id) {
+      const primeiroPonto = pontosCheckin.find(
+        (p) => p.rota_id === atualizada.rota_id && p.ordem === 1
+      );
+      if (primeiroPonto && !checkinsFeitosIds.includes(primeiroPonto.id)) {
+        const pos = await obterPosicaoAtual();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        await supabase.from("checkins").insert({
+          peregrinacao_id: atualizada.id,
+          user_id: user!.id,
+          ponto_checkin_id: primeiroPonto.id,
+          latitude: pos?.coords.latitude ?? primeiroPonto.latitude,
+          longitude: pos?.coords.longitude ?? primeiroPonto.longitude,
+        });
+      }
+    }
+
+    setLoading(false);
+    router.push("/peregrinacao/trajeto");
   }
 
   function iniciarCompartilhamento() {
@@ -157,7 +230,7 @@ export default function PeregrinacaoClient({
     }
   }
 
-  async function fazerCheckin() {
+  async function fazerCheckin(pontoCheckinId?: string) {
     if (!peregrinacao) return;
     if (!navigator.geolocation) {
       setErro("Geolocalização não disponível neste navegador.");
@@ -171,6 +244,7 @@ export default function PeregrinacaoClient({
           peregrinacao_id: peregrinacao.id,
           user_id: peregrinacao.user_id,
           ponto_apoio_id: pontoSelecionado || null,
+          ponto_checkin_id: pontoCheckinId || null,
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
         });
@@ -179,6 +253,9 @@ export default function PeregrinacaoClient({
           return;
         }
         setCheckinsCount((c) => c + 1);
+        if (pontoCheckinId) {
+          setCheckinsFeitosIds((ids) => [...ids, pontoCheckinId]);
+        }
         setMsg("Check-in registrado com sucesso!");
       },
       () => setErro("Não foi possível acessar sua localização para o check-in.")
@@ -295,6 +372,29 @@ export default function PeregrinacaoClient({
               </select>
             </div>
           )}
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              id="emgrupo"
+              type="checkbox"
+              className="h-4 w-4"
+              checked={emGrupo}
+              onChange={(e) => setEmGrupo(e.target.checked)}
+            />
+            <label htmlFor="emgrupo" className="text-sm font-medium">
+              Vou em grupo nesta peregrinação
+            </label>
+          </div>
+          {emGrupo && (
+            <div>
+              <label className="label">Nome do grupo</label>
+              <input
+                className="input"
+                value={nomeGrupo}
+                onChange={(e) => setNomeGrupo(e.target.value)}
+                placeholder="Ex: Grupo Nossa Senhora Aparecida"
+              />
+            </div>
+          )}
         </div>
         {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
         <div className="flex flex-wrap gap-3">
@@ -317,6 +417,7 @@ export default function PeregrinacaoClient({
           {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
           {MEIO_TRANSPORTE_LABELS[peregrinacao.meio_transporte] ?? "a pé"}
           {rotaPlanejada ? ` — ${rotaPlanejada.nome} (${rotaPlanejada.origem} → ${rotaPlanejada.destino})` : ""}
+          {peregrinacao.em_grupo ? ` — em grupo${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}` : ""}
         </p>
         <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-300">
           Peregrinação planejada
@@ -338,21 +439,44 @@ export default function PeregrinacaoClient({
     return (
       <div className="flex flex-col gap-5">
         <div className="card border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
-          <p className="flex items-center gap-2 font-semibold text-green-800 dark:text-green-400">
-            <Radio size={18} /> Peregrinação em andamento
-          </p>
-          <p className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-            {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} /> : <Footprints size={14} />}
-            {MEIO_TRANSPORTE_LABELS[peregrinacao.meio_transporte] ?? "a pé"}
-            {rotaAtiva ? ` — ${rotaAtiva.nome} (${rotaAtiva.origem} → ${rotaAtiva.destino})` : ""}
-          </p>
-          <p className="text-sm text-neutral-600 dark:text-neutral-300">
-            Iniciada em{" "}
-            {peregrinacao.data_inicio
-              ? new Date(peregrinacao.data_inicio).toLocaleString("pt-BR")
-              : "-"}
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-2 font-semibold text-green-800 dark:text-green-400">
+                <Radio size={18} /> Peregrinação em andamento
+              </p>
+              <p className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+                {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} /> : <Footprints size={14} />}
+                {MEIO_TRANSPORTE_LABELS[peregrinacao.meio_transporte] ?? "a pé"}
+                {rotaAtiva ? ` — ${rotaAtiva.nome} (${rotaAtiva.origem} → ${rotaAtiva.destino})` : ""}
+                {peregrinacao.em_grupo
+                  ? ` — em grupo${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
+                  : ""}
+              </p>
+              <p className="text-sm text-neutral-600 dark:text-neutral-300">
+                Iniciada em{" "}
+                {peregrinacao.data_inicio
+                  ? new Date(peregrinacao.data_inicio).toLocaleString("pt-BR")
+                  : "-"}
+              </p>
+            </div>
+            {pontosCheckin.length > 0 && (
+              <AlertaProximidade
+                pontosCheckin={pontosCheckin}
+                checkinsFeitosIds={checkinsFeitosIds}
+                onCheckin={(ponto) => fazerCheckin(ponto.id)}
+              />
+            )}
+          </div>
         </div>
+
+        {pontosCheckin.length > 0 && (
+          <Link
+            href="/peregrinacao/trajeto"
+            className="btn-secondary flex items-center justify-center gap-2"
+          >
+            <RouteIcon size={18} /> Ver trajeto e pontos de check-in
+          </Link>
+        )}
 
         <div className="card">
           <h2 className="mb-2 text-base font-bold text-amber-800 dark:text-amber-500">
@@ -368,8 +492,8 @@ export default function PeregrinacaoClient({
             <>
               <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
                 {compartilhando
-                  ? "Sua localização está sendo compartilhada em tempo real."
-                  : "Ative para que outros peregrinos e equipes de apoio possam te localizar."}
+                  ? "Sua localização está sendo compartilhada com a equipe de apoio."
+                  : "Ative para que a equipe de apoio possa avisar sobre condições adversas e te localizar em caso de emergência. Outros peregrinos não veem sua localização."}
               </p>
               {!compartilhando ? (
                 <button onClick={iniciarCompartilhamento} className="btn-primary flex items-center gap-2">
@@ -403,7 +527,7 @@ export default function PeregrinacaoClient({
               </option>
             ))}
           </select>
-          <button onClick={fazerCheckin} className="btn-primary flex items-center gap-2">
+          <button onClick={() => fazerCheckin()} className="btn-primary flex items-center gap-2">
             <CheckCircle2 size={18} /> Fazer check-in aqui
           </button>
           {msg && <p className="mt-2 text-sm text-green-700">{msg}</p>}

@@ -1,6 +1,15 @@
 export type Sexo = "masculino" | "feminino" | "outro" | "prefiro_nao_dizer";
-export type Motivo = "promessa" | "curiosidade" | "desafio" | "companhia" | "outros";
+export type Motivo =
+  | "promessa"
+  | "curiosidade"
+  | "desafio"
+  | "companhia"
+  | "fe"
+  | "aventura"
+  | "religiosidade"
+  | "outros";
 export type StatusPeregrinacao = "planejada" | "em_andamento" | "concluida" | "cancelada";
+export type StatusGerentePap = "pendente" | "aprovado" | "rejeitado";
 export type MeioTransporte = "a_pe" | "bicicleta";
 export type LadoRodovia =
   | "marginal_norte"
@@ -15,19 +24,46 @@ export interface Profile {
   nome_completo: string;
   telefone: string | null;
   cidade: string;
+  uf: string | null;
   faz_parte_grupo: boolean;
   nome_grupo: string | null;
   ja_fez_trajeto: boolean;
   data_nascimento: string;
   sexo: Sexo;
   religiao: string | null;
+  religiao_outro_desc: string | null;
   motivo: Motivo;
   motivo_outro_desc: string | null;
   tem_acompanhamento_carro_apoio: boolean;
   aceita_compartilhar_localizacao: boolean;
+  avatar_url: string | null;
   is_admin: boolean;
   criado_em: string;
   atualizado_em: string;
+}
+
+export interface GerentePap {
+  id: string;
+  nome_completo: string;
+  telefone: string;
+  nome_organizacao: string | null;
+  status: StatusGerentePap;
+  observacao_admin: string | null;
+  aprovado_por: string | null;
+  aprovado_em: string | null;
+  criado_em: string;
+}
+
+export interface PontoCheckin {
+  id: string;
+  rota_id: string;
+  cidade: string;
+  ordem: number;
+  km_aproximado: number | null;
+  latitude: number;
+  longitude: number;
+  descricao: string | null;
+  criado_em: string;
 }
 
 export interface Rota {
@@ -44,6 +80,7 @@ export interface Rota {
 export interface PontoApoio {
   id: string;
   criado_por: string | null;
+  gerente_id: string | null;
   nome: string;
   responsavel: string | null;
   telefone: string | null;
@@ -95,6 +132,8 @@ export interface Peregrinacao {
   compartilhar_localizacao: boolean;
   meio_transporte: MeioTransporte;
   rota_id: string | null;
+  em_grupo: boolean;
+  nome_grupo: string | null;
   criado_em: string;
 }
 
@@ -112,6 +151,7 @@ export interface Checkin {
   peregrinacao_id: string;
   user_id: string;
   ponto_apoio_id: string | null;
+  ponto_checkin_id: string | null;
   latitude: number;
   longitude: number;
   criado_em: string;

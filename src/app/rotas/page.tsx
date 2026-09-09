@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LADO_RODOVIA_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
+import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
 import type { PontoRisco, Rota, TrechoSeguranca } from "@/types/database";
 
@@ -51,6 +52,7 @@ export default async function RotasPage({
 
   return (
     <div className="flex flex-col gap-8">
+      <VoltarButton href="/" />
       <div>
         <h1 className="text-2xl font-bold">Rotas de peregrinação</h1>
         <p className="text-sm text-neutral-500">

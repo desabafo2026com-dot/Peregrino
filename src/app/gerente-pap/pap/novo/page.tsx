@@ -18,7 +18,7 @@ const MapView = dynamic(() => import("@/components/MapView"), {
   ),
 });
 
-export default function NovoPapPage() {
+export default function NovoPapGerentePage() {
   const router = useRouter();
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [rotaId, setRotaId] = useState<string>("");
@@ -75,6 +75,7 @@ export default function NovoPapPage() {
 
     const { error } = await supabase.from("pontos_apoio").insert({
       criado_por: user?.id,
+      gerente_id: user?.id,
       nome,
       responsavel: responsavel || null,
       telefone: telefone || null,
@@ -93,17 +94,18 @@ export default function NovoPapPage() {
       setErro(error.message);
       return;
     }
-    router.push("/mapa");
+    router.push("/gerente-pap");
     router.refresh();
   }
 
   return (
     <div className="mx-auto max-w-2xl">
-      <VoltarButton href="/admin" />
-      <h2 className="mb-1 text-xl font-bold">Cadastrar PAP</h2>
+      <VoltarButton href="/gerente-pap" />
+      <h2 className="mb-1 text-xl font-bold">Cadastrar meu PAP</h2>
       <p className="mb-6 text-sm text-neutral-500">
         PAP — Ponto de Apoio ao Peregrino. Preencha os dados e marque a
-        localização exata no mapa para fixar o ponto.
+        localização exata no mapa para fixar o ponto. Ele aparecerá para
+        todos os peregrinos.
       </p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">

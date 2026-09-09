@@ -473,4 +473,222 @@ $$;
 
 grant execute on function public.estatisticas_admin() to authenticated;
 
+-- =====================================================================
+-- MIGRATION 3 — Gerente de PAP, check-ins por cidade, privacidade de
+-- localização, tema, avatar/foto, grupo por peregrinação, novos motivos
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+-- Novos motivos de peregrinação
+alter type motivo_enum add value if not exists 'fe';
+alter type motivo_enum add value if not exists 'aventura';
+alter type motivo_enum add value if not exists 'religiosidade';
+
+-- profiles: UF de origem, descrição de religião "outros" e avatar/foto
+alter table public.profiles add column if not exists uf text;
+alter table public.profiles add column if not exists religiao_outro_desc text;
+alter table public.profiles add column if not exists avatar_url text;
+
+-- peregrinacoes: "em grupo" específico desta caminhada (independente do perfil geral)
+alter table public.peregrinacoes add column if not exists em_grupo boolean not null default false;
+alter table public.peregrinacoes add column if not exists nome_grupo text;
+
+-- ---------------------------------------------------------------------
+-- PRIVACIDADE DA LOCALIZAÇÃO — só administradores (e o próprio peregrino)
+-- veem a posição; NÃO é mais visível para outros peregrinos.
+-- A localização serve para avisar sobre condições adversas e para busca
+-- em caso de emergência, não para que outros peregrinos vejam.
+-- ---------------------------------------------------------------------
+drop policy if exists "localizacoes_select_auth" on public.localizacoes_ativas;
+drop policy if exists "localizacoes_select_admin_ou_own" on public.localizacoes_ativas;
+create policy "localizacoes_select_admin_ou_own" on public.localizacoes_ativas for select to authenticated
+  using (public.is_admin() or auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------
+-- GERENTES DE PAP — cadastro separado do peregrino, precisa de aprovação
+-- do administrador antes de poder cadastrar/gerenciar seu PAP.
+-- ---------------------------------------------------------------------
+create table if not exists public.gerentes_pap (
+  id uuid primary key references auth.users(id) on delete cascade,
+  nome_completo text not null,
+  telefone text not null,
+  nome_organizacao text,
+  status text not null default 'pendente' check (status in ('pendente', 'aprovado', 'rejeitado')),
+  observacao_admin text,
+  aprovado_por uuid references auth.users(id) on delete set null,
+  aprovado_em timestamptz,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.gerentes_pap is 'Cadastro de gerentes de PAP, separado do peregrino. Precisa aprovação de administrador (status) antes de poder cadastrar PAP.';
+
+alter table public.gerentes_pap enable row level security;
+
+drop policy if exists "gerentes_pap_select_admin_ou_own" on public.gerentes_pap;
+create policy "gerentes_pap_select_admin_ou_own" on public.gerentes_pap for select to authenticated
+  using (public.is_admin() or auth.uid() = id);
+
+drop policy if exists "gerentes_pap_insert_own" on public.gerentes_pap;
+create policy "gerentes_pap_insert_own" on public.gerentes_pap for insert to authenticated
+  with check (auth.uid() = id and status = 'pendente');
+
+drop policy if exists "gerentes_pap_update_admin" on public.gerentes_pap;
+create policy "gerentes_pap_update_admin" on public.gerentes_pap for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- Função auxiliar: o usuário logado é um gerente de PAP já aprovado?
+create or replace function public.is_gerente_pap_aprovado()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.gerentes_pap where id = auth.uid() and status = 'aprovado'
+  );
+$$;
+
+grant execute on function public.is_gerente_pap_aprovado() to authenticated;
+
+-- pontos_apoio (PAP): agora também pode ser cadastrado/gerido por um
+-- gerente de PAP aprovado, além do administrador.
+alter table public.pontos_apoio add column if not exists gerente_id uuid references public.gerentes_pap(id) on delete set null;
+
+drop policy if exists "pontos_apoio_insert_admin" on public.pontos_apoio;
+drop policy if exists "pontos_apoio_insert_admin_ou_gerente" on public.pontos_apoio;
+create policy "pontos_apoio_insert_admin_ou_gerente" on public.pontos_apoio for insert to authenticated
+  with check (
+    public.is_admin()
+    or (gerente_id = auth.uid() and public.is_gerente_pap_aprovado())
+  );
+
+drop policy if exists "pontos_apoio_update_admin" on public.pontos_apoio;
+drop policy if exists "pontos_apoio_update_admin_ou_gerente" on public.pontos_apoio;
+create policy "pontos_apoio_update_admin_ou_gerente" on public.pontos_apoio for update to authenticated
+  using (public.is_admin() or gerente_id = auth.uid())
+  with check (public.is_admin() or gerente_id = auth.uid());
+
+drop policy if exists "pontos_apoio_delete_admin" on public.pontos_apoio;
+drop policy if exists "pontos_apoio_delete_admin_ou_gerente" on public.pontos_apoio;
+create policy "pontos_apoio_delete_admin_ou_gerente" on public.pontos_apoio for delete to authenticated
+  using (public.is_admin() or gerente_id = auth.uid());
+
+-- ---------------------------------------------------------------------
+-- PONTOS DE CHECK-IN — um ponto seguro por cidade de cada rota. O início
+-- da peregrinação já conta como o primeiro check-in (ordem = 1).
+-- ---------------------------------------------------------------------
+create table if not exists public.pontos_checkin (
+  id uuid primary key default gen_random_uuid(),
+  rota_id uuid not null references public.rotas(id) on delete cascade,
+  cidade text not null,
+  ordem smallint not null,
+  km_aproximado numeric(6,1),
+  latitude double precision not null,
+  longitude double precision not null,
+  descricao text,
+  criado_em timestamptz not null default now(),
+  unique (rota_id, ordem)
+);
+
+comment on column public.pontos_checkin.km_aproximado is 'Distância aproximada (km) desde a origem da rota — estimativa, não é o km oficial da rodovia.';
+
+alter table public.pontos_checkin enable row level security;
+drop policy if exists "pontos_checkin_select_all" on public.pontos_checkin;
+create policy "pontos_checkin_select_all" on public.pontos_checkin for select using (true);
+drop policy if exists "pontos_checkin_admin_write" on public.pontos_checkin;
+create policy "pontos_checkin_admin_write" on public.pontos_checkin for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- checkins: agora também pode referenciar um ponto de check-in de cidade
+alter table public.checkins add column if not exists ponto_checkin_id uuid references public.pontos_checkin(id) on delete set null;
+
+-- Seed: um ponto de check-in por cidade em cada rota (coordenadas
+-- aproximadas do centro da cidade / km estimado a partir da origem).
+insert into public.pontos_checkin (rota_id, cidade, ordem, km_aproximado, latitude, longitude, descricao)
+select r.id, x.cidade, x.ordem, x.km, x.lat, x.lng, x.descricao
+from (values
+  ('norte', 'São Paulo', 1::smallint, 0.0, -23.5505, -46.6333, 'Marco inicial da Rota Norte.'),
+  ('norte', 'Guarulhos', 2::smallint, 20.0, -23.4538, -46.5333, null),
+  ('norte', 'Arujá', 3::smallint, 40.0, -23.3961, -46.3211, null),
+  ('norte', 'Santa Isabel', 4::smallint, 55.0, -23.3175, -46.2222, null),
+  ('norte', 'Jacareí', 5::smallint, 80.0, -23.3053, -45.9658, null),
+  ('norte', 'São José dos Campos', 6::smallint, 90.0, -23.2237, -45.9009, null),
+  ('norte', 'Caçapava', 7::smallint, 105.0, -23.0989, -45.7075, null),
+  ('norte', 'Taubaté', 8::smallint, 115.0, -23.0264, -45.5553, null),
+  ('norte', 'Pindamonhangaba', 9::smallint, 135.0, -22.9247, -45.4614, null),
+  ('norte', 'Roseira', 10::smallint, 150.0, -22.8967, -45.3081, null),
+  ('norte', 'Guaratinguetá', 11::smallint, 160.0, -22.8161, -45.1919, null),
+  ('norte', 'Aparecida', 12::smallint, 170.0, -22.8494, -45.2317, 'Chegada — Basílica de Nossa Senhora Aparecida.'),
+  ('sul', 'Queluz', 1::smallint, 0.0, -22.5354, -44.7692, 'Marco inicial da Rota Sul.'),
+  ('sul', 'Lavrinhas', 2::smallint, 12.0, -22.5719, -44.9082, null),
+  ('sul', 'Cruzeiro', 3::smallint, 22.0, -22.5794, -44.9678, null),
+  ('sul', 'Cachoeira Paulista', 4::smallint, 35.0, -22.6667, -45.0083, null),
+  ('sul', 'Aparecida', 5::smallint, 45.0, -22.8494, -45.2317, 'Chegada — Basílica de Nossa Senhora Aparecida.')
+) as x(rota_slug, cidade, ordem, km, lat, lng, descricao)
+join public.rotas r on r.slug = x.rota_slug
+on conflict (rota_id, ordem) do nothing;
+
+-- Estatísticas administrativas: inclui gerentes de PAP pendentes de aprovação
+drop function if exists public.estatisticas_admin();
+create or replace function public.estatisticas_admin()
+returns table (
+  peregrinos_ativos bigint,
+  peregrinacoes_concluidas bigint,
+  concluidas_hoje bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  pontos_risco_total bigint,
+  gerentes_pendentes bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  return query
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.peregrinacoes where status = 'concluida'),
+    (select count(*) from public.peregrinacoes where status = 'concluida' and data_fim >= current_date),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio where ativo = true),
+    (select count(*) from public.pontos_risco),
+    (select count(*) from public.gerentes_pap where status = 'pendente');
+end;
+$$;
+
+grant execute on function public.estatisticas_admin() to authenticated;
+
+-- ---------------------------------------------------------------------
+-- STORAGE — bucket público para foto de perfil (avatar)
+-- ---------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+drop policy if exists "avatars_select_all" on storage.objects;
+create policy "avatars_select_all" on storage.objects for select
+  using (bucket_id = 'avatars');
+
+drop policy if exists "avatars_insert_own" on storage.objects;
+create policy "avatars_insert_own" on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "avatars_update_own" on storage.objects;
+create policy "avatars_update_own" on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "avatars_delete_own" on storage.objects;
+create policy "avatars_delete_own" on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
 -- FIM DO SCHEMA

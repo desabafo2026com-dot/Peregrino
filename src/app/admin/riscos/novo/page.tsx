@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { NIVEL_RISCO_LABELS } from "@/lib/constants";
+import VoltarButton from "@/components/VoltarButton";
 import { LocateFixed } from "lucide-react";
 import type { Rota } from "@/types/database";
 
@@ -90,6 +91,7 @@ export default function NovoRiscoPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
+      <VoltarButton href="/admin" />
       <h2 className="mb-1 text-xl font-bold">Cadastrar local de risco</h2>
       <p className="mb-6 text-sm text-neutral-500">
         Marque no mapa um trecho específico de maior perigo para os

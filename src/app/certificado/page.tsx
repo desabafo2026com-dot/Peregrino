@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CertificadoView from "@/components/CertificadoView";
+import VoltarButton from "@/components/VoltarButton";
 import type { Certificado } from "@/types/database";
 
 export default async function CertificadoPage() {
@@ -19,6 +20,7 @@ export default async function CertificadoPage() {
   if (!certificados?.length) {
     return (
       <div className="mx-auto max-w-md text-center text-neutral-500">
+        <VoltarButton href="/peregrinacao" />
         <p>
           Você ainda não concluiu nenhuma peregrinação. Ao finalizar, o
           certificado aparece aqui automaticamente.
@@ -29,6 +31,7 @@ export default async function CertificadoPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
+      <VoltarButton href="/peregrinacao" />
       <h1 className="text-2xl font-bold">Meus certificados</h1>
       {(certificados as Certificado[]).map((c) => (
         <CertificadoView key={c.id} certificado={c} />

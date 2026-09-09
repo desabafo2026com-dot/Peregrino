@@ -22,10 +22,10 @@ export default async function Home() {
       desc: "Veja os PAP (Pontos de Apoio ao Peregrino) — água, alimentação, descanso e doações ao longo da rota.",
     },
     {
-      href: "/admin/pap/novo",
+      href: "/gerente-pap/cadastro",
       icon: MapPinPlus,
       title: "Cadastre seu PAP",
-      desc: "Área para administradores cadastrarem novos Pontos de Apoio ao Peregrino, marcando a localização no mapa.",
+      desc: "Cadastro para gerentes de PAP: após aprovação, cadastre seu Ponto de Apoio ao Peregrino no mapa para todos verem.",
     },
     {
       href: "/rotas",

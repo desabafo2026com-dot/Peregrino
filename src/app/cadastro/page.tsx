@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { UserPlus } from "lucide-react";
+import { validarNomeCompleto } from "@/lib/validation";
+import VoltarButton from "@/components/VoltarButton";
 
 export default function CadastroPage() {
   const [nome, setNome] = useState("");
@@ -22,6 +24,11 @@ export default function CadastroPage() {
     setErro(null);
     setSucesso(null);
 
+    const erroNome = validarNomeCompleto(nome);
+    if (erroNome) {
+      setErro(erroNome);
+      return;
+    }
     if (senha !== confirmarSenha) {
       setErro("As senhas não coincidem.");
       return;
@@ -65,6 +72,7 @@ export default function CadastroPage() {
 
   return (
     <div className="mx-auto max-w-sm">
+      <VoltarButton href="/" />
       <div className="card">
         <h1 className="mb-1 flex items-center gap-2 text-xl font-bold">
           <UserPlus size={22} className="text-amber-700" /> Criar conta
@@ -82,8 +90,11 @@ export default function CadastroPage() {
               className="input"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Seu nome completo"
+              placeholder="Nome e sobrenome"
             />
+            <p className="mt-1 text-xs text-neutral-500">
+              Informe nome e sobrenome, como em seu documento.
+            </p>
           </div>
 
           <div>

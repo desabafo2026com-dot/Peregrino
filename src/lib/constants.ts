@@ -1,10 +1,44 @@
 export const MOTIVOS: { value: string; label: string }[] = [
+  { value: "fe", label: "Fé" },
   { value: "promessa", label: "Promessa" },
+  { value: "religiosidade", label: "Religiosidade" },
+  { value: "aventura", label: "Aventura" },
   { value: "curiosidade", label: "Curiosidade" },
   { value: "desafio", label: "Desafio pessoal" },
   { value: "companhia", label: "Companhia (amigo/família)" },
   { value: "outros", label: "Outros" },
 ];
+
+export const RELIGIOES: { value: string; label: string }[] = [
+  { value: "catolica", label: "Católica" },
+  { value: "evangelica", label: "Evangélica" },
+  { value: "espirita", label: "Espírita" },
+  { value: "umbanda_candomble", label: "Umbanda / Candomblé" },
+  { value: "testemunha_de_jeova", label: "Testemunha de Jeová" },
+  { value: "mormon", label: "Mórmon (SUD)" },
+  { value: "judaica", label: "Judaica" },
+  { value: "islamica", label: "Islâmica" },
+  { value: "budista", label: "Budista" },
+  { value: "ateu", label: "Ateu(a)" },
+  { value: "agnostico", label: "Agnóstico(a)" },
+  { value: "outros", label: "Outra" },
+  { value: "prefiro_nao_dizer", label: "Prefiro não dizer" },
+];
+
+export const AVATARES_PEREGRINO: string[] = [
+  "/avatars/peregrino-1.svg",
+  "/avatars/peregrino-2.svg",
+  "/avatars/peregrino-3.svg",
+  "/avatars/peregrino-4.svg",
+  "/avatars/peregrino-5.svg",
+  "/avatars/peregrino-6.svg",
+];
+
+export const STATUS_GERENTE_LABELS: Record<string, string> = {
+  pendente: "Aguardando aprovação",
+  aprovado: "Aprovado",
+  rejeitado: "Rejeitado",
+};
 
 export const SEXO_OPTIONS: { value: string; label: string }[] = [
   { value: "masculino", label: "Masculino" },

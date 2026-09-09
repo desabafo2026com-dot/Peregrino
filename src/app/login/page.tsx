@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import VoltarButton from "@/components/VoltarButton";
 import { LogIn } from "lucide-react";
 
 function LoginForm() {
@@ -39,6 +40,7 @@ function LoginForm() {
 
   return (
     <div className="mx-auto max-w-sm">
+      <VoltarButton href="/" />
       <div className="card">
         <h1 className="mb-1 flex items-center gap-2 text-xl font-bold">
           <LogIn size={22} className="text-amber-700" /> Entrar

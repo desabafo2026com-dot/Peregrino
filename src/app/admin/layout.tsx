@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ShieldAlert, LayoutDashboard, MapPinPlus, TriangleAlert, Route } from "lucide-react";
+import { ShieldAlert, LayoutDashboard, MapPinPlus, TriangleAlert, Route, Users } from "lucide-react";
 
 const ADMIN_LINKS = [
   { href: "/admin", label: "Painel", icon: LayoutDashboard },
   { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
+  { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
   { href: "/admin/riscos/novo", label: "Locais de risco", icon: TriangleAlert },
   { href: "/admin/rotas", label: "Rotas (Sul/Norte)", icon: Route },
 ];

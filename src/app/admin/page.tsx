@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import AdminMapClient from "./AdminMapClient";
-import { Users, Award, CheckCircle2, MapPinned, TriangleAlert, CalendarCheck } from "lucide-react";
+import VoltarButton from "@/components/VoltarButton";
+import { Users, Award, CheckCircle2, MapPinned, TriangleAlert, CalendarCheck, UserCheck } from "lucide-react";
 import type { PontoApoio, PontoRisco } from "@/types/database";
 
 interface StatsAdmin {
@@ -11,6 +12,7 @@ interface StatsAdmin {
   checkins_total: number;
   pontos_apoio_ativos: number;
   pontos_risco_total: number;
+  gerentes_pendentes: number;
 }
 
 export default async function AdminDashboardPage() {
@@ -32,11 +34,13 @@ export default async function AdminDashboardPage() {
         { icon: CheckCircle2, label: "Check-ins hoje", value: stats.checkins_hoje },
         { icon: MapPinned, label: "PAP ativos", value: stats.pontos_apoio_ativos },
         { icon: TriangleAlert, label: "Locais de risco", value: stats.pontos_risco_total },
+        { icon: UserCheck, label: "Gerentes PAP pendentes", value: stats.gerentes_pendentes },
       ]
     : [];
 
   return (
     <div className="flex flex-col gap-6">
+      <VoltarButton href="/" />
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {cards.map((c) => (
           <div key={c.label} className="card text-center">

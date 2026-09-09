@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import RotasAdminClient from "./RotasAdminClient";
+import VoltarButton from "@/components/VoltarButton";
 import type { Rota, TrechoSeguranca } from "@/types/database";
 
 export default async function AdminRotasPage() {
@@ -11,6 +12,7 @@ export default async function AdminRotasPage() {
 
   return (
     <div>
+      <VoltarButton href="/admin" />
       <h2 className="mb-1 text-xl font-bold">Trechos por rota</h2>
       <p className="mb-6 text-sm text-neutral-500">
         Defina, para cada rota (Sul ou Norte), qual lado da rodovia seguir em

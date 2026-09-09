@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import VoltarButton from "@/components/VoltarButton";
 import { ShieldCheck, Search } from "lucide-react";
 
 interface Resultado {
@@ -37,6 +38,7 @@ export default function VerificarPage() {
 
   return (
     <div className="mx-auto max-w-md">
+      <VoltarButton href="/" />
       <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold">
         <ShieldCheck className="text-amber-700" /> Verificar certificado
       </h1>

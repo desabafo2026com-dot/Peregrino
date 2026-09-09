@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Menu, X, MapPin, Route, User, LogOut, Home, Footprints, ShieldCheck } from "lucide-react";
+import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
   { href: "/", label: "Início", icon: Home },
@@ -97,11 +98,15 @@ export default function Navbar() {
               <LogOut size={16} /> Sair
             </button>
           )}
+          <ThemeToggle />
         </nav>
 
-        <button className="md:hidden" onClick={() => setOpen(!open)} aria-label="Menu">
-          {open ? <X /> : <Menu />}
-        </button>
+        <div className="flex items-center gap-1 md:hidden">
+          <ThemeToggle />
+          <button onClick={() => setOpen(!open)} aria-label="Menu">
+            {open ? <X /> : <Menu />}
+          </button>
+        </div>
       </div>
 
       {open && (
