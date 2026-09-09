@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0c0a09;
+    --foreground: #fafaf9;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(212 212 212);
+  background: white;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  outline: none;
+}
+.input:focus {
+  border-color: rgb(180 83 9);
+  box-shadow: 0 0 0 2px rgba(180, 83, 9, 0.15);
+}
+.dark .input {
+  background: rgb(23 23 23);
+  border-color: rgb(64 64 64);
+  color: white;
+}
+
+.label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgb(68 64 60);
+  margin-bottom: 0.25rem;
+  display: block;
+}
+.dark .label {
+  color: rgb(214 211 209);
+}
+
+.btn-primary {
+  background: rgb(146 64 14);
+  color: white;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.25rem;
+  transition: background 0.15s;
+}
+.btn-primary:hover {
+  background: rgb(120 53 15);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid rgb(212 212 212);
+  font-weight: 600;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.25rem;
+}
+
+.card {
+  border-radius: 1rem;
+  border: 1px solid rgb(231 229 228);
+  background: white;
+  padding: 1.25rem;
+}
+.dark .card {
+  background: rgb(23 23 23);
+  border-color: rgb(64 64 64);
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Peregrino - Rodovia Dutra até Aparecida",
+  "short_name": "Peregrino",
+  "description": "Apoio para peregrinos: pontos de apoio, rotas seguras, localização e emergência.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafaf9",
+  "theme_color": "#92400e",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
