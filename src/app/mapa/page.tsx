@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import MapClient from "./MapClient";
-import { Plus } from "lucide-react";
+import { MapPinPlus } from "lucide-react";
 import type { PontoApoio, PontoRisco } from "@/types/database";
 
 export default async function MapaPage() {
@@ -9,6 +9,16 @@ export default async function MapaPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  let isAdmin = false;
+  if (user) {
+    const { data: perfil } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
+    isAdmin = !!perfil?.is_admin;
+  }
 
   const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] =
     await Promise.all([
@@ -23,18 +33,18 @@ export default async function MapaPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Mapa da rota</h1>
+          <h1 className="text-2xl font-bold">Mapa de PAP</h1>
           <p className="text-sm text-neutral-500">
-            Pontos de apoio (marrom), pontos de risco (vermelho)
-            {user ? " e peregrinos em caminhada (azul)" : ""}.
+            PAP — Pontos de Apoio ao Peregrino (marrom) e locais de risco (vermelho)
+            {user ? ", e peregrinos em caminhada (azul)" : ""}.
           </p>
         </div>
-        {user && (
+        {isAdmin && (
           <Link
-            href="/pontos-apoio/novo"
+            href="/admin/pap/novo"
             className="btn-primary flex items-center gap-1 whitespace-nowrap"
           >
-            <Plus size={18} /> Novo ponto
+            <MapPinPlus size={18} /> Cadastrar PAP
           </Link>
         )}
       </div>
@@ -50,7 +60,13 @@ export default async function MapaPage() {
           <Link href="/login" className="font-semibold text-amber-700">
             Entre na sua conta
           </Link>{" "}
-          para cadastrar pontos de apoio e ver peregrinos ativos no mapa.
+          para ver peregrinos ativos no mapa.
+        </p>
+      )}
+      {user && !isAdmin && (
+        <p className="mt-4 text-sm text-neutral-500">
+          Novos PAP são cadastrados pelos administradores. Quer ajudar
+          indicando um ponto de apoio? Fale com a equipe do Peregrino.
         </p>
       )}
     </div>

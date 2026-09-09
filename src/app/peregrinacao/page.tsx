@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
-import type { Peregrinacao, PontoApoio, Profile } from "@/types/database";
+import type { Peregrinacao, PontoApoio, Profile, Rota } from "@/types/database";
 
 export default async function PeregrinacaoPage() {
   const supabase = await createClient();
@@ -44,6 +44,8 @@ export default async function PeregrinacaoPage() {
     .select("*")
     .eq("ativo", true);
 
+  const { data: rotas } = await supabase.from("rotas").select("*").order("ordem");
+
   let checkinsCount = 0;
   if (peregrinacao) {
     const { count } = await supabase
@@ -64,6 +66,7 @@ export default async function PeregrinacaoPage() {
         perfil={perfil as Profile}
         peregrinacaoInicial={peregrinacao as Peregrinacao | null}
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
+        rotas={(rotas ?? []) as Rota[]}
         checkinsCount={checkinsCount}
       />
     </div>

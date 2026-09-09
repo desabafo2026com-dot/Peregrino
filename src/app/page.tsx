@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, Route, Footprints, ShieldCheck, Users } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Footprints, ShieldCheck, Users } from "lucide-react";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -18,20 +18,26 @@ export default async function Home() {
     {
       href: "/mapa",
       icon: MapPin,
-      title: "Mapa de pontos de apoio",
-      desc: "Veja e cadastre pontos de água, alimentação, descanso e doações ao longo da rota.",
+      title: "Mapa de PAP",
+      desc: "Veja os PAP (Pontos de Apoio ao Peregrino) — água, alimentação, descanso e doações ao longo da rota.",
+    },
+    {
+      href: "/admin/pap/novo",
+      icon: MapPinPlus,
+      title: "Cadastre seu PAP",
+      desc: "Área para administradores cadastrarem novos Pontos de Apoio ao Peregrino, marcando a localização no mapa.",
     },
     {
       href: "/rotas",
       icon: Route,
-      title: "Rotas seguras",
-      desc: "Saiba qual lado da rodovia seguir e onde ficam os pontos de maior risco.",
+      title: "Rotas de peregrinação",
+      desc: "Rota Sul (Queluz) ou Norte (São Paulo) até Aparecida: qual lado da rodovia seguir e pontos de maior risco.",
     },
     {
       href: "/peregrinacao",
       icon: Footprints,
       title: "Minha peregrinação",
-      desc: "Inicie sua caminhada, compartilhe localização e faça check-in nos pontos.",
+      desc: "Inicie sua caminhada ou pedalada, compartilhe localização e faça check-in nos pontos.",
     },
     {
       href: "/verificar",

@@ -3,14 +3,29 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Flag, MapPin, CheckCircle2, Radio, Award } from "lucide-react";
-import type { Peregrinacao, PontoApoio, Profile } from "@/types/database";
+import { intervalToDuration, formatDuration } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Flag, MapPin, CheckCircle2, Radio, Award, Footprints, Bike } from "lucide-react";
+import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
+import type { Peregrinacao, PontoApoio, Profile, Rota, MeioTransporte } from "@/types/database";
 
 interface Props {
   perfil: Profile;
   peregrinacaoInicial: Peregrinacao | null;
   pontosApoio: PontoApoio[];
+  rotas: Rota[];
   checkinsCount: number;
+}
+
+function formatarDuracao(inicio: string | null, fim: Date) {
+  if (!inicio) return null;
+  const duracao = intervalToDuration({ start: new Date(inicio), end: fim });
+  const texto = formatDuration(duracao, {
+    format: ["days", "hours", "minutes"],
+    locale: ptBR,
+    zero: false,
+  });
+  return texto || "menos de 1 minuto";
 }
 
 function gerarCodigoCertificado() {
@@ -25,6 +40,7 @@ export default function PeregrinacaoClient({
   perfil,
   peregrinacaoInicial,
   pontosApoio,
+  rotas,
   checkinsCount: checkinsCountInicial,
 }: Props) {
   const router = useRouter();
@@ -34,6 +50,8 @@ export default function PeregrinacaoClient({
   const [checkinsCount, setCheckinsCount] = useState(checkinsCountInicial);
   const [diasPrevistos, setDiasPrevistos] = useState("3");
   const [dataInicioPrevista, setDataInicioPrevista] = useState("");
+  const [meioTransporte, setMeioTransporte] = useState<MeioTransporte>("a_pe");
+  const [rotaId, setRotaId] = useState(rotas[0]?.id ?? "");
   const [compartilhando, setCompartilhando] = useState(false);
   const [pontoSelecionado, setPontoSelecionado] = useState("");
   const [loading, setLoading] = useState(false);
@@ -64,6 +82,8 @@ export default function PeregrinacaoClient({
         dias_previstos: diasPrevistos ? Number(diasPrevistos) : null,
         data_inicio_prevista: dataInicioPrevista || null,
         data_inicio: iniciarAgora ? agora : null,
+        meio_transporte: meioTransporte,
+        rota_id: rotaId || null,
       })
       .select()
       .single();
@@ -182,6 +202,9 @@ export default function PeregrinacaoClient({
       1,
       Math.ceil((agora.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24)) || 1
     );
+    const duracaoTexto = formatarDuracao(peregrinacao.data_inicio, agora);
+    const rotaAtual = rotas.find((r) => r.id === peregrinacao.rota_id);
+    const meioAtual = peregrinacao.meio_transporte ?? "a_pe";
 
     const { error: updateError } = await supabase
       .from("peregrinacoes")
@@ -203,6 +226,9 @@ export default function PeregrinacaoClient({
       data_inicio: peregrinacao.data_inicio,
       data_fim: agora.toISOString(),
       total_checkins: checkinsCount,
+      rota_nome: rotaAtual ? `${rotaAtual.nome} (${rotaAtual.origem} → ${rotaAtual.destino})` : null,
+      meio_transporte: meioAtual,
+      duracao_texto: duracaoTexto,
     });
 
     setLoading(false);
@@ -243,6 +269,32 @@ export default function PeregrinacaoClient({
               onChange={(e) => setDataInicioPrevista(e.target.value)}
             />
           </div>
+          <div>
+            <label className="label">Meio de transporte</label>
+            <select
+              className="input"
+              value={meioTransporte}
+              onChange={(e) => setMeioTransporte(e.target.value as MeioTransporte)}
+            >
+              {MEIO_TRANSPORTE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {rotas.length > 0 && (
+            <div>
+              <label className="label">Rota</label>
+              <select className="input" value={rotaId} onChange={(e) => setRotaId(e.target.value)}>
+                {rotas.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.nome} ({r.origem} → {r.destino})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
         <div className="flex flex-wrap gap-3">
@@ -258,8 +310,14 @@ export default function PeregrinacaoClient({
   }
 
   if (peregrinacao.status === "planejada") {
+    const rotaPlanejada = rotas.find((r) => r.id === peregrinacao.rota_id);
     return (
       <div className="card">
+        <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
+          {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
+          {MEIO_TRANSPORTE_LABELS[peregrinacao.meio_transporte] ?? "a pé"}
+          {rotaPlanejada ? ` — ${rotaPlanejada.nome} (${rotaPlanejada.origem} → ${rotaPlanejada.destino})` : ""}
+        </p>
         <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-300">
           Peregrinação planejada
           {peregrinacao.data_inicio_prevista
@@ -276,11 +334,17 @@ export default function PeregrinacaoClient({
   }
 
   if (peregrinacao.status === "em_andamento") {
+    const rotaAtiva = rotas.find((r) => r.id === peregrinacao.rota_id);
     return (
       <div className="flex flex-col gap-5">
         <div className="card border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
           <p className="flex items-center gap-2 font-semibold text-green-800 dark:text-green-400">
             <Radio size={18} /> Peregrinação em andamento
+          </p>
+          <p className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+            {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} /> : <Footprints size={14} />}
+            {MEIO_TRANSPORTE_LABELS[peregrinacao.meio_transporte] ?? "a pé"}
+            {rotaAtiva ? ` — ${rotaAtiva.nome} (${rotaAtiva.origem} → ${rotaAtiva.destino})` : ""}
           </p>
           <p className="text-sm text-neutral-600 dark:text-neutral-300">
             Iniciada em{" "}

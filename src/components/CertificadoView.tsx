@@ -1,6 +1,8 @@
 "use client";
 
-import { Footprints, Printer } from "lucide-react";
+import Image from "next/image";
+import { Printer } from "lucide-react";
+import { MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
 import type { Certificado } from "@/types/database";
 
 function formatarData(d: string | null) {
@@ -13,14 +15,21 @@ function formatarData(d: string | null) {
 }
 
 export default function CertificadoView({ certificado: c }: { certificado: Certificado }) {
+  const meioLabel = c.meio_transporte ? MEIO_TRANSPORTE_LABELS[c.meio_transporte] : "a pé";
   return (
     <div>
       <div
         id={`cert-${c.id}`}
         className="mx-auto max-w-2xl rounded-2xl border-8 border-double border-amber-800 bg-[#fffdf7] p-10 text-center text-neutral-800 shadow-sm print:border-4"
       >
-        <div className="mb-4 flex justify-center text-amber-800">
-          <Footprints size={40} />
+        <div className="mb-4 flex justify-center">
+          <Image
+            src="/certificado/selo.png"
+            alt="Selo da Basílica de Aparecida"
+            width={90}
+            height={90}
+            className="rounded-full"
+          />
         </div>
         <p className="mb-1 text-xs tracking-[0.3em] text-amber-700 uppercase">
           Certificado de Peregrinação
@@ -34,10 +43,11 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
           {c.nome_peregrino}
         </p>
         <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-neutral-600">
-          concluiu sua peregrinação até a Basílica de Nossa Senhora Aparecida,
-          percorrendo o trajeto ao longo de{" "}
-          <strong>{c.dias_caminhada ?? "-"} dia(s)</strong>, entre{" "}
-          <strong>{formatarData(c.data_inicio)}</strong> e{" "}
+          concluiu {meioLabel} sua peregrinação até a Basílica de Nossa
+          Senhora Aparecida{c.rota_nome ? ` pela ${c.rota_nome}` : ""},
+          percorrendo o trajeto em{" "}
+          <strong>{c.duracao_texto ?? `${c.dias_caminhada ?? "-"} dia(s)`}</strong>,
+          entre <strong>{formatarData(c.data_inicio)}</strong> e{" "}
           <strong>{formatarData(c.data_fim)}</strong>, com{" "}
           <strong>{c.total_checkins}</strong> check-in(s) confirmados ao
           longo da rota.

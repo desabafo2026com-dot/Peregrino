@@ -24,6 +24,19 @@ export const SERVICOS_PONTO_APOIO: { value: string; label: string }[] = [
   { value: "apoio_espiritual", label: "Apoio espiritual" },
 ];
 
+export const MEIO_TRANSPORTE_OPTIONS: { value: string; label: string }[] = [
+  { value: "a_pe", label: "A pé" },
+  { value: "bicicleta", label: "Bicicleta" },
+];
+
+export const MEIO_TRANSPORTE_LABELS: Record<string, string> = {
+  a_pe: "a pé",
+  bicicleta: "de bicicleta",
+};
+
+export const PAP_SIGLA = "PAP";
+export const PAP_NOME_COMPLETO = "PAP — Ponto de Apoio ao Peregrino";
+
 export const LADO_RODOVIA_LABELS: Record<string, string> = {
   marginal_norte: "Marginal sentido Norte",
   marginal_sul: "Marginal sentido Sul",

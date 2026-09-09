@@ -1,6 +1,7 @@
 export type Sexo = "masculino" | "feminino" | "outro" | "prefiro_nao_dizer";
 export type Motivo = "promessa" | "curiosidade" | "desafio" | "companhia" | "outros";
 export type StatusPeregrinacao = "planejada" | "em_andamento" | "concluida" | "cancelada";
+export type MeioTransporte = "a_pe" | "bicicleta";
 export type LadoRodovia =
   | "marginal_norte"
   | "marginal_sul"
@@ -24,8 +25,20 @@ export interface Profile {
   motivo_outro_desc: string | null;
   tem_acompanhamento_carro_apoio: boolean;
   aceita_compartilhar_localizacao: boolean;
+  is_admin: boolean;
   criado_em: string;
   atualizado_em: string;
+}
+
+export interface Rota {
+  id: string;
+  slug: string;
+  nome: string;
+  origem: string;
+  destino: string;
+  cor: string;
+  ordem: number;
+  criado_em: string;
 }
 
 export interface PontoApoio {
@@ -42,6 +55,7 @@ export interface PontoApoio {
   contato_doacao: string | null;
   observacoes: string | null;
   ativo: boolean;
+  rota_id: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -53,6 +67,7 @@ export interface TrechoSeguranca {
   lado_recomendado: LadoRodovia;
   observacao: string | null;
   nivel_risco: number;
+  rota_id: string;
   criado_em: string;
 }
 
@@ -65,6 +80,7 @@ export interface PontoRisco {
   km_referencia: number | null;
   tipo: string;
   nivel_risco: number;
+  rota_id: string | null;
   criado_em: string;
 }
 
@@ -77,6 +93,8 @@ export interface Peregrinacao {
   data_inicio: string | null;
   data_fim: string | null;
   compartilhar_localizacao: boolean;
+  meio_transporte: MeioTransporte;
+  rota_id: string | null;
   criado_em: string;
 }
 
@@ -109,6 +127,9 @@ export interface Certificado {
   data_inicio: string | null;
   data_fim: string | null;
   total_checkins: number;
+  rota_nome: string | null;
+  meio_transporte: MeioTransporte | null;
+  duracao_texto: string | null;
   emitido_em: string;
 }
 

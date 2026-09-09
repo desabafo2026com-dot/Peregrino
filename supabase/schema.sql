@@ -300,4 +300,177 @@ values
   (160.0, 172.0, 'acostamento', 'Sem marginal neste trecho — caminhar sempre de frente para o tráfego, em fila única.', 4)
 on conflict do nothing;
 
+-- =====================================================================
+-- MIGRATION 2 — Administradores, PAP, Rotas (Sul/Norte), meio de transporte
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+-- Enum: meio de transporte da peregrinação
+do $$ begin
+  create type meio_transporte_enum as enum ('a_pe', 'bicicleta');
+exception when duplicate_object then null; end $$;
+
+-- profiles: flag de administrador
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+
+-- Função auxiliar: o usuário logado é administrador?
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select is_admin from public.profiles where id = auth.uid()), false);
+$$;
+
+grant execute on function public.is_admin() to authenticated, anon;
+
+-- Impede que o próprio usuário se promova a admin editando o perfil
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own" on public.profiles for update
+  using (auth.uid() = id)
+  with check (
+    auth.uid() = id
+    and is_admin = (select p.is_admin from public.profiles p where p.id = auth.uid())
+  );
+
+-- ---------------------------------------------------------------------
+-- ROTAS — Sul (Queluz x Aparecida) e Norte (São Paulo x Aparecida)
+-- ---------------------------------------------------------------------
+create table if not exists public.rotas (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  nome text not null,
+  origem text not null,
+  destino text not null,
+  cor text not null default '#92400e',
+  ordem smallint not null default 0,
+  criado_em timestamptz not null default now()
+);
+
+insert into public.rotas (slug, nome, origem, destino, cor, ordem) values
+  ('sul', 'Rota Sul', 'Queluz', 'Aparecida', '#92400e', 1),
+  ('norte', 'Rota Norte', 'São Paulo', 'Aparecida', '#1d4ed8', 2)
+on conflict (slug) do nothing;
+
+alter table public.rotas enable row level security;
+drop policy if exists "rotas_select_all" on public.rotas;
+create policy "rotas_select_all" on public.rotas for select using (true);
+drop policy if exists "rotas_admin_write" on public.rotas;
+create policy "rotas_admin_write" on public.rotas for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- trechos_seguranca: agora vinculado a uma rota; escrita restrita a admin
+alter table public.trechos_seguranca add column if not exists rota_id uuid references public.rotas(id);
+update public.trechos_seguranca set rota_id = (select id from public.rotas where slug = 'sul') where rota_id is null;
+alter table public.trechos_seguranca alter column rota_id set not null;
+
+drop policy if exists "trechos_admin_write" on public.trechos_seguranca;
+create policy "trechos_admin_write" on public.trechos_seguranca for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- pontos_risco: agora vinculado a uma rota; escrita restrita a admin
+alter table public.pontos_risco add column if not exists rota_id uuid references public.rotas(id);
+
+drop policy if exists "riscos_admin_write" on public.pontos_risco;
+create policy "riscos_admin_write" on public.pontos_risco for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- pontos_apoio (PAP): cadastro/edição/exclusão agora restritos a administradores
+alter table public.pontos_apoio add column if not exists rota_id uuid references public.rotas(id);
+
+drop policy if exists "pontos_apoio_insert_auth" on public.pontos_apoio;
+drop policy if exists "pontos_apoio_update_own" on public.pontos_apoio;
+drop policy if exists "pontos_apoio_delete_own" on public.pontos_apoio;
+
+drop policy if exists "pontos_apoio_insert_admin" on public.pontos_apoio;
+create policy "pontos_apoio_insert_admin" on public.pontos_apoio for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "pontos_apoio_update_admin" on public.pontos_apoio;
+create policy "pontos_apoio_update_admin" on public.pontos_apoio for update to authenticated
+  using (public.is_admin());
+
+drop policy if exists "pontos_apoio_delete_admin" on public.pontos_apoio;
+create policy "pontos_apoio_delete_admin" on public.pontos_apoio for delete to authenticated
+  using (public.is_admin());
+
+-- peregrinacoes: meio de transporte (a pé / bicicleta) e rota escolhida
+alter table public.peregrinacoes add column if not exists meio_transporte meio_transporte_enum not null default 'a_pe';
+alter table public.peregrinacoes add column if not exists rota_id uuid references public.rotas(id);
+
+-- admin enxerga todas as peregrinações (dashboard de movimentação)
+drop policy if exists "peregrinacoes_select_admin" on public.peregrinacoes;
+create policy "peregrinacoes_select_admin" on public.peregrinacoes for select to authenticated
+  using (public.is_admin());
+
+-- certificados: guarda rota/meio/duração exata no momento da emissão
+alter table public.certificados add column if not exists rota_nome text;
+alter table public.certificados add column if not exists meio_transporte meio_transporte_enum;
+alter table public.certificados add column if not exists duracao_texto text;
+
+-- Atualiza verificação pública de certificado com os novos campos
+drop function if exists public.verificar_certificado(text);
+create or replace function public.verificar_certificado(p_codigo text)
+returns table (
+  nome_peregrino text,
+  dias_caminhada int,
+  data_inicio timestamptz,
+  data_fim timestamptz,
+  total_checkins int,
+  emitido_em timestamptz,
+  rota_nome text,
+  meio_transporte text,
+  duracao_texto text,
+  valido boolean
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select nome_peregrino, dias_caminhada, data_inicio, data_fim, total_checkins, emitido_em,
+         rota_nome, meio_transporte::text, duracao_texto, true as valido
+  from public.certificados
+  where codigo = p_codigo;
+$$;
+
+grant execute on function public.verificar_certificado(text) to anon, authenticated;
+
+-- Estatísticas administrativas (dashboard de movimentação e PAP ativos)
+create or replace function public.estatisticas_admin()
+returns table (
+  peregrinos_ativos bigint,
+  peregrinacoes_concluidas bigint,
+  concluidas_hoje bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  pontos_risco_total bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  return query
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.peregrinacoes where status = 'concluida'),
+    (select count(*) from public.peregrinacoes where status = 'concluida' and data_fim >= current_date),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio where ativo = true),
+    (select count(*) from public.pontos_risco);
+end;
+$$;
+
+grant execute on function public.estatisticas_admin() to authenticated;
+
 -- FIM DO SCHEMA

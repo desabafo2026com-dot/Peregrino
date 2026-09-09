@@ -103,6 +103,7 @@ export default function MapView({
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px">
+              <span style="font-size:10px;letter-spacing:.05em;color:#92400e;font-weight:700">PAP</span><br/>
               <strong>${p.nome}</strong><br/>
               ${p.responsavel ? `Responsável: ${p.responsavel}<br/>` : ""}
               ${p.telefone ? `Tel: ${p.telefone}<br/>` : ""}

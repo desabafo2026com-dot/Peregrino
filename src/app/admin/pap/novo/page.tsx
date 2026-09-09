@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { SERVICOS_PONTO_APOIO } from "@/lib/constants";
 import { LocateFixed } from "lucide-react";
+import type { Rota } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -16,8 +17,10 @@ const MapView = dynamic(() => import("@/components/MapView"), {
   ),
 });
 
-export default function NovoPontoApoioPage() {
+export default function NovoPapPage() {
   const router = useRouter();
+  const [rotas, setRotas] = useState<Rota[]>([]);
+  const [rotaId, setRotaId] = useState<string>("");
   const [nome, setNome] = useState("");
   const [responsavel, setResponsavel] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -29,6 +32,15 @@ export default function NovoPontoApoioPage() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("rotas")
+      .select("*")
+      .order("ordem")
+      .then(({ data }) => setRotas((data ?? []) as Rota[]));
+  }, []);
 
   function toggleServico(v: string) {
     setServicos((prev) =>
@@ -51,7 +63,7 @@ export default function NovoPontoApoioPage() {
     e.preventDefault();
     setErro(null);
     if (!coords) {
-      setErro("Marque a localização do ponto de apoio no mapa (ou use sua localização atual).");
+      setErro("Marque a localização do PAP no mapa (ou use sua localização atual).");
       return;
     }
     setLoading(true);
@@ -72,6 +84,7 @@ export default function NovoPontoApoioPage() {
       servicos,
       contato_doacao: contatoDoacao || null,
       observacoes: observacoes || null,
+      rota_id: rotaId || null,
     });
     setLoading(false);
 
@@ -85,16 +98,17 @@ export default function NovoPontoApoioPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-1 text-2xl font-bold">Cadastrar ponto de apoio</h1>
+      <h2 className="mb-1 text-xl font-bold">Cadastrar PAP</h2>
       <p className="mb-6 text-sm text-neutral-500">
-        Ajude outros peregrinos indicando um local de apoio na rota.
+        PAP — Ponto de Apoio ao Peregrino. Preencha os dados e marque a
+        localização exata no mapa para fixar o ponto.
       </p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="card">
-          <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
+          <h3 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
             Localização
-          </h2>
+          </h3>
           <button
             type="button"
             onClick={usarLocalizacaoAtual}
@@ -120,9 +134,9 @@ export default function NovoPontoApoioPage() {
         </div>
 
         <div className="card">
-          <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
-            Dados do ponto de apoio
-          </h2>
+          <h3 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
+            Dados do PAP
+          </h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="label">Nome do local</label>
@@ -145,6 +159,17 @@ export default function NovoPontoApoioPage() {
                 value={kmReferencia}
                 onChange={(e) => setKmReferencia(e.target.value)}
               />
+            </div>
+            <div>
+              <label className="label">Rota</label>
+              <select className="input" value={rotaId} onChange={(e) => setRotaId(e.target.value)}>
+                <option value="">Ambas as rotas</option>
+                {rotas.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.nome} ({r.origem} → {r.destino})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="label">Período de funcionamento</label>
@@ -177,9 +202,9 @@ export default function NovoPontoApoioPage() {
         </div>
 
         <div className="card">
-          <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
+          <h3 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
             Serviços oferecidos
-          </h2>
+          </h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {SERVICOS_PONTO_APOIO.map((s) => (
               <label key={s.value} className="flex items-center gap-2 text-sm">
@@ -201,7 +226,7 @@ export default function NovoPontoApoioPage() {
         )}
 
         <button type="submit" disabled={loading} className="btn-primary">
-          {loading ? "Salvando..." : "Cadastrar ponto de apoio"}
+          {loading ? "Salvando..." : "Cadastrar PAP"}
         </button>
       </form>
     </div>

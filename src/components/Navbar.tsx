@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Menu, X, MapPin, Route, User, LogOut, Home, Footprints } from "lucide-react";
+import { Menu, X, MapPin, Route, User, LogOut, Home, Footprints, ShieldCheck } from "lucide-react";
 
 const LINKS = [
   { href: "/", label: "Início", icon: Home },
   { href: "/mapa", label: "Mapa", icon: MapPin },
-  { href: "/rotas", label: "Rotas seguras", icon: Route },
+  { href: "/rotas", label: "Rotas", icon: Route },
   { href: "/peregrinacao", label: "Minha peregrinação", icon: Footprints },
   { href: "/perfil", label: "Perfil", icon: User },
 ];
@@ -17,17 +17,40 @@ const LINKS = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setLoggedIn(!!data.user));
+
+    async function checarAdmin(userId: string | undefined) {
+      if (!userId) {
+        setIsAdmin(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", userId)
+        .maybeSingle();
+      setIsAdmin(!!data?.is_admin);
+    }
+
+    supabase.auth.getUser().then(({ data }) => {
+      setLoggedIn(!!data.user);
+      checarAdmin(data.user?.id);
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setLoggedIn(!!session?.user);
+      checarAdmin(session?.user?.id);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  const links = isAdmin
+    ? [...LINKS, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+    : LINKS;
 
   async function handleLogout() {
     const supabase = createClient();
@@ -45,7 +68,7 @@ export default function Navbar() {
         </Link>
 
         <nav className="hidden gap-1 md:flex">
-          {LINKS.map((l) => (
+          {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
@@ -83,7 +106,7 @@ export default function Navbar() {
 
       {open && (
         <nav className="flex flex-col gap-1 border-t border-neutral-200 px-4 py-3 md:hidden dark:border-neutral-800">
-          {LINKS.map((l) => (
+          {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
