@@ -10,6 +10,7 @@ export type Motivo =
   | "outros";
 export type StatusPeregrinacao = "planejada" | "em_andamento" | "concluida" | "cancelada";
 export type StatusGerentePap = "pendente" | "aprovado" | "rejeitado";
+export type StatusAprovacaoPap = "pendente" | "aprovado" | "rejeitado";
 export type MeioTransporte = "a_pe" | "bicicleta";
 export type LadoRodovia =
   | "marginal_norte"
@@ -23,21 +24,22 @@ export interface Profile {
   id: string;
   nome_completo: string;
   telefone: string | null;
-  cidade: string;
+  cidade: string | null;
   uf: string | null;
   faz_parte_grupo: boolean;
   nome_grupo: string | null;
   ja_fez_trajeto: boolean;
-  data_nascimento: string;
-  sexo: Sexo;
+  data_nascimento: string | null;
+  sexo: Sexo | null;
   religiao: string | null;
   religiao_outro_desc: string | null;
-  motivo: Motivo;
+  motivo: Motivo | null;
   motivo_outro_desc: string | null;
   tem_acompanhamento_carro_apoio: boolean;
   aceita_compartilhar_localizacao: boolean;
   avatar_url: string | null;
   is_admin: boolean;
+  is_agente: boolean;
   criado_em: string;
   atualizado_em: string;
 }
@@ -92,6 +94,9 @@ export interface PontoApoio {
   contato_doacao: string | null;
   observacoes: string | null;
   ativo: boolean;
+  status_aprovacao: StatusAprovacaoPap;
+  aberto_agora: boolean;
+  observacao_admin: string | null;
   rota_id: string | null;
   criado_em: string;
   atualizado_em: string;

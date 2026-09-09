@@ -1,15 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { intervalToDuration, formatDuration } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Flag, MapPin, CheckCircle2, Radio, Award, Footprints, Bike, Route as RouteIcon } from "lucide-react";
-import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
+import {
+  Flag,
+  MapPin,
+  CheckCircle2,
+  Radio,
+  Award,
+  Footprints,
+  Bike,
+  Route as RouteIcon,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
+import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
-import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte } from "@/types/database";
+import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte, Motivo } from "@/types/database";
 
 interface Props {
   perfil: Profile;
@@ -75,28 +86,47 @@ export default function PeregrinacaoClient({
   const [rotaId, setRotaId] = useState(rotas[0]?.id ?? "");
   const [emGrupo, setEmGrupo] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
-  const [compartilhando, setCompartilhando] = useState(false);
+  const [jaFezTrajeto, setJaFezTrajeto] = useState(perfil.ja_fez_trajeto ?? false);
+  const [motivo, setMotivo] = useState<Motivo | "">(perfil.motivo ?? "");
+  const [motivoOutro, setMotivoOutro] = useState(perfil.motivo_outro_desc ?? "");
+  const [carroApoio, setCarroApoio] = useState(perfil.tem_acompanhamento_carro_apoio ?? false);
+  const [compartilhando, setCompartilhando] = useState(
+    peregrinacaoInicial?.compartilhar_localizacao ?? false
+  );
   const [pontoSelecionado, setPontoSelecionado] = useState("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const watchIdRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-    };
-  }, []);
+  async function salvarDadosPeregrino() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from("profiles")
+      .update({
+        ja_fez_trajeto: jaFezTrajeto,
+        motivo: motivo || null,
+        motivo_outro_desc: motivo === "outros" ? motivoOutro : null,
+        tem_acompanhamento_carro_apoio: carroApoio,
+      })
+      .eq("id", user.id);
+  }
 
   async function criarPeregrinacao(iniciarAgora: boolean) {
     setErro(null);
+    if (!motivo) {
+      setErro("Selecione o motivo da sua peregrinação.");
+      return;
+    }
     setLoading(true);
     const {
       data: { user },
     } = await supabase.auth.getUser();
     const agora = new Date().toISOString();
+
+    await salvarDadosPeregrino();
 
     const { data, error } = await supabase
       .from("peregrinacoes")
@@ -110,6 +140,7 @@ export default function PeregrinacaoClient({
         rota_id: rotaId || null,
         em_grupo: emGrupo,
         nome_grupo: emGrupo ? nomeGrupo || null : null,
+        compartilhar_localizacao: iniciarAgora,
       })
       .select()
       .single();
@@ -150,7 +181,7 @@ export default function PeregrinacaoClient({
     const agora = new Date().toISOString();
     const { data, error } = await supabase
       .from("peregrinacoes")
-      .update({ status: "em_andamento", data_inicio: agora })
+      .update({ status: "em_andamento", data_inicio: agora, compartilhar_localizacao: true })
       .eq("id", peregrinacao.id)
       .select()
       .single();
@@ -186,48 +217,23 @@ export default function PeregrinacaoClient({
     router.push("/peregrinacao/trajeto");
   }
 
-  function iniciarCompartilhamento() {
+  async function pararCompartilhamento() {
     if (!peregrinacao) return;
-    if (!navigator.geolocation) {
-      setErro("Geolocalização não disponível neste navegador.");
-      return;
-    }
-    setErro(null);
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      async (pos) => {
-        await supabase.from("localizacoes_ativas").upsert({
-          peregrinacao_id: peregrinacao.id,
-          user_id: peregrinacao.user_id,
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          precisao_m: pos.coords.accuracy,
-          atualizado_em: new Date().toISOString(),
-        });
-      },
-      () => setErro("Não foi possível acessar sua localização. Verifique as permissões."),
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
-    );
-    setCompartilhando(true);
-    supabase
+    setCompartilhando(false);
+    await supabase.from("localizacoes_ativas").delete().eq("peregrinacao_id", peregrinacao.id);
+    await supabase
       .from("peregrinacoes")
-      .update({ compartilhar_localizacao: true })
-      .eq("id", peregrinacao.id)
-      .then(() => {});
+      .update({ compartilhar_localizacao: false })
+      .eq("id", peregrinacao.id);
   }
 
-  async function pararCompartilhamento() {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
-    setCompartilhando(false);
-    if (peregrinacao) {
-      await supabase.from("localizacoes_ativas").delete().eq("peregrinacao_id", peregrinacao.id);
-      await supabase
-        .from("peregrinacoes")
-        .update({ compartilhar_localizacao: false })
-        .eq("id", peregrinacao.id);
-    }
+  async function retomarCompartilhamento() {
+    if (!peregrinacao) return;
+    setCompartilhando(true);
+    await supabase
+      .from("peregrinacoes")
+      .update({ compartilhar_localizacao: true })
+      .eq("id", peregrinacao.id);
   }
 
   async function fazerCheckin(pontoCheckinId?: string) {
@@ -264,13 +270,9 @@ export default function PeregrinacaoClient({
 
   async function finalizarPeregrinacao() {
     if (!peregrinacao) return;
-    if (!confirm("Finalizar a peregrinação e gerar seu certificado?")) return;
+    if (!confirm("Finalizar a peregrinação?")) return;
 
     setLoading(true);
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
     await supabase.from("localizacoes_ativas").delete().eq("peregrinacao_id", peregrinacao.id);
 
     const agora = new Date();
@@ -285,12 +287,33 @@ export default function PeregrinacaoClient({
 
     const { error: updateError } = await supabase
       .from("peregrinacoes")
-      .update({ status: "concluida", data_fim: agora.toISOString() })
+      .update({ status: "concluida", data_fim: agora.toISOString(), compartilhar_localizacao: false })
       .eq("id", peregrinacao.id);
 
     if (updateError) {
       setLoading(false);
       setErro(updateError.message);
+      return;
+    }
+
+    // Só recebe certificado quem tem check-in inicial em cidade diferente de
+    // Aparecida e encerra a peregrinação com check-in em Aparecida.
+    const pontosOrdenados = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem);
+    const primeiroPonto = pontosOrdenados[0];
+    const ultimoPonto = pontosOrdenados[pontosOrdenados.length - 1];
+    const elegivel =
+      !!primeiroPonto &&
+      !!ultimoPonto &&
+      primeiroPonto.cidade.trim().toLowerCase() !== "aparecida" &&
+      checkinsFeitosIds.includes(ultimoPonto.id);
+
+    setLoading(false);
+
+    if (!elegivel) {
+      setPeregrinacao({ ...peregrinacao, status: "concluida", data_fim: agora.toISOString() });
+      setMsg(
+        "Peregrinação concluída. Certificado não emitido: é necessário ter feito o check-in inicial em uma cidade diferente de Aparecida e o check-in final em Aparecida."
+      );
       return;
     }
 
@@ -308,7 +331,6 @@ export default function PeregrinacaoClient({
       duracao_texto: duracaoTexto,
     });
 
-    setLoading(false);
     if (certError) {
       setErro(certError.message);
       return;
@@ -316,15 +338,50 @@ export default function PeregrinacaoClient({
     router.push("/certificado");
   }
 
-  if (!perfil.aceita_compartilhar_localizacao) {
-    // não bloqueia o fluxo, apenas avisa — mostrado dentro das seções relevantes
+  async function reabrirPeregrinacao() {
+    if (!peregrinacao) return;
+    if (
+      !confirm(
+        "Reabrir esta peregrinação? Ela voltará para 'em andamento' e o certificado emitido (se houver) deixa de ser válido."
+      )
+    )
+      return;
+    setLoading(true);
+    const { error } = await supabase
+      .from("peregrinacoes")
+      .update({ status: "em_andamento", data_fim: null })
+      .eq("id", peregrinacao.id);
+    setLoading(false);
+    if (error) {
+      setErro(error.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function excluirPeregrinacao() {
+    if (!peregrinacao) return;
+    if (
+      !confirm(
+        "Excluir esta peregrinação? Essa ação não pode ser desfeita e apaga também seus check-ins e certificado."
+      )
+    )
+      return;
+    setLoading(true);
+    const { error } = await supabase.from("peregrinacoes").delete().eq("id", peregrinacao.id);
+    setLoading(false);
+    if (error) {
+      setErro(error.message);
+      return;
+    }
+    router.refresh();
   }
 
   if (!peregrinacao) {
     return (
       <div className="card">
         <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
-          Planeje sua peregrinação
+          Iniciar peregrinação
         </h2>
         <div className="mb-4 grid gap-4 sm:grid-cols-2">
           <div>
@@ -372,7 +429,59 @@ export default function PeregrinacaoClient({
               </select>
             </div>
           )}
+          <div className="sm:col-span-2">
+            <label className="label">Motivo da peregrinação</label>
+            <select
+              required
+              className="input"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value as Motivo)}
+            >
+              <option value="" disabled>
+                Selecione
+              </option>
+              {MOTIVOS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {motivo === "outros" && (
+            <div className="sm:col-span-2">
+              <label className="label">Descreva o motivo</label>
+              <input
+                className="input"
+                value={motivoOutro}
+                onChange={(e) => setMotivoOutro(e.target.value)}
+              />
+            </div>
+          )}
           <div className="flex items-center gap-2 pt-2">
+            <input
+              id="jafez"
+              type="checkbox"
+              className="h-4 w-4"
+              checked={jaFezTrajeto}
+              onChange={(e) => setJaFezTrajeto(e.target.checked)}
+            />
+            <label htmlFor="jafez" className="text-sm font-medium">
+              Já fiz esse trajeto antes
+            </label>
+          </div>
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              id="carro"
+              type="checkbox"
+              className="h-4 w-4"
+              checked={carroApoio}
+              onChange={(e) => setCarroApoio(e.target.checked)}
+            />
+            <label htmlFor="carro" className="text-sm font-medium">
+              Terei acompanhamento de carro de apoio
+            </label>
+          </div>
+          <div className="flex items-center gap-2 pt-2 sm:col-span-2">
             <input
               id="emgrupo"
               type="checkbox"
@@ -385,7 +494,7 @@ export default function PeregrinacaoClient({
             </label>
           </div>
           {emGrupo && (
-            <div>
+            <div className="sm:col-span-2">
               <label className="label">Nome do grupo</label>
               <input
                 className="input"
@@ -396,6 +505,11 @@ export default function PeregrinacaoClient({
             </div>
           )}
         </div>
+        <p className="mb-3 text-xs text-neutral-500">
+          Ao iniciar agora, sua localização passa a ser compartilhada
+          automaticamente com a equipe de apoio até o fim da peregrinação
+          (você pode pausar quando quiser).
+        </p>
         {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
         <div className="flex flex-wrap gap-3">
           <button disabled={loading} onClick={() => criarPeregrinacao(false)} className="btn-secondary">
@@ -482,29 +596,19 @@ export default function PeregrinacaoClient({
           <h2 className="mb-2 text-base font-bold text-amber-800 dark:text-amber-500">
             Compartilhar localização
           </h2>
-          {!perfil.aceita_compartilhar_localizacao ? (
-            <p className="text-sm text-neutral-500">
-              Você não autorizou o compartilhamento de localização no seu
-              perfil. Ative essa opção em &quot;Perfil&quot; para usar este
-              recurso.
-            </p>
+          <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
+            {compartilhando
+              ? "Sua localização está sendo compartilhada com a equipe de apoio, para avisos de condições adversas e localização em emergência. Outros peregrinos não veem sua localização."
+              : "O compartilhamento está pausado no momento."}
+          </p>
+          {compartilhando ? (
+            <button onClick={pararCompartilhamento} className="btn-secondary flex items-center gap-2">
+              <MapPin size={18} /> Pausar compartilhamento
+            </button>
           ) : (
-            <>
-              <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
-                {compartilhando
-                  ? "Sua localização está sendo compartilhada com a equipe de apoio."
-                  : "Ative para que a equipe de apoio possa avisar sobre condições adversas e te localizar em caso de emergência. Outros peregrinos não veem sua localização."}
-              </p>
-              {!compartilhando ? (
-                <button onClick={iniciarCompartilhamento} className="btn-primary flex items-center gap-2">
-                  <MapPin size={18} /> Começar a compartilhar
-                </button>
-              ) : (
-                <button onClick={pararCompartilhamento} className="btn-secondary flex items-center gap-2">
-                  Parar de compartilhar
-                </button>
-              )}
-            </>
+            <button onClick={retomarCompartilhamento} className="btn-primary flex items-center gap-2">
+              <MapPin size={18} /> Retomar compartilhamento
+            </button>
           )}
         </div>
 
@@ -540,7 +644,9 @@ export default function PeregrinacaoClient({
             <Award size={18} /> Concluir
           </h2>
           <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
-            Ao finalizar, seu certificado de peregrino será gerado automaticamente.
+            Ao finalizar, seu certificado de peregrino será gerado
+            automaticamente — desde que você tenha feito o check-in inicial
+            fora de Aparecida e o check-in final em Aparecida.
           </p>
           <button disabled={loading} onClick={finalizarPeregrinacao} className="btn-primary">
             {loading ? "Finalizando..." : "Finalizar peregrinação"}
@@ -551,13 +657,38 @@ export default function PeregrinacaoClient({
   }
 
   return (
-    <div className="card text-center">
-      <p className="mb-3 text-neutral-600 dark:text-neutral-300">
-        Sua última peregrinação já foi concluída. 🎉
-      </p>
-      <a href="/certificado" className="btn-primary inline-block">
-        Ver certificado
-      </a>
+    <div className="flex flex-col gap-4">
+      <div className="card text-center">
+        <p className="mb-3 text-neutral-600 dark:text-neutral-300">
+          Sua última peregrinação já foi concluída. 🎉
+        </p>
+        {msg && <p className="mb-3 text-sm text-amber-700 dark:text-amber-500">{msg}</p>}
+        <a href="/certificado" className="btn-primary inline-block">
+          Ver certificado
+        </a>
+      </div>
+      {erro && <p className="text-sm text-red-600">{erro}</p>}
+      <div className="card flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-neutral-500">
+          Errou algo? Você pode reabrir esta peregrinação ou excluí-la.
+        </p>
+        <div className="flex gap-2">
+          <button
+            disabled={loading}
+            onClick={reabrirPeregrinacao}
+            className="btn-secondary flex items-center gap-2 text-sm"
+          >
+            <RotateCcw size={16} /> Reabrir
+          </button>
+          <button
+            disabled={loading}
+            onClick={excluirPeregrinacao}
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+          >
+            <Trash2 size={16} /> Excluir
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

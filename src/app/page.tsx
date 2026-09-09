@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Footprints, ShieldCheck, Users } from "lucide-react";
+import { MapPin, MapPinPlus, Route, ShieldCheck, Users, Footprints } from "lucide-react";
 
 export default async function Home() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data: stats } = (await supabase
     .rpc("estatisticas_publicas")
     .maybeSingle()) as {
@@ -25,19 +28,13 @@ export default async function Home() {
       href: "/gerente-pap/cadastro",
       icon: MapPinPlus,
       title: "Cadastre seu PAP",
-      desc: "Cadastro para gerentes de PAP: após aprovação, cadastre seu Ponto de Apoio ao Peregrino no mapa para todos verem.",
+      desc: "Cadastro para gerentes de PAP: cadastre-se, confirme seu e-mail e cadastre seu Ponto de Apoio ao Peregrino — ele aparece no mapa após aprovação da administração.",
     },
     {
       href: "/rotas",
       icon: Route,
       title: "Rotas de peregrinação",
-      desc: "Rota Sul (Queluz) ou Norte (São Paulo) até Aparecida: qual lado da rodovia seguir e pontos de maior risco.",
-    },
-    {
-      href: "/peregrinacao",
-      icon: Footprints,
-      title: "Minha peregrinação",
-      desc: "Inicie sua caminhada ou pedalada, compartilhe localização e faça check-in nos pontos.",
+      desc: "Rota Norte (São Paulo) ou Sul (Rio de Janeiro) até Aparecida: qual lado da rodovia seguir e pontos de maior risco.",
     },
     {
       href: "/verificar",
@@ -79,6 +76,14 @@ export default async function Home() {
           </div>
         </section>
       )}
+
+      <Link
+        href={user ? "/peregrinacao" : "/login"}
+        className="flex items-center justify-center gap-2 rounded-2xl bg-amber-700 py-4 text-lg font-bold text-white shadow-sm hover:bg-amber-800"
+      >
+        <Footprints size={22} />
+        {user ? "MINHA PEREGRINAÇÃO" : "SOU PEREGRINO — ENTRAR"}
+      </Link>
 
       <section className="grid gap-4 sm:grid-cols-2">
         {cards.map((c) => (

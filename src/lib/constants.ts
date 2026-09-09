@@ -40,6 +40,12 @@ export const STATUS_GERENTE_LABELS: Record<string, string> = {
   rejeitado: "Rejeitado",
 };
 
+export const STATUS_PAP_LABELS: Record<string, string> = {
+  pendente: "Aguardando aprovação da administração",
+  aprovado: "Publicado no mapa",
+  rejeitado: "Não aprovado pela administração",
+};
+
 export const SEXO_OPTIONS: { value: string; label: string }[] = [
   { value: "masculino", label: "Masculino" },
   { value: "feminino", label: "Feminino" },

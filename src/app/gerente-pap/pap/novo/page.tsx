@@ -87,6 +87,7 @@ export default function NovoPapGerentePage() {
       contato_doacao: contatoDoacao || null,
       observacoes: observacoes || null,
       rota_id: rotaId || null,
+      status_aprovacao: "pendente",
     });
     setLoading(false);
 
@@ -104,8 +105,9 @@ export default function NovoPapGerentePage() {
       <h2 className="mb-1 text-xl font-bold">Cadastrar meu PAP</h2>
       <p className="mb-6 text-sm text-neutral-500">
         PAP — Ponto de Apoio ao Peregrino. Preencha os dados e marque a
-        localização exata no mapa para fixar o ponto. Ele aparecerá para
-        todos os peregrinos.
+        localização exata no mapa para fixar o ponto. Ele fica pendente e só
+        aparece no mapa para os peregrinos depois que um administrador
+        aprovar a divulgação.
       </p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">

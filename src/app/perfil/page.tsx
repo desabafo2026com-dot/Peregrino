@@ -35,6 +35,7 @@ export default async function PerfilPage() {
         userId={user.id}
         nomeInicial={(user.user_metadata?.nome_completo as string) ?? ""}
         telefoneInicial={(user.user_metadata?.telefone as string) ?? ""}
+        aceitaCompartilharInicial={!!user.user_metadata?.aceita_termos}
         perfilExistente={perfil as Profile | null}
       />
     </div>

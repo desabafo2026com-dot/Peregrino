@@ -1,10 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Circle, TriangleAlert, ShieldAlert } from "lucide-react";
 import { LADO_RODOVIA_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
 import type { Peregrinacao, PontoCheckin, PontoRisco, Rota, TrechoSeguranca } from "@/types/database";
+
+const MapView = dynamic(() => import("@/components/MapView"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[350px] w-full items-center justify-center rounded-2xl bg-neutral-100 text-neutral-400 dark:bg-neutral-900">
+      Carregando mapa...
+    </div>
+  ),
+});
 
 interface Props {
   peregrinacao: Peregrinacao;
@@ -66,8 +76,30 @@ export default function TrajetoClient({
 
   const concluidos = pontosCheckin.filter((p) => checkinsFeitos.has(p.id)).length;
 
+  const trajeto = pontosCheckin.map((p) => ({
+    ordem: p.ordem,
+    cidade: p.cidade,
+    lat: p.latitude,
+    lng: p.longitude,
+    feito: checkinsFeitos.has(p.id),
+  }));
+
   return (
     <div className="flex flex-col gap-6">
+      {pontosCheckin.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">
+            Mapa do trajeto
+          </h2>
+          <MapView
+            trajeto={trajeto}
+            center={[pontosCheckin[0].longitude, pontosCheckin[0].latitude]}
+            zoom={7}
+            height="350px"
+          />
+        </section>
+      )}
+
       {rota && (
         <div className="card">
           <div className="mb-2 flex items-center justify-between text-sm font-semibold text-amber-800 dark:text-amber-500">

@@ -56,10 +56,11 @@ export default async function RotasPage({
       <div>
         <h1 className="text-2xl font-bold">Rotas de peregrinação</h1>
         <p className="text-sm text-neutral-500">
-          Duas rotas até a Basílica de Aparecida: Sul (saindo de Queluz) e
-          Norte (saindo de São Paulo). Veja qual lado da rodovia seguir em
-          cada trecho e onde ficam os pontos de maior risco. Sempre siga
-          também as orientações da PRF no local.
+          Duas rotas até a Basílica de Aparecida: Norte (saindo de São Paulo,
+          a mais procurada) e Sul (para quem vem do Rio de Janeiro, saindo de
+          Queluz-SP). Veja qual lado da rodovia seguir em cada trecho e onde
+          ficam os pontos de maior risco. Sempre siga também as orientações
+          da PRF no local.
         </p>
       </div>
 

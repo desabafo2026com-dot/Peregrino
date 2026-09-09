@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import EmergencyButton from "@/components/EmergencyButton";
+import LocationSharingManager from "@/components/LocationSharingManager";
 
 export const metadata: Metadata = {
   title: "Peregrino — Rodovia Dutra até Aparecida",
@@ -40,6 +41,7 @@ export default function RootLayout({
         <Navbar />
         <main className="mx-auto max-w-5xl px-4 pb-24 pt-6">{children}</main>
         <EmergencyButton />
+        <LocationSharingManager />
       </body>
     </html>
   );

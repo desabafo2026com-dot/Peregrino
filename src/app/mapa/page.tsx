@@ -23,7 +23,11 @@ export default async function MapaPage() {
 
   const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] =
     await Promise.all([
-      supabase.from("pontos_apoio").select("*").eq("ativo", true),
+      supabase
+        .from("pontos_apoio")
+        .select("*")
+        .eq("ativo", true)
+        .eq("status_aprovacao", "aprovado"),
       supabase.from("pontos_risco").select("*"),
       isAdmin
         ? supabase.from("localizacoes_ativas").select("user_id, latitude, longitude")

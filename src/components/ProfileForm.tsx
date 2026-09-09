@@ -3,16 +3,17 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { MOTIVOS, SEXO_OPTIONS, RELIGIOES, AVATARES_PEREGRINO } from "@/lib/constants";
+import { SEXO_OPTIONS, RELIGIOES, AVATARES_PEREGRINO } from "@/lib/constants";
 import { CIDADES_POR_UF, UF_OPTIONS } from "@/lib/cidades";
 import { validarNomeCompleto } from "@/lib/validation";
-import { Upload } from "lucide-react";
+import { Upload, ShieldCheck } from "lucide-react";
 import type { Profile } from "@/types/database";
 
 interface Props {
   userId: string;
   nomeInicial: string;
   telefoneInicial: string;
+  aceitaCompartilharInicial?: boolean;
   perfilExistente?: Profile | null;
 }
 
@@ -20,6 +21,7 @@ export default function ProfileForm({
   userId,
   nomeInicial,
   telefoneInicial,
+  aceitaCompartilharInicial = false,
   perfilExistente,
 }: Props) {
   const router = useRouter();
@@ -38,13 +40,6 @@ export default function ProfileForm({
   const [uf, setUf] = useState(perfilExistente?.uf ?? "SP");
   const [cidade, setCidade] = useState(perfilExistente?.cidade ?? "");
   const [buscaCidade, setBuscaCidade] = useState(perfilExistente?.cidade ?? "");
-  const [fazParteGrupo, setFazParteGrupo] = useState(
-    perfilExistente?.faz_parte_grupo ?? false
-  );
-  const [nomeGrupo, setNomeGrupo] = useState(perfilExistente?.nome_grupo ?? "");
-  const [jaFezTrajeto, setJaFezTrajeto] = useState(
-    perfilExistente?.ja_fez_trajeto ?? false
-  );
   const [dataNascimento, setDataNascimento] = useState(
     perfilExistente?.data_nascimento ?? ""
   );
@@ -52,16 +47,6 @@ export default function ProfileForm({
   const [religiao, setReligiao] = useState(perfilExistente?.religiao ?? "");
   const [religiaoOutra, setReligiaoOutra] = useState(
     perfilExistente?.religiao_outro_desc ?? ""
-  );
-  const [motivo, setMotivo] = useState(perfilExistente?.motivo ?? "");
-  const [motivoOutro, setMotivoOutro] = useState(
-    perfilExistente?.motivo_outro_desc ?? ""
-  );
-  const [carroApoio, setCarroApoio] = useState(
-    perfilExistente?.tem_acompanhamento_carro_apoio ?? false
-  );
-  const [compartilharLocalizacao, setCompartilharLocalizacao] = useState(
-    perfilExistente?.aceita_compartilhar_localizacao ?? false
   );
   const [avatarUrl, setAvatarUrl] = useState(perfilExistente?.avatar_url ?? "");
 
@@ -131,17 +116,12 @@ export default function ProfileForm({
       telefone,
       uf,
       cidade,
-      faz_parte_grupo: fazParteGrupo,
-      nome_grupo: fazParteGrupo ? nomeGrupo : null,
-      ja_fez_trajeto: jaFezTrajeto,
       data_nascimento: dataNascimento,
       sexo,
       religiao: religiao || null,
       religiao_outro_desc: religiao === "outros" ? religiaoOutra : null,
-      motivo,
-      motivo_outro_desc: motivo === "outros" ? motivoOutro : null,
-      tem_acompanhamento_carro_apoio: carroApoio,
-      aceita_compartilhar_localizacao: compartilharLocalizacao,
+      aceita_compartilhar_localizacao:
+        perfilExistente?.aceita_compartilhar_localizacao ?? aceitaCompartilharInicial,
       avatar_url: avatarUrl || null,
       atualizado_em: new Date().toISOString(),
     };
@@ -243,7 +223,7 @@ export default function ProfileForm({
               type="date"
               required
               className="input"
-              value={dataNascimento}
+              value={dataNascimento ?? ""}
               onChange={(e) => setDataNascimento(e.target.value)}
             />
           </div>
@@ -307,8 +287,8 @@ export default function ProfileForm({
             <select
               required
               className="input"
-              value={sexo}
-              onChange={(e) => setSexo(e.target.value as Profile["sexo"])}
+              value={sexo ?? ""}
+              onChange={(e) => setSexo(e.target.value)}
             >
               <option value="" disabled>
                 Selecione
@@ -348,114 +328,21 @@ export default function ProfileForm({
         </div>
       </section>
 
-      <section className="card">
-        <h2 className="mb-4 text-base font-bold text-amber-800 dark:text-amber-500">
-          Sobre sua peregrinação
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <input
-              id="grupo"
-              type="checkbox"
-              className="h-4 w-4"
-              checked={fazParteGrupo}
-              onChange={(e) => setFazParteGrupo(e.target.checked)}
-            />
-            <label htmlFor="grupo" className="text-sm font-medium">
-              Faço parte de um grupo de peregrinos
-            </label>
-          </div>
-          {fazParteGrupo && (
-            <div className="sm:col-span-2">
-              <label className="label">Nome do grupo</label>
-              <input
-                className="input"
-                value={nomeGrupo ?? ""}
-                onChange={(e) => setNomeGrupo(e.target.value)}
-              />
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <input
-              id="jafez"
-              type="checkbox"
-              className="h-4 w-4"
-              checked={jaFezTrajeto}
-              onChange={(e) => setJaFezTrajeto(e.target.checked)}
-            />
-            <label htmlFor="jafez" className="text-sm font-medium">
-              Já fiz esse trajeto antes
-            </label>
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="label">Motivo da peregrinação</label>
-            <select
-              required
-              className="input"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value as Profile["motivo"])}
-            >
-              <option value="" disabled>
-                Selecione
-              </option>
-              {MOTIVOS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {motivo === "outros" && (
-            <div className="sm:col-span-2">
-              <label className="label">Descreva o motivo</label>
-              <input
-                className="input"
-                value={motivoOutro ?? ""}
-                onChange={(e) => setMotivoOutro(e.target.value)}
-              />
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <input
-              id="carro"
-              type="checkbox"
-              className="h-4 w-4"
-              checked={carroApoio}
-              onChange={(e) => setCarroApoio(e.target.checked)}
-            />
-            <label htmlFor="carro" className="text-sm font-medium">
-              Terei acompanhamento de carro de apoio
-            </label>
-          </div>
-        </div>
-      </section>
-
       <section className="card border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
-        <h2 className="mb-2 text-base font-bold text-amber-800 dark:text-amber-500">
-          Compartilhamento de localização
+        <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-amber-800 dark:text-amber-500">
+          <ShieldCheck size={18} /> Compartilhamento de localização
         </h2>
-        <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
-          Sua localização <strong>não é usada para que outros peregrinos vejam
-          onde você está</strong>. Ela serve apenas para que a equipe de apoio
-          possa avisar você sobre condições adversas na rota (mau tempo,
-          acidentes, riscos) e para conseguir te localizar em caso de
-          emergência. Você pode desativar quando quiser.
+        <p className="text-sm text-neutral-600 dark:text-neutral-300">
+          Ao aceitar os termos no cadastro, você já autorizou o
+          compartilhamento da sua localização durante o trajeto, do início ao
+          fim de cada peregrinação. Ela{" "}
+          <strong>não é usada para que outros peregrinos vejam onde você
+          está</strong> — serve apenas para que a equipe de apoio possa avisar
+          sobre condições adversas na rota e para te localizar em caso de
+          emergência. O compartilhamento é ativado automaticamente quando você
+          inicia uma peregrinação, e você pode pausá-lo a qualquer momento na
+          página &quot;Minha peregrinação&quot;.
         </p>
-        <div className="flex items-center gap-2">
-          <input
-            id="localizacao"
-            type="checkbox"
-            className="h-4 w-4"
-            checked={compartilharLocalizacao}
-            onChange={(e) => setCompartilharLocalizacao(e.target.checked)}
-          />
-          <label htmlFor="localizacao" className="text-sm font-medium">
-            Aceito compartilhar minha localização durante a caminhada
-          </label>
-        </div>
       </section>
 
       {erro && (

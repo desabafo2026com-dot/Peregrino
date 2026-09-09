@@ -14,11 +14,28 @@ export default async function GerentePapPage() {
 
   if (!user) redirect("/login?redirect=/gerente-pap");
 
-  const { data: gerente } = await supabase
+  let { data: gerente } = await supabase
     .from("gerentes_pap")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Se ela se cadastrou com e-mail/senha e precisou confirmar o e-mail antes
+  // de logar, o registro de gerente ainda não existia — criamos agora, com
+  // os dados que ficaram guardados no cadastro (metadata do usuário).
+  if (!gerente && user.user_metadata?.tipo_conta === "gerente_pap") {
+    const { data: novoGerente } = await supabase
+      .from("gerentes_pap")
+      .insert({
+        id: user.id,
+        nome_completo: (user.user_metadata.nome_completo as string) ?? "",
+        telefone: (user.user_metadata.telefone as string) ?? "",
+        nome_organizacao: (user.user_metadata.nome_organizacao as string) ?? null,
+      })
+      .select()
+      .maybeSingle();
+    gerente = novoGerente;
+  }
 
   if (!gerente) {
     return (

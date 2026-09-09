@@ -28,10 +28,19 @@ export interface PeregrinoAtivo {
   longitude: number;
 }
 
+export interface PontoTrajeto {
+  ordem: number;
+  cidade: string;
+  lat: number;
+  lng: number;
+  feito: boolean;
+}
+
 interface Props {
   pontosApoio?: PontoApoio[];
   pontosRisco?: PontoRisco[];
   peregrinos?: PeregrinoAtivo[];
+  trajeto?: PontoTrajeto[];
   center?: [number, number];
   zoom?: number;
   height?: string;
@@ -48,6 +57,7 @@ export default function MapView({
   pontosApoio = [],
   pontosRisco = [],
   peregrinos = [],
+  trajeto = [],
   center = DEFAULT_CENTER,
   zoom = 9,
   height = "500px",
@@ -58,6 +68,7 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const trajetoMarkersRef = useRef<Marker[]>([]);
   const previewMarkerRef = useRef<Marker | null>(null);
 
   // Cria o mapa uma única vez
@@ -108,6 +119,11 @@ export default function MapView({
               ${p.responsavel ? `Responsável: ${p.responsavel}<br/>` : ""}
               ${p.telefone ? `Tel: ${p.telefone}<br/>` : ""}
               ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
+              ${
+                p.aberto_agora === false
+                  ? `<span style="color:#dc2626;font-weight:600">Fechado no momento</span><br/>`
+                  : `<span style="color:#16a34a;font-weight:600">Aberto agora</span><br/>`
+              }
               Serviços: ${servicosLabel(p.servicos)}<br/>
               ${p.contato_doacao ? `Doações: ${p.contato_doacao}` : ""}
             </div>
@@ -147,6 +163,87 @@ export default function MapView({
       markersRef.current.push(marker);
     });
   }, [pontosApoio, pontosRisco, peregrinos]);
+
+  // Trajeto — linha ligando os pontos de check-in da rota, destacando os
+  // já concluídos (verde) dos pendentes (âmbar)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    function desenhar() {
+      trajetoMarkersRef.current.forEach((m) => m.remove());
+      trajetoMarkersRef.current = [];
+
+      if (trajeto.length === 0) {
+        if (map!.getLayer("trajeto-linha")) map!.removeLayer("trajeto-linha");
+        if (map!.getSource("trajeto-linha")) map!.removeSource("trajeto-linha");
+        return;
+      }
+
+      const ordenado = [...trajeto].sort((a, b) => a.ordem - b.ordem);
+      const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: ordenado.map((p) => [p.lng, p.lat]),
+        },
+      };
+
+      const source = map!.getSource("trajeto-linha") as maplibregl.GeoJSONSource | undefined;
+      if (source) {
+        source.setData(geojson);
+      } else {
+        map!.addSource("trajeto-linha", { type: "geojson", data: geojson });
+        map!.addLayer({
+          id: "trajeto-linha",
+          type: "line",
+          source: "trajeto-linha",
+          paint: {
+            "line-color": "#92400e",
+            "line-width": 3,
+            "line-dasharray": [2, 1.5],
+          },
+        });
+      }
+
+      ordenado.forEach((p) => {
+        const el = document.createElement("div");
+        const cor = p.feito ? "#16a34a" : "#d97706";
+        el.style.cssText = `width:18px;height:18px;border-radius:50%;background:${cor};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:700`;
+        el.textContent = String(p.ordem);
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([p.lng, p.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 14 }).setHTML(
+              `<div style="font-family:sans-serif"><strong>${p.ordem}. ${p.cidade}</strong><br/>${
+                p.feito ? "Check-in feito ✓" : "Pendente"
+              }</div>`
+            )
+          )
+          .addTo(map!);
+        trajetoMarkersRef.current.push(marker);
+      });
+
+      if (ordenado.length > 1) {
+        const lons = ordenado.map((p) => p.lng);
+        const lats = ordenado.map((p) => p.lat);
+        map!.fitBounds(
+          [
+            [Math.min(...lons), Math.min(...lats)],
+            [Math.max(...lons), Math.max(...lats)],
+          ],
+          { padding: 40, maxZoom: 10 }
+        );
+      }
+    }
+
+    if (map.isStyleLoaded()) {
+      desenhar();
+    } else {
+      map.once("load", desenhar);
+    }
+  }, [trajeto]);
 
   // Marcador de prévia (ao cadastrar novo ponto)
   useEffect(() => {

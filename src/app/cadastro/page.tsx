@@ -14,6 +14,7 @@ export default function CadastroPage() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [aceitaTermos, setAceitaTermos] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,6 +38,12 @@ export default function CadastroPage() {
       setErro("A senha deve ter pelo menos 6 caracteres.");
       return;
     }
+    if (!aceitaTermos) {
+      setErro(
+        "É necessário aceitar os termos, incluindo o compartilhamento de localização durante a peregrinação, para se cadastrar."
+      );
+      return;
+    }
 
     setLoading(true);
     const supabase = createClient();
@@ -44,7 +51,7 @@ export default function CadastroPage() {
       email,
       password: senha,
       options: {
-        data: { nome_completo: nome, telefone },
+        data: { nome_completo: nome, telefone, aceita_termos: true },
       },
     });
     setLoading(false);
@@ -143,6 +150,25 @@ export default function CadastroPage() {
               onChange={(e) => setConfirmarSenha(e.target.value)}
               placeholder="Repita a senha"
             />
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
+            <input
+              id="termos"
+              type="checkbox"
+              required
+              className="mt-0.5 h-4 w-4"
+              checked={aceitaTermos}
+              onChange={(e) => setAceitaTermos(e.target.checked)}
+            />
+            <label htmlFor="termos" className="text-xs text-neutral-600 dark:text-neutral-300">
+              Li e aceito os Termos de Uso. Ao aceitar, autorizo o
+              compartilhamento da minha localização durante o trajeto, do
+              início ao fim de cada peregrinação, exclusivamente para que a
+              equipe de apoio possa avisar sobre condições adversas e me
+              localizar em caso de emergência — outros peregrinos não veem
+              minha localização.
+            </label>
           </div>
 
           {erro && (

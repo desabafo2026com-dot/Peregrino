@@ -1,14 +1,35 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ShieldAlert, LayoutDashboard, MapPinPlus, TriangleAlert, Route, Users } from "lucide-react";
+import VoltarButton from "@/components/VoltarButton";
+import {
+  ShieldAlert,
+  LayoutDashboard,
+  MapPinPlus,
+  MapPinned,
+  TriangleAlert,
+  Route,
+  Users,
+  UserCog,
+} from "lucide-react";
 
 const ADMIN_LINKS = [
   { href: "/admin", label: "Painel", icon: LayoutDashboard },
   { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
+  { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
   { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
   { href: "/admin/riscos/novo", label: "Locais de risco", icon: TriangleAlert },
-  { href: "/admin/rotas", label: "Rotas (Sul/Norte)", icon: Route },
+  { href: "/admin/rotas", label: "Rotas (Norte/Sul)", icon: Route },
+  { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
+];
+
+// Agentes só têm acesso ao painel (leitura) e à inserção de trechos/locais
+// de risco — as demais páginas administrativas continuam exclusivas do
+// administrador (cada página confere isso de novo por segurança).
+const LINKS_AGENTE = [
+  { href: "/admin", label: "Painel", icon: LayoutDashboard },
+  { href: "/admin/riscos/novo", label: "Locais de risco", icon: TriangleAlert },
+  { href: "/admin/rotas", label: "Trechos de risco", icon: Route },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -21,20 +42,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: perfil } = await supabase
     .from("profiles")
-    .select("is_admin, nome_completo")
+    .select("is_admin, is_agente, nome_completo")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!perfil?.is_admin) {
+  if (!perfil?.is_admin && !perfil?.is_agente) {
     return (
       <div className="mx-auto max-w-md text-center">
+        <VoltarButton href="/" />
         <ShieldAlert className="mx-auto mb-4 text-amber-700" size={40} />
         <h1 className="mb-2 text-xl font-bold">Área restrita</h1>
         <p className="mb-4 text-sm text-neutral-500">
-          Esta área é reservada aos administradores de PAP (Pontos de Apoio
-          ao Peregrino) e locais de risco. Se você ajuda a manter pontos de
-          apoio na rota e deveria ter acesso, fale com a equipe do Peregrino
-          para se tornar um administrador.
+          Esta área é reservada aos administradores e agentes do Peregrino.
+          Se você ajuda a manter pontos de apoio ou informações de segurança
+          na rota e deveria ter acesso, fale com a equipe do Peregrino.
         </p>
         <Link href="/" className="btn-secondary inline-block">
           Voltar ao início
@@ -43,16 +64,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
+  const links = perfil.is_admin ? ADMIN_LINKS : LINKS_AGENTE;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold">Administração</h1>
+        <h1 className="text-2xl font-bold">
+          {perfil.is_admin ? "Administração" : "Painel do agente"}
+        </h1>
         <p className="text-sm text-neutral-500">
-          Olá, {perfil.nome_completo?.split(" ")[0] ?? "administrador"} — gerencie PAP, locais de risco e rotas de peregrinação.
+          Olá, {perfil.nome_completo?.split(" ")[0] ?? (perfil.is_admin ? "administrador" : "agente")}
+          {perfil.is_admin
+            ? " — gerencie PAP, gerentes, locais de risco e rotas de peregrinação."
+            : " — você pode visualizar o painel e o mapa, e cadastrar trechos e locais de risco."}
         </p>
       </div>
       <nav className="flex flex-wrap gap-2">
-        {ADMIN_LINKS.map((l) => (
+        {links.map((l) => (
           <Link
             key={l.href}
             href={l.href}

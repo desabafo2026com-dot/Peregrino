@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Menu, X, MapPin, Route, User, LogOut, Home, Footprints, ShieldCheck } from "lucide-react";
+import { Menu, X, MapPin, Route, User, LogOut, Home, Footprints, ShieldCheck, Church } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
@@ -64,7 +65,13 @@ export default function Navbar() {
     <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white/90 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-500">
-          <Footprints size={22} />
+          <Image
+            src="/icons/icon-192.png"
+            alt="Símbolo do Peregrino"
+            width={28}
+            height={28}
+            className="rounded-md"
+          />
           Peregrino
         </Link>
 
@@ -99,9 +106,15 @@ export default function Navbar() {
             </button>
           )}
           <ThemeToggle />
+          <Church
+            className="ml-1 text-amber-800 dark:text-amber-500"
+            size={24}
+            aria-label="Basílica de Aparecida"
+          />
         </nav>
 
         <div className="flex items-center gap-1 md:hidden">
+          <Church className="text-amber-800 dark:text-amber-500" size={22} aria-label="Basílica de Aparecida" />
           <ThemeToggle />
           <button onClick={() => setOpen(!open)} aria-label="Menu">
             {open ? <X /> : <Menu />}

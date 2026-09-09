@@ -20,6 +20,7 @@ export default function CadastroGerentePapPage() {
   const [senha, setSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function CadastroGerentePapPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
+    setSucesso(null);
 
     const erroNome = validarNomeCompleto(nomeCompleto);
     if (erroNome) {
@@ -64,6 +66,14 @@ export default function CadastroGerentePapPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password: senha,
+        options: {
+          data: {
+            nome_completo: nomeCompleto,
+            telefone,
+            nome_organizacao: nomeOrganizacao || null,
+            tipo_conta: "gerente_pap",
+          },
+        },
       });
       if (error) {
         setLoading(false);
@@ -71,6 +81,16 @@ export default function CadastroGerentePapPage() {
           error.message === "User already registered"
             ? "Este e-mail já está cadastrado. Faça login e volte a esta página."
             : error.message
+        );
+        return;
+      }
+
+      if (!data.session) {
+        // Confirmação de e-mail exigida: só criamos o registro de gerente
+        // quando ela confirmar e entrar (ver /gerente-pap).
+        setLoading(false);
+        setSucesso(
+          "Cadastro realizado! Verifique seu e-mail para confirmar a conta. Depois, faça login para cadastrar seu PAP."
         );
         return;
       }
@@ -112,9 +132,10 @@ export default function CadastroGerentePapPage() {
           <MapPinPlus size={22} className="text-amber-700" /> Cadastro de Gerente de PAP
         </h1>
         <p className="mb-5 text-sm text-neutral-500">
-          Este cadastro é separado do cadastro de peregrino. Depois de
-          aprovado por um administrador, você poderá entrar no sistema e
-          cadastrar seu PAP — que aparecerá para todos os peregrinos.
+          Este cadastro é separado do cadastro de peregrino. Cadastre-se,
+          confirme seu e-mail e você já pode entrar e cadastrar seu PAP. Ele
+          fica visível no mapa para todos os peregrinos assim que um
+          administrador aprovar a divulgação.
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -188,6 +209,11 @@ export default function CadastroGerentePapPage() {
           {erro && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
               {erro}
+            </p>
+          )}
+          {sucesso && (
+            <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+              {sucesso}
             </p>
           )}
 

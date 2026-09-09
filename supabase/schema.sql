@@ -691,4 +691,155 @@ drop policy if exists "avatars_delete_own" on storage.objects;
 create policy "avatars_delete_own" on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- =====================================================================
+-- MIGRATION 4 — Agentes/admins extras, aprovação de divulgação do PAP
+-- separada da conta do gerente, horário de funcionamento do PAP,
+-- reabrir/excluir peregrinação, rotas renomeadas (Norte primeiro),
+-- elegibilidade do certificado
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- PROFILES — campos de peregrino agora opcionais (contas de agente/admin
+-- criadas pela administração não são peregrinos e não preenchem esses
+-- dados) + papel de agente
+-- ---------------------------------------------------------------------
+alter table public.profiles alter column cidade drop not null;
+alter table public.profiles alter column data_nascimento drop not null;
+alter table public.profiles alter column sexo drop not null;
+alter table public.profiles alter column motivo drop not null;
+
+alter table public.profiles add column if not exists is_agente boolean not null default false;
+
+create or replace function public.is_agente()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select is_agente from public.profiles where id = auth.uid()), false);
+$$;
+
+grant execute on function public.is_agente() to authenticated, anon;
+
+-- Autopromoção continua bloqueada (nem admin, nem agente, por edição própria)
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own" on public.profiles for update
+  using (auth.uid() = id)
+  with check (
+    auth.uid() = id
+    and is_admin = (select p.is_admin from public.profiles p where p.id = auth.uid())
+    and is_agente = (select p.is_agente from public.profiles p where p.id = auth.uid())
+  );
+
+-- Um usuário só pode criar o PRÓPRIO perfil (upsert normal do app) e nunca
+-- já nascendo admin/agente por essa via
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own" on public.profiles for insert
+  with check (auth.uid() = id and is_admin = false and is_agente = false);
+
+-- Administradores podem criar e editar QUALQUER perfil — é assim que o
+-- admin cadastra contas de agente/outro admin (e-mail e senha próprios,
+-- via signUp comum; o perfil com is_admin/is_agente é criado por este
+-- caminho, nunca pelo próprio usuário)
+drop policy if exists "profiles_insert_admin" on public.profiles;
+create policy "profiles_insert_admin" on public.profiles for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "profiles_select_admin" on public.profiles;
+create policy "profiles_select_admin" on public.profiles for select to authenticated
+  using (public.is_admin() or auth.uid() = id);
+
+drop policy if exists "profiles_update_admin" on public.profiles;
+create policy "profiles_update_admin" on public.profiles for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- ---------------------------------------------------------------------
+-- AGENTES — enxergam painel e mapas administrativos, mas só podem
+-- INSERIR trechos de segurança e locais de risco (não editam/excluem,
+-- não mexem em PAP, gerentes ou rotas)
+-- ---------------------------------------------------------------------
+drop policy if exists "trechos_admin_write" on public.trechos_seguranca;
+drop policy if exists "trechos_insert_admin_ou_agente" on public.trechos_seguranca;
+create policy "trechos_insert_admin_ou_agente" on public.trechos_seguranca for insert to authenticated
+  with check (public.is_admin() or public.is_agente());
+drop policy if exists "trechos_update_admin" on public.trechos_seguranca;
+create policy "trechos_update_admin" on public.trechos_seguranca for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "trechos_delete_admin" on public.trechos_seguranca;
+create policy "trechos_delete_admin" on public.trechos_seguranca for delete to authenticated
+  using (public.is_admin());
+
+drop policy if exists "riscos_admin_write" on public.pontos_risco;
+drop policy if exists "riscos_insert_admin_ou_agente" on public.pontos_risco;
+create policy "riscos_insert_admin_ou_agente" on public.pontos_risco for insert to authenticated
+  with check (public.is_admin() or public.is_agente());
+drop policy if exists "riscos_update_admin" on public.pontos_risco;
+create policy "riscos_update_admin" on public.pontos_risco for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "riscos_delete_admin" on public.pontos_risco;
+create policy "riscos_delete_admin" on public.pontos_risco for delete to authenticated
+  using (public.is_admin());
+
+-- certificados: administrador também pode conferir (além do próprio dono)
+drop policy if exists "certificados_select_admin" on public.certificados;
+create policy "certificados_select_admin" on public.certificados for select to authenticated
+  using (public.is_admin() or auth.uid() = user_id);
+
+-- peregrinacoes: o próprio peregrino pode excluir sua peregrinação
+-- (reabrir/editar já é possível via peregrinacoes_update_own)
+drop policy if exists "peregrinacoes_delete_own" on public.peregrinacoes;
+create policy "peregrinacoes_delete_own" on public.peregrinacoes for delete to authenticated
+  using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------
+-- GERENTES DE PAP — cadastro passa a ser direto (e-mail/senha próprios,
+-- com confirmação por e-mail); não há mais aprovação prévia da CONTA.
+-- O que fica pendente de aprovação do administrador é a divulgação do
+-- PAP cadastrado por ela no mapa (ver pontos_apoio.status_aprovacao).
+-- ---------------------------------------------------------------------
+alter table public.gerentes_pap alter column status set default 'aprovado';
+
+-- ---------------------------------------------------------------------
+-- PONTOS DE APOIO (PAP) — aprovação de divulgação no mapa (separada da
+-- conta do gerente) + horário de funcionamento (aberto agora)
+-- ---------------------------------------------------------------------
+alter table public.pontos_apoio add column if not exists status_aprovacao text not null default 'aprovado' check (status_aprovacao in ('pendente','aprovado','rejeitado'));
+alter table public.pontos_apoio add column if not exists aberto_agora boolean not null default true;
+alter table public.pontos_apoio add column if not exists observacao_admin text;
+
+comment on column public.pontos_apoio.status_aprovacao is 'PAP cadastrado por gerente nasce pendente; só aparece no mapa público após aprovado por um admin. PAP cadastrado por admin já nasce aprovado.';
+comment on column public.pontos_apoio.aberto_agora is 'Controlado pelo próprio gerente do PAP, conforme o horário real de funcionamento.';
+
+drop policy if exists "pontos_apoio_insert_admin_ou_gerente" on public.pontos_apoio;
+create policy "pontos_apoio_insert_admin_ou_gerente" on public.pontos_apoio for insert to authenticated
+  with check (
+    public.is_admin()
+    or (
+      gerente_id = auth.uid()
+      and public.is_gerente_pap_aprovado()
+      and status_aprovacao = 'pendente'
+    )
+  );
+
+drop policy if exists "pontos_apoio_update_admin_ou_gerente" on public.pontos_apoio;
+create policy "pontos_apoio_update_admin_ou_gerente" on public.pontos_apoio for update to authenticated
+  using (public.is_admin() or gerente_id = auth.uid())
+  with check (
+    public.is_admin()
+    or (
+      gerente_id = auth.uid()
+      and status_aprovacao = (select p.status_aprovacao from public.pontos_apoio p where p.id = pontos_apoio.id)
+    )
+  );
+
+-- ---------------------------------------------------------------------
+-- ROTAS — Norte passa a ser a primeira (maior procura); Sul renomeada
+-- para refletir que os peregrinos vêm do Rio de Janeiro
+-- ---------------------------------------------------------------------
+update public.rotas set nome = 'Rota Norte', origem = 'São Paulo', destino = 'Aparecida', ordem = 1 where slug = 'norte';
+update public.rotas set nome = 'Rota Sul', origem = 'Rio de Janeiro', destino = 'Aparecida', ordem = 2 where slug = 'sul';
+
 -- FIM DO SCHEMA
