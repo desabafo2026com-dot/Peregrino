@@ -7,6 +7,17 @@ export default async function Home() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  let isGerente = false;
+  if (user) {
+    const { data: gerente } = await supabase
+      .from("gerentes_pap")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+    isGerente = !!gerente || user.user_metadata?.tipo_conta === "gerente_pap";
+  }
+
   const { data: stats } = (await supabase
     .rpc("estatisticas_publicas")
     .maybeSingle()) as {
@@ -27,10 +38,12 @@ export default async function Home() {
       desc: "Veja os PAP (Pontos de Apoio ao Peregrino) — água, alimentação, descanso e doações ao longo da rota.",
     },
     {
-      href: "/gerente-pap/cadastro",
+      href: isGerente ? "/gerente-pap" : "/gerente-pap/cadastro",
       icon: MapPinPlus,
-      title: "Cadastre seu PAP",
-      desc: "Cadastro para gerentes de PAP: cadastre-se, confirme seu e-mail e cadastre seu Ponto de Apoio ao Peregrino — ele aparece no mapa após aprovação da administração.",
+      title: "Cadastrar/Alterar PAP",
+      desc: isGerente
+        ? "Acesse sua área de gerente para alterar os dados do seu Ponto de Apoio ao Peregrino a qualquer momento."
+        : "Cadastro para gerentes de PAP: cadastre-se, confirme seu e-mail e cadastre seu Ponto de Apoio ao Peregrino — ele aparece no mapa após aprovação da administração. Depois, altere os dados quando quiser.",
     },
     {
       href: "/rotas",
@@ -86,11 +99,11 @@ export default async function Home() {
       )}
 
       <Link
-        href={user ? "/peregrinacao" : "/login"}
+        href={!user ? "/login" : isGerente ? "/gerente-pap" : "/peregrinacao"}
         className="flex items-center justify-center gap-2 rounded-2xl bg-amber-700 py-4 text-lg font-bold text-white shadow-sm hover:bg-amber-800"
       >
         <Footprints size={22} />
-        {user ? "MINHA PEREGRINAÇÃO" : "SOU PEREGRINO — ENTRAR"}
+        {!user ? "SOU PEREGRINO — ENTRAR" : isGerente ? "MEU PAP — GERENCIAR" : "MINHA PEREGRINAÇÃO"}
       </Link>
 
       <section className="grid gap-4 sm:grid-cols-2">

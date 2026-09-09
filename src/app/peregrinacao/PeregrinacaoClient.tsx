@@ -85,7 +85,7 @@ export default function PeregrinacaoClient({
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
   const [checkinsCount, setCheckinsCount] = useState(checkinsCountInicial);
   const [checkinsFeitosIds, setCheckinsFeitosIds] = useState(checkinsFeitosIdsInicial);
-  const [diasPrevistos, setDiasPrevistos] = useState("3");
+  const [diasPrevistos, setDiasPrevistos] = useState("");
   const [dataInicioPrevista, setDataInicioPrevista] = useState("");
   const [meioTransporte, setMeioTransporte] = useState<MeioTransporte>("a_pe");
   const [meioTransporteOutro, setMeioTransporteOutro] = useState("");
@@ -124,6 +124,10 @@ export default function PeregrinacaoClient({
 
   async function criarPeregrinacao(iniciarAgora: boolean) {
     setErro(null);
+    if (!diasPrevistos) {
+      setErro("Selecione os dias previstos de caminhada.");
+      return;
+    }
     if (!motivo) {
       setErro("Selecione o motivo da sua peregrinação.");
       return;
@@ -401,10 +405,14 @@ export default function PeregrinacaoClient({
           <div>
             <label className="label">Dias previstos de peregrinação</label>
             <select
+              required
               className="input"
               value={diasPrevistos}
               onChange={(e) => setDiasPrevistos(e.target.value)}
             >
+              <option value="" disabled>
+                Selecione
+              </option>
               {DIAS_PREVISTOS_OPTIONS.map((d) => (
                 <option key={d} value={d}>
                   {d} {d === 1 ? "dia" : "dias"}

@@ -15,6 +15,17 @@ export default async function PerfilPage() {
     redirect("/login?redirect=/perfil");
   }
 
+  // Contas de Gerente de PAP têm sua própria área e nunca acessam o perfil
+  // de peregrino.
+  const { data: gerente } = await supabase
+    .from("gerentes_pap")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (gerente || user.user_metadata?.tipo_conta === "gerente_pap") {
+    redirect("/gerente-pap");
+  }
+
   const { data: perfil } = await supabase
     .from("profiles")
     .select("*")

@@ -19,7 +19,7 @@ export default function RecuperarSenhaPage() {
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/redefinir-senha`,
+      redirectTo: `${window.location.origin}/auth/confirm?next=/redefinir-senha`,
     });
     setLoading(false);
     if (error) {

@@ -14,18 +14,19 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const aviso = searchParams.get("aviso");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: senha,
     });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setErro(
         error.message === "Invalid login credentials"
           ? "E-mail ou senha incorretos."
@@ -33,8 +34,23 @@ function LoginForm() {
       );
       return;
     }
-    const redirect = searchParams.get("redirect") || "/perfil";
-    router.push(redirect);
+
+    // Contas de Gerente de PAP têm sua própria área e nunca devem cair no
+    // fluxo de peregrino — verificamos o papel da conta antes de decidir
+    // para onde ir, ignorando o parâmetro de redirect quando for o caso.
+    let destino = searchParams.get("redirect") || "/perfil";
+    if (data.user) {
+      const { data: gerente } = await supabase
+        .from("gerentes_pap")
+        .select("id")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      const ehGerente = !!gerente || data.user.user_metadata?.tipo_conta === "gerente_pap";
+      if (ehGerente) destino = "/gerente-pap";
+    }
+
+    setLoading(false);
+    router.push(destino);
     router.refresh();
   }
 
@@ -49,6 +65,12 @@ function LoginForm() {
           Acesse sua conta de peregrino.
         </p>
 
+        {aviso === "confirme-email" && (
+          <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            Cadastro realizado! Enviamos um e-mail de confirmação — verifique
+            sua caixa de entrada (e o spam) e clique no link antes de entrar.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
             <label className="label">E-mail</label>

@@ -52,6 +52,7 @@ export default function CadastroPage() {
       password: senha,
       options: {
         data: { nome_completo: nome, telefone, aceita_termos: true },
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });
     setLoading(false);
@@ -73,8 +74,9 @@ export default function CadastroPage() {
     }
 
     setSucesso(
-      "Cadastro realizado! Verifique seu e-mail para confirmar a conta e depois faça login."
+      "Cadastro realizado! Verifique seu e-mail para confirmar a conta. Redirecionando..."
     );
+    setTimeout(() => router.push("/login?aviso=confirme-email"), 2000);
   }
 
   return (

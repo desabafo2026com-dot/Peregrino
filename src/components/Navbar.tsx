@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Menu, X, MapPin, Route, User, LogOut, Home, Footprints, ShieldCheck, Church } from "lucide-react";
+import { Menu, X, MapPin, Route, User, LogOut, Home, Footprints, ShieldCheck, Church, MapPinPlus } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
@@ -20,41 +20,58 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isGerente, setIsGerente] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
     const supabase = createClient();
 
-    async function checarAdmin(userId: string | undefined) {
+    async function checarPapel(
+      userId: string | undefined,
+      metadata: Record<string, unknown> | undefined
+    ) {
       if (!userId) {
         setIsAdmin(false);
+        setIsGerente(false);
         return;
       }
-      const { data } = await supabase
-        .from("profiles")
-        .select("is_admin")
-        .eq("id", userId)
-        .maybeSingle();
-      setIsAdmin(!!data?.is_admin);
+      const [{ data: perfil }, { data: gerente }] = await Promise.all([
+        supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle(),
+        supabase.from("gerentes_pap").select("id").eq("id", userId).maybeSingle(),
+      ]);
+      setIsAdmin(!!perfil?.is_admin);
+      setIsGerente(!!gerente || metadata?.tipo_conta === "gerente_pap");
     }
 
     supabase.auth.getUser().then(({ data }) => {
       setLoggedIn(!!data.user);
-      checarAdmin(data.user?.id);
+      checarPapel(data.user?.id, data.user?.user_metadata);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setLoggedIn(!!session?.user);
-      checarAdmin(session?.user?.id);
+      checarPapel(session?.user?.id, session?.user?.user_metadata);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const links = isAdmin
-    ? [...LINKS, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+  // Contas de Gerente de PAP ficam restritas à própria área — não veem os
+  // itens de navegação de peregrino ("Minha peregrinação" / "Perfil").
+  const baseLinks = isGerente
+    ? [
+        { href: "/", label: "Início", icon: Home },
+        { href: "/mapa", label: "Mapa", icon: MapPin },
+        { href: "/rotas", label: "Rotas", icon: Route },
+        { href: "/gerente-pap", label: "Meu PAP", icon: MapPinPlus },
+      ]
     : LINKS;
 
+  const links = isAdmin
+    ? [...baseLinks, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+    : baseLinks;
+
   async function handleLogout() {
+    setOpen(false);
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");

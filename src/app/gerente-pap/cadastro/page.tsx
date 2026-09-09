@@ -104,6 +104,7 @@ export default function CadastroGerentePapPage() {
             nome_organizacao: nomeOrganizacao || null,
             tipo_conta: "gerente_pap",
           },
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
         },
       });
       if (error) {
@@ -123,8 +124,9 @@ export default function CadastroGerentePapPage() {
         // só da divulgação do PAP que ela cadastrar depois.
         setLoading(false);
         setSucesso(
-          "Cadastro realizado! Verifique seu e-mail para confirmar a conta. Depois, faça login para cadastrar seu PAP."
+          "Cadastro realizado! Verifique seu e-mail para confirmar a conta. Redirecionando..."
         );
+        setTimeout(() => router.push("/login?aviso=confirme-email"), 2000);
         return;
       }
       userId = data.user?.id;

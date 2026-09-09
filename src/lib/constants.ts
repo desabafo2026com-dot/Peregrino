@@ -100,6 +100,21 @@ export const LADO_RODOVIA_LABELS: Record<string, string> = {
   nao_recomendado: "Trecho não recomendado a pé",
 };
 
+export const TIPOS_RISCO: { value: string; label: string }[] = [
+  { value: "geral", label: "Geral" },
+  { value: "transito", label: "Trânsito / atropelamento" },
+  { value: "assalto", label: "Assalto / segurança" },
+  { value: "sem_acostamento", label: "Sem acostamento / marginal" },
+  { value: "animal", label: "Animais na pista" },
+  { value: "iluminacao", label: "Falta de iluminação" },
+];
+
+export const STATUS_RISCO_INFORMADO_LABELS: Record<string, string> = {
+  pendente: "Aguardando revisão",
+  aprovado: "Aprovado — publicado no mapa",
+  rejeitado: "Não aprovado",
+};
+
 export const NIVEL_RISCO_LABELS: Record<number, string> = {
   1: "Muito baixo",
   2: "Baixo",

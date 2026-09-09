@@ -982,4 +982,87 @@ $$;
 
 grant execute on function public.estatisticas_admin() to authenticated;
 
+-- =====================================================================
+-- MIGRATION 6 — correção de papel do Gerente de PAP (não é mais tratado
+-- como peregrino após login), riscos informados por peregrinos (nova
+-- tabela, pendente de revisão da administração), rotas renomeadas para
+-- "Sentido Norte"/"Sentido Sul", e estatísticas administrativas
+-- reorganizadas em 4 grupos (Peregrinos, Peregrinações, PAP, Riscos).
+-- =====================================================================
+
+update public.rotas set nome = 'Sentido Norte' where slug = 'norte';
+update public.rotas set nome = 'Sentido Sul' where slug = 'sul';
+
+-- ---------------------------------------------------------------------
+-- RISCOS INFORMADOS — relatos de risco enviados por peregrinos durante a
+-- caminhada, pendentes de revisão da administração. Quando aprovado, gera
+-- um ponto_risco oficial (ponto_risco_id aponta para ele).
+-- ---------------------------------------------------------------------
+create table if not exists public.riscos_informados (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  titulo text not null,
+  descricao text,
+  tipo text not null default 'geral',
+  nivel_risco smallint not null default 3 check (nivel_risco between 1 and 5),
+  latitude double precision not null,
+  longitude double precision not null,
+  km_referencia numeric(6,1),
+  rota_id uuid references public.rotas(id),
+  status text not null default 'pendente' check (status in ('pendente', 'aprovado', 'rejeitado')),
+  observacao_admin text,
+  ponto_risco_id uuid references public.pontos_risco(id),
+  criado_em timestamptz not null default now()
+);
+
+alter table public.riscos_informados enable row level security;
+
+drop policy if exists "riscos_informados_insert_own" on public.riscos_informados;
+create policy "riscos_informados_insert_own" on public.riscos_informados for insert to authenticated
+  with check (user_id = auth.uid());
+
+drop policy if exists "riscos_informados_select_own_ou_admin" on public.riscos_informados;
+create policy "riscos_informados_select_own_ou_admin" on public.riscos_informados for select to authenticated
+  using (
+    user_id = auth.uid()
+    or public.is_admin()
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_agente)
+  );
+
+drop policy if exists "riscos_informados_update_admin" on public.riscos_informados;
+create policy "riscos_informados_update_admin" on public.riscos_informados for update to authenticated
+  using (public.is_admin());
+
+drop policy if exists "riscos_informados_delete_admin" on public.riscos_informados;
+create policy "riscos_informados_delete_admin" on public.riscos_informados for delete to authenticated
+  using (public.is_admin());
+
+-- ---------------------------------------------------------------------
+-- Estatísticas públicas: peregrinações concluídas agora conta apenas as
+-- que de fato emitiram certificado (consistente com a regra de
+-- elegibilidade), não apenas status = 'concluida'.
+-- ---------------------------------------------------------------------
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio where ativo = true and status_aprovacao = 'aprovado'),
+    (select count(*) from public.certificados);
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
 -- FIM DO SCHEMA

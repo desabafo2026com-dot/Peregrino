@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Circle, TriangleAlert, ShieldAlert } from "lucide-react";
 import { LADO_RODOVIA_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
+import InformarRisco from "@/components/InformarRisco";
 import type { Peregrinacao, PontoCheckin, PontoRisco, Rota, TrechoSeguranca } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
@@ -98,6 +99,8 @@ export default function TrajetoClient({
 
   return (
     <div className="flex flex-col gap-6">
+      <InformarRisco rotaId={peregrinacao.rota_id} />
+
       {pontosCheckin.length > 0 && (
         <section>
           <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">

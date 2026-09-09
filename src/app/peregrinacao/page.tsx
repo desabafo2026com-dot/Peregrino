@@ -13,6 +13,17 @@ export default async function PeregrinacaoPage() {
 
   if (!user) redirect("/login?redirect=/peregrinacao");
 
+  // Contas de Gerente de PAP têm sua própria área e nunca acessam o fluxo
+  // de peregrino.
+  const { data: gerente } = await supabase
+    .from("gerentes_pap")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (gerente || user.user_metadata?.tipo_conta === "gerente_pap") {
+    redirect("/gerente-pap");
+  }
+
   const { data: perfil } = await supabase
     .from("profiles")
     .select("*")

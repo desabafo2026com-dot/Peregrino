@@ -132,6 +132,25 @@ export interface PontoRisco {
   criado_em: string;
 }
 
+export type StatusRiscoInformado = "pendente" | "aprovado" | "rejeitado";
+
+export interface RiscoInformado {
+  id: string;
+  user_id: string;
+  titulo: string;
+  descricao: string | null;
+  tipo: string;
+  nivel_risco: number;
+  latitude: number;
+  longitude: number;
+  km_referencia: number | null;
+  rota_id: string | null;
+  status: StatusRiscoInformado;
+  observacao_admin: string | null;
+  ponto_risco_id: string | null;
+  criado_em: string;
+}
+
 export interface Peregrinacao {
   id: string;
   user_id: string;

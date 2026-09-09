@@ -144,17 +144,25 @@ export default function MapView({
     });
 
     pontosRisco.forEach((r) => {
+      // Bandeira vermelha para risco alto/muito alto (4-5), amarela para
+      // moderado/baixo (1-3).
+      const alto = r.nivel_risco >= 4;
+      const cor = alto ? "#dc2626" : "#eab308";
       const el = document.createElement("div");
-      el.style.cssText =
-        "width:22px;height:22px;border-radius:4px;background:#dc2626;border:2px solid white;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,.4)";
-      const marker = new maplibregl.Marker({ element: el })
+      el.style.cssText = "width:26px;height:26px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))";
+      el.innerHTML = `
+        <svg width="26" height="26" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <line x1="5" y1="2" x2="5" y2="22" stroke="#3f3f3f" stroke-width="2" stroke-linecap="round"/>
+          <path d="M5 3 L21 7.5 L5 12 Z" fill="${cor}" stroke="#3f3f3f" stroke-width="1"/>
+        </svg>`;
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
         .setLngLat([r.longitude, r.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px">
-              <strong style="color:#dc2626">⚠ ${r.titulo}</strong><br/>
+              <strong style="color:${cor}">🚩 ${r.titulo}</strong><br/>
               ${r.descricao ?? ""}<br/>
-              Nível de risco: ${r.nivel_risco}/5
+              Nível de risco: ${r.nivel_risco}/5 (${alto ? "Alto/Muito alto" : "Moderado/baixo"})
             </div>
           `)
         )
