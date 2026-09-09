@@ -18,7 +18,7 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS } from "@/lib/constants";
+import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
 import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte, Motivo } from "@/types/database";
 
@@ -41,6 +41,11 @@ function formatarDuracao(inicio: string | null, fim: Date) {
     zero: false,
   });
   return texto || "menos de 1 minuto";
+}
+
+function labelMeioTransporte(meio: MeioTransporte | null | undefined, outroDesc?: string | null) {
+  if (meio === "outros") return outroDesc || "outro meio de transporte";
+  return meio ? (MEIO_TRANSPORTE_LABELS[meio] ?? "a pé") : "a pé";
 }
 
 function gerarCodigoCertificado() {
@@ -83,11 +88,14 @@ export default function PeregrinacaoClient({
   const [diasPrevistos, setDiasPrevistos] = useState("3");
   const [dataInicioPrevista, setDataInicioPrevista] = useState("");
   const [meioTransporte, setMeioTransporte] = useState<MeioTransporte>("a_pe");
+  const [meioTransporteOutro, setMeioTransporteOutro] = useState("");
   const [rotaId, setRotaId] = useState(rotas[0]?.id ?? "");
   const [emGrupo, setEmGrupo] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
   const [jaFezTrajeto, setJaFezTrajeto] = useState(perfil.ja_fez_trajeto ?? false);
-  const [motivo, setMotivo] = useState<Motivo | "">(perfil.motivo ?? "");
+  // Sempre em branco: o motivo é escolhido a cada nova peregrinação, não é
+  // reaproveitado de um valor salvo anteriormente no perfil.
+  const [motivo, setMotivo] = useState<Motivo | "">("");
   const [motivoOutro, setMotivoOutro] = useState(perfil.motivo_outro_desc ?? "");
   const [carroApoio, setCarroApoio] = useState(perfil.tem_acompanhamento_carro_apoio ?? false);
   const [compartilhando, setCompartilhando] = useState(
@@ -120,6 +128,10 @@ export default function PeregrinacaoClient({
       setErro("Selecione o motivo da sua peregrinação.");
       return;
     }
+    if (meioTransporte === "outros" && !meioTransporteOutro.trim()) {
+      setErro("Especifique o meio de transporte.");
+      return;
+    }
     setLoading(true);
     const {
       data: { user },
@@ -137,6 +149,7 @@ export default function PeregrinacaoClient({
         data_inicio_prevista: dataInicioPrevista || null,
         data_inicio: iniciarAgora ? agora : null,
         meio_transporte: meioTransporte,
+        meio_transporte_outro_desc: meioTransporte === "outros" ? meioTransporteOutro : null,
         rota_id: rotaId || null,
         em_grupo: emGrupo,
         nome_grupo: emGrupo ? nomeGrupo || null : null,
@@ -328,6 +341,7 @@ export default function PeregrinacaoClient({
       total_checkins: checkinsCount,
       rota_nome: rotaAtual ? `${rotaAtual.nome} (${rotaAtual.origem} → ${rotaAtual.destino})` : null,
       meio_transporte: meioAtual,
+      meio_transporte_outro_desc: peregrinacao.meio_transporte_outro_desc,
       duracao_texto: duracaoTexto,
     });
 
@@ -385,14 +399,18 @@ export default function PeregrinacaoClient({
         </h2>
         <div className="mb-4 grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="label">Dias previstos de caminhada</label>
-            <input
-              type="number"
-              min={1}
+            <label className="label">Dias previstos de peregrinação</label>
+            <select
               className="input"
               value={diasPrevistos}
               onChange={(e) => setDiasPrevistos(e.target.value)}
-            />
+            >
+              {DIAS_PREVISTOS_OPTIONS.map((d) => (
+                <option key={d} value={d}>
+                  {d} {d === 1 ? "dia" : "dias"}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Data prevista de início</label>
@@ -417,6 +435,18 @@ export default function PeregrinacaoClient({
               ))}
             </select>
           </div>
+          {meioTransporte === "outros" && (
+            <div>
+              <label className="label">Especifique o meio de transporte</label>
+              <input
+                required
+                className="input"
+                value={meioTransporteOutro}
+                onChange={(e) => setMeioTransporteOutro(e.target.value)}
+                placeholder="Ex: cavalo, moto..."
+              />
+            </div>
+          )}
           {rotas.length > 0 && (
             <div>
               <label className="label">Rota</label>
@@ -529,7 +559,7 @@ export default function PeregrinacaoClient({
       <div className="card">
         <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
           {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
-          {MEIO_TRANSPORTE_LABELS[peregrinacao.meio_transporte] ?? "a pé"}
+          {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
           {rotaPlanejada ? ` — ${rotaPlanejada.nome} (${rotaPlanejada.origem} → ${rotaPlanejada.destino})` : ""}
           {peregrinacao.em_grupo ? ` — em grupo${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}` : ""}
         </p>
@@ -560,7 +590,7 @@ export default function PeregrinacaoClient({
               </p>
               <p className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
                 {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} /> : <Footprints size={14} />}
-                {MEIO_TRANSPORTE_LABELS[peregrinacao.meio_transporte] ?? "a pé"}
+                {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
                 {rotaAtiva ? ` — ${rotaAtiva.nome} (${rotaAtiva.origem} → ${rotaAtiva.destino})` : ""}
                 {peregrinacao.em_grupo
                   ? ` — em grupo${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`

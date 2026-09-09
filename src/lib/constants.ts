@@ -67,11 +67,25 @@ export const SERVICOS_PONTO_APOIO: { value: string; label: string }[] = [
 export const MEIO_TRANSPORTE_OPTIONS: { value: string; label: string }[] = [
   { value: "a_pe", label: "A pé" },
   { value: "bicicleta", label: "Bicicleta" },
+  { value: "outros", label: "Outros" },
 ];
 
 export const MEIO_TRANSPORTE_LABELS: Record<string, string> = {
   a_pe: "a pé",
   bicicleta: "de bicicleta",
+  outros: "outro meio de transporte",
+};
+
+export const DIAS_PREVISTOS_OPTIONS: number[] = Array.from({ length: 15 }, (_, i) => i + 1);
+
+export const SENTIDO_PISTA_OPTIONS: { value: string; label: string }[] = [
+  { value: "sp", label: "Sentido São Paulo (Rota Norte)" },
+  { value: "rj", label: "Sentido Rio de Janeiro (Rota Sul)" },
+];
+
+export const SENTIDO_PISTA_LABELS: Record<string, string> = {
+  sp: "Sentido São Paulo",
+  rj: "Sentido Rio de Janeiro",
 };
 
 export const PAP_SIGLA = "PAP";

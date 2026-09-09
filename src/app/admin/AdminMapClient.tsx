@@ -24,6 +24,7 @@ export default function AdminMapClient({ pontosApoio, pontosRisco, peregrinos }:
       pontosApoio={pontosApoio}
       pontosRisco={pontosRisco}
       peregrinos={peregrinos}
+      calorPeregrinos
       height="55vh"
     />
   );

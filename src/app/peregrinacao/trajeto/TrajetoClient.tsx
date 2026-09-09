@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Circle, TriangleAlert, ShieldAlert } from "lucide-react";
@@ -43,6 +43,18 @@ export default function TrajetoClient({
   const [checkinsFeitos, setCheckinsFeitos] = useState(new Set(checkinsFeitosIdsIniciais));
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [minhaPosicao, setMinhaPosicao] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Mostra a posição atual do peregrino no mapa do trajeto.
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setMinhaPosicao({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
 
   async function fazerCheckin(ponto: PontoCheckin) {
     if (!navigator.geolocation) {
@@ -93,6 +105,7 @@ export default function TrajetoClient({
           </h2>
           <MapView
             trajeto={trajeto}
+            minhaPosicao={minhaPosicao}
             center={[pontosCheckin[0].longitude, pontosCheckin[0].latitude]}
             zoom={7}
             height="350px"

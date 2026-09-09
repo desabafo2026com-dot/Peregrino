@@ -1,19 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AdminMapClient from "./AdminMapClient";
-import PeregrinosAdminClient, { type PeregrinoLinha } from "./PeregrinosAdminClient";
+import AdminDrilldownClient, { type PeregrinoLinha, type PapLinha, type RiscoLinha } from "./AdminDrilldownClient";
 import VoltarButton from "@/components/VoltarButton";
-import { Users, Award, CheckCircle2, MapPinned, TriangleAlert, CalendarCheck, UserCheck } from "lucide-react";
-import type { PontoApoio, PontoRisco, Rota } from "@/types/database";
+import { CheckCircle2, UserCheck } from "lucide-react";
+import type { PontoApoio, PontoRisco, Rota, MeioTransporte, Peregrinacao } from "@/types/database";
 
 interface StatsAdmin {
-  peregrinos_ativos: number;
-  peregrinacoes_concluidas: number;
-  concluidas_hoje: number;
   checkins_hoje: number;
-  checkins_total: number;
-  pontos_apoio_ativos: number;
-  pontos_risco_total: number;
   gerentes_pendentes: number;
 }
 
@@ -40,12 +34,7 @@ export default async function AdminDashboardPage() {
 
   const cards = stats
     ? [
-        { icon: Users, label: "Peregrinos ativos agora", value: stats.peregrinos_ativos },
-        { icon: Award, label: "Peregrinações concluídas", value: stats.peregrinacoes_concluidas },
-        { icon: CalendarCheck, label: "Concluídas hoje", value: stats.concluidas_hoje },
         { icon: CheckCircle2, label: "Check-ins hoje", value: stats.checkins_hoje },
-        { icon: MapPinned, label: "PAP ativos", value: stats.pontos_apoio_ativos },
-        { icon: TriangleAlert, label: "Locais de risco", value: stats.pontos_risco_total },
         {
           icon: UserCheck,
           label: "Gerentes PAP pendentes",
@@ -55,77 +44,137 @@ export default async function AdminDashboardPage() {
       ]
     : [];
 
-  let peregrinosAtivos: PeregrinoLinha[] = [];
-  let peregrinosConcluidos: PeregrinoLinha[] = [];
+  let peregrinosPorAba: Record<"cadastrados" | "ativos" | "concluidos" | "concluidosHoje", PeregrinoLinha[]> = {
+    cadastrados: [],
+    ativos: [],
+    concluidos: [],
+    concluidosHoje: [],
+  };
+  let papPorAba: Record<"cadastrados" | "ativos" | "pendentes", PapLinha[]> = {
+    cadastrados: [],
+    ativos: [],
+    pendentes: [],
+  };
+  let riscos: RiscoLinha[] = [];
 
   if (isAdmin) {
-    const [{ data: ativas }, { data: concluidas }, { data: rotas }] = await Promise.all([
-      supabase
-        .from("peregrinacoes")
-        .select("*")
-        .eq("status", "em_andamento")
-        .order("data_inicio", { ascending: false })
-        .limit(50),
-      supabase
-        .from("peregrinacoes")
-        .select("*")
-        .eq("status", "concluida")
-        .order("data_fim", { ascending: false })
-        .limit(50),
-      supabase.from("rotas").select("*"),
-    ]);
+    const [{ data: todosPerfis }, { data: gerentes }, { data: todasPeregrinacoes }, { data: rotas }] =
+      await Promise.all([
+        supabase.from("profiles").select("id, nome_completo, cidade, uf"),
+        supabase.from("gerentes_pap").select("id, nome_completo"),
+        supabase
+          .from("peregrinacoes")
+          .select("*")
+          .order("criado_em", { ascending: false }),
+        supabase.from("rotas").select("*"),
+      ]);
+    const nomeDaRotaParaRiscos = new Map(((rotas ?? []) as Rota[]).map((r) => [r.id, r.nome]));
+    riscos = ((pontosRisco ?? []) as PontoRisco[]).map((r) => ({
+      id: r.id,
+      titulo: r.titulo,
+      tipo: r.tipo,
+      nivelRisco: r.nivel_risco,
+      kmReferencia: r.km_referencia,
+      rotaNome: r.rota_id ? nomeDaRotaParaRiscos.get(r.rota_id) ?? null : null,
+    }));
 
-    const todasPeregrinacoes = [...(ativas ?? []), ...(concluidas ?? [])];
-    const userIds = [...new Set(todasPeregrinacoes.map((p) => p.user_id as string))];
-    const peregrinacaoIds = todasPeregrinacoes.map((p) => p.id as string);
+    interface PerfilBasico {
+      id: string;
+      nome_completo: string;
+      cidade: string | null;
+      uf: string | null;
+    }
 
-    const [{ data: perfis }, { data: checkins }, { data: localizacoesAtivas }] = await Promise.all([
-      userIds.length
-        ? supabase.from("profiles").select("id, nome_completo").in("id", userIds)
-        : Promise.resolve({ data: [] as { id: string; nome_completo: string }[] }),
-      peregrinacaoIds.length
-        ? supabase.from("checkins").select("peregrinacao_id").in("peregrinacao_id", peregrinacaoIds)
-        : Promise.resolve({ data: [] as { peregrinacao_id: string }[] }),
-      supabase.from("localizacoes_ativas").select("peregrinacao_id, latitude, longitude, atualizado_em"),
-    ]);
+    const idsGerentes = new Set((gerentes ?? []).map((g) => g.id as string));
+    const peregrinoProfiles = ((todosPerfis ?? []) as PerfilBasico[]).filter(
+      (p) => !idsGerentes.has(p.id)
+    );
 
-    const nomeDoUsuario = new Map((perfis ?? []).map((p) => [p.id, p.nome_completo]));
+    const nomeDaRota = new Map(((rotas ?? []) as Rota[]).map((r) => [r.id, r.nome]));
+    const nomeDoGerente = new Map(
+      (gerentes ?? []).map((g) => [g.id as string, g.nome_completo as string])
+    );
+
+    const peregrinacoes = (todasPeregrinacoes ?? []) as Peregrinacao[];
+    const peregrinacaoIds = peregrinacoes.map((p) => p.id);
+    const { data: checkins } = peregrinacaoIds.length
+      ? await supabase.from("checkins").select("peregrinacao_id").in("peregrinacao_id", peregrinacaoIds)
+      : { data: [] as { peregrinacao_id: string }[] };
     const contagemCheckins = new Map<string, number>();
     (checkins ?? []).forEach((c) => {
       contagemCheckins.set(c.peregrinacao_id, (contagemCheckins.get(c.peregrinacao_id) ?? 0) + 1);
     });
-    const localizacaoPorPeregrinacao = new Map(
-      (localizacoesAtivas ?? []).map((l) => [l.peregrinacao_id, l])
-    );
-    const nomeDaRota = new Map(((rotas ?? []) as Rota[]).map((r) => [r.id, r.nome]));
 
-    function paraLinha(p: {
-      id: string;
-      user_id: string;
-      status: "em_andamento" | "concluida";
-      meio_transporte: string;
-      rota_id: string | null;
-      data_inicio: string | null;
-      data_fim: string | null;
-    }): PeregrinoLinha {
-      const loc = localizacaoPorPeregrinacao.get(p.id);
+    // Última peregrinação (qualquer status) de cada peregrino cadastrado.
+    const ultimaPeregrinacaoPorUsuario = new Map<string, Peregrinacao>();
+    peregrinacoes.forEach((p) => {
+      if (!ultimaPeregrinacaoPorUsuario.has(p.user_id)) {
+        ultimaPeregrinacaoPorUsuario.set(p.user_id, p);
+      }
+    });
+
+    function linhaDoPerfil(perfilPeregrino: PerfilBasico): PeregrinoLinha {
+      const p = ultimaPeregrinacaoPorUsuario.get(perfilPeregrino.id);
+      const local = perfilPeregrino.cidade
+        ? `${perfilPeregrino.cidade}${perfilPeregrino.uf ? `/${perfilPeregrino.uf}` : ""}`
+        : "não informado";
+      if (!p) {
+        return {
+          id: perfilPeregrino.id,
+          nome: perfilPeregrino.nome_completo,
+          status: "sem_peregrinacao",
+          local,
+          meioTransporte: null,
+          rotaNome: null,
+          dataInicio: null,
+          dataFim: null,
+          checkinsCount: 0,
+        };
+      }
       return {
         id: p.id,
-        nome: nomeDoUsuario.get(p.user_id) ?? "Peregrino",
-        status: p.status,
-        meioTransporte: p.meio_transporte,
+        nome: perfilPeregrino.nome_completo,
+        status: p.status === "concluida" ? "concluida" : p.status === "em_andamento" ? "em_andamento" : "sem_peregrinacao",
+        local,
+        meioTransporte: (p.meio_transporte as MeioTransporte) ?? null,
+        meioTransporteOutroDesc: p.meio_transporte_outro_desc,
         rotaNome: p.rota_id ? nomeDaRota.get(p.rota_id) ?? null : null,
         dataInicio: p.data_inicio,
         dataFim: p.data_fim,
         checkinsCount: contagemCheckins.get(p.id) ?? 0,
-        localizacaoAtual: loc
-          ? { latitude: loc.latitude, longitude: loc.longitude, atualizadoEm: loc.atualizado_em }
-          : null,
       };
     }
 
-    peregrinosAtivos = (ativas ?? []).map(paraLinha);
-    peregrinosConcluidos = (concluidas ?? []).map(paraLinha);
+    const cadastrados = peregrinoProfiles.map(linhaDoPerfil);
+    const ativos = cadastrados.filter((l) => l.status === "em_andamento");
+    const concluidos = cadastrados.filter((l) => l.status === "concluida");
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const concluidosHoje = concluidos.filter(
+      (l) => l.dataFim && new Date(l.dataFim) >= hoje
+    );
+
+    peregrinosPorAba = { cadastrados, ativos, concluidos, concluidosHoje };
+
+    const papRows = ((pontosApoio ?? []) as PontoApoio[]).map(
+      (p): PapLinha => ({
+        id: p.id,
+        nome: p.nome,
+        cidade: p.cidade,
+        kmReferencia: p.km_referencia,
+        sentidoPista: p.sentido_pista,
+        statusAprovacao: p.status_aprovacao,
+        abertoAgora: p.aberto_agora,
+        gerenteNome: p.gerente_id ? nomeDoGerente.get(p.gerente_id) ?? null : null,
+        criadoEm: p.criado_em,
+      })
+    );
+
+    papPorAba = {
+      cadastrados: papRows,
+      ativos: papRows.filter((p) => p.abertoAgora && p.statusAprovacao === "aprovado"),
+      pendentes: papRows.filter((p) => p.statusAprovacao === "pendente"),
+    };
   }
 
   return (
@@ -166,12 +215,7 @@ export default async function AdminDashboardPage() {
       </section>
 
       {isAdmin && (
-        <section>
-          <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">
-            Peregrinos — quem está ativo e quem já concluiu
-          </h2>
-          <PeregrinosAdminClient ativos={peregrinosAtivos} concluidos={peregrinosConcluidos} />
-        </section>
+        <AdminDrilldownClient peregrinos={peregrinosPorAba} pap={papPorAba} riscos={riscos} />
       )}
     </div>
   );

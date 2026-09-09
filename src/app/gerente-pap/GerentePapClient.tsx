@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon } from "lucide-react";
+import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon, Pencil } from "lucide-react";
 import { STATUS_PAP_LABELS } from "@/lib/constants";
 import type { GerentePap, PontoApoio } from "@/types/database";
 
@@ -79,13 +79,22 @@ export default function GerentePapClient({
                   {p.km_referencia != null ? ` — km ${p.km_referencia}` : ""}
                 </p>
               </div>
-              <button
-                onClick={() => excluir(p.id)}
-                className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                aria-label="Excluir PAP"
-              >
-                <Trash2 size={18} />
-              </button>
+              <div className="flex gap-1">
+                <Link
+                  href={`/gerente-pap/pap/${p.id}/editar`}
+                  className="rounded-lg p-2 text-amber-700 hover:bg-amber-50 dark:text-amber-500 dark:hover:bg-amber-950/40"
+                  aria-label="Editar PAP"
+                >
+                  <Pencil size={18} />
+                </Link>
+                <button
+                  onClick={() => excluir(p.id)}
+                  className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                  aria-label="Excluir PAP"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
             </div>
             <button
               onClick={() => alternarAberto(p.id, p.aberto_agora)}

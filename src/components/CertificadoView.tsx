@@ -15,7 +15,12 @@ function formatarData(d: string | null) {
 }
 
 export default function CertificadoView({ certificado: c }: { certificado: Certificado }) {
-  const meioLabel = c.meio_transporte ? MEIO_TRANSPORTE_LABELS[c.meio_transporte] : "a pé";
+  const meioLabel =
+    c.meio_transporte === "outros"
+      ? c.meio_transporte_outro_desc || "outro meio de transporte"
+      : c.meio_transporte
+        ? MEIO_TRANSPORTE_LABELS[c.meio_transporte]
+        : "a pé";
   return (
     <div>
       <div

@@ -47,6 +47,8 @@ interface Props {
   pickMode?: boolean;
   onPick?: (lat: number, lng: number) => void;
   markerPreview?: { lat: number; lng: number } | null;
+  calorPeregrinos?: boolean;
+  minhaPosicao?: { lat: number; lng: number } | null;
 }
 
 function servicosLabel(servicos: string[]) {
@@ -64,12 +66,15 @@ export default function MapView({
   pickMode = false,
   onPick,
   markerPreview = null,
+  calorPeregrinos = false,
+  minhaPosicao = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const trajetoMarkersRef = useRef<Marker[]>([]);
   const previewMarkerRef = useRef<Marker | null>(null);
+  const minhaPosicaoMarkerRef = useRef<Marker | null>(null);
 
   // Cria o mapa uma única vez
   useEffect(() => {
@@ -116,8 +121,9 @@ export default function MapView({
             <div style="font-family:sans-serif;max-width:220px">
               <span style="font-size:10px;letter-spacing:.05em;color:#92400e;font-weight:700">PAP</span><br/>
               <strong>${p.nome}</strong><br/>
+              ${p.cidade ? `${p.cidade}${p.sentido_pista ? ` — sentido ${p.sentido_pista === "sp" ? "São Paulo" : "Rio de Janeiro"}` : ""}<br/>` : ""}
               ${p.responsavel ? `Responsável: ${p.responsavel}<br/>` : ""}
-              ${p.telefone ? `Tel: ${p.telefone}<br/>` : ""}
+              ${p.telefone && p.exibir_telefone !== false ? `Tel: ${p.telefone}<br/>` : ""}
               ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
               ${
                 p.aberto_agora === false
@@ -125,7 +131,11 @@ export default function MapView({
                   : `<span style="color:#16a34a;font-weight:600">Aberto agora</span><br/>`
               }
               Serviços: ${servicosLabel(p.servicos)}<br/>
-              ${p.contato_doacao ? `Doações: ${p.contato_doacao}` : ""}
+              ${
+                p.aceita_doacoes
+                  ? `<span style="color:#92400e;font-weight:600">Aceita doações</span>${p.doacao_necessidade ? `: ${p.doacao_necessidade}` : ""}<br/>${p.contato_doacao ? `Contato doação: ${p.contato_doacao}` : ""}`
+                  : ""
+              }
             </div>
           `)
         )
@@ -244,6 +254,88 @@ export default function MapView({
       map.once("load", desenhar);
     }
   }, [trajeto]);
+
+  // Mapa de calor de peregrinos ativos — intensidade conforme a
+  // concentração de peregrinos naquele ponto do trajeto (uso administrativo).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    function desenharCalor() {
+      const geojson: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+        type: "FeatureCollection",
+        features: peregrinos.map((p) => ({
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Point", coordinates: [p.longitude, p.latitude] },
+        })),
+      };
+
+      const source = map!.getSource("peregrinos-calor") as maplibregl.GeoJSONSource | undefined;
+      if (source) {
+        source.setData(geojson);
+        return;
+      }
+      if (!calorPeregrinos) return;
+
+      map!.addSource("peregrinos-calor", { type: "geojson", data: geojson });
+      map!.addLayer({
+        id: "peregrinos-calor-layer",
+        type: "heatmap",
+        source: "peregrinos-calor",
+        paint: {
+          "heatmap-weight": 1,
+          "heatmap-intensity": 1.2,
+          "heatmap-radius": 35,
+          "heatmap-opacity": 0.65,
+          "heatmap-color": [
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0,
+            "rgba(0,0,0,0)",
+            0.2,
+            "rgb(254,240,217)",
+            0.4,
+            "rgb(253,204,138)",
+            0.6,
+            "rgb(252,141,89)",
+            0.8,
+            "rgb(227,74,51)",
+            1,
+            "rgb(153,0,0)",
+          ],
+        },
+      });
+    }
+
+    if (!calorPeregrinos) return;
+    if (map.isStyleLoaded()) {
+      desenharCalor();
+    } else {
+      map.once("load", desenharCalor);
+    }
+  }, [peregrinos, calorPeregrinos]);
+
+  // Marcador da posição atual do próprio peregrino (na página de trajeto)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (minhaPosicaoMarkerRef.current) {
+      minhaPosicaoMarkerRef.current.remove();
+      minhaPosicaoMarkerRef.current = null;
+    }
+    if (minhaPosicao) {
+      const el = document.createElement("div");
+      el.style.cssText =
+        "width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid white;box-shadow:0 0 0 4px rgba(37,99,235,.3)";
+      minhaPosicaoMarkerRef.current = new maplibregl.Marker({ element: el })
+        .setLngLat([minhaPosicao.lng, minhaPosicao.lat])
+        .setPopup(new maplibregl.Popup({ offset: 14 }).setHTML("Você está aqui"))
+        .addTo(map);
+    }
+  }, [minhaPosicao]);
 
   // Marcador de prévia (ao cadastrar novo ponto)
   useEffect(() => {

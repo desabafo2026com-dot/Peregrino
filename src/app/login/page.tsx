@@ -71,6 +71,11 @@ function LoginForm() {
               onChange={(e) => setSenha(e.target.value)}
               placeholder="••••••••"
             />
+            <p className="mt-1 text-right">
+              <Link href="/recuperar-senha" className="text-xs font-medium text-amber-700">
+                Esqueci minha senha
+              </Link>
+            </p>
           </div>
 
           {erro && (

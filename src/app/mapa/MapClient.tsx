@@ -24,6 +24,7 @@ export default function MapClient({ pontosApoio, pontosRisco, peregrinos }: Prop
       pontosApoio={pontosApoio}
       pontosRisco={pontosRisco}
       peregrinos={peregrinos}
+      calorPeregrinos={peregrinos.length > 0}
       height="65vh"
     />
   );

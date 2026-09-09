@@ -842,4 +842,144 @@ create policy "pontos_apoio_update_admin_ou_gerente" on public.pontos_apoio for 
 update public.rotas set nome = 'Rota Norte', origem = 'São Paulo', destino = 'Aparecida', ordem = 1 where slug = 'norte';
 update public.rotas set nome = 'Rota Sul', origem = 'Rio de Janeiro', destino = 'Aparecida', ordem = 2 where slug = 'sul';
 
+-- =====================================================================
+-- MIGRATION 5 — Localização completa do PAP no cadastro do gerente
+-- (cidade, km, sentido da pista, período), telefone/doações opcionais e
+-- exibidos conforme autorização, meio de transporte "outros", estatísticas
+-- detalhadas de peregrinos/PAP para o painel admin com drill-down, e
+-- recuperação de senha (usa o fluxo padrão do Supabase Auth, sem alteração
+-- de schema).
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- PONTOS DE APOIO — localização descritiva (cidade, sentido da pista) e
+-- controles de privacidade/divulgação do gerente
+-- ---------------------------------------------------------------------
+alter table public.pontos_apoio add column if not exists cidade text;
+alter table public.pontos_apoio add column if not exists sentido_pista text check (sentido_pista in ('sp', 'rj'));
+alter table public.pontos_apoio add column if not exists exibir_telefone boolean not null default true;
+alter table public.pontos_apoio add column if not exists aceita_doacoes boolean not null default false;
+alter table public.pontos_apoio add column if not exists doacao_necessidade text;
+
+comment on column public.pontos_apoio.sentido_pista is 'Sentido da pista onde o PAP fica: sp (sentido São Paulo / Rota Norte) ou rj (sentido Rio de Janeiro / Rota Sul).';
+comment on column public.pontos_apoio.exibir_telefone is 'Se falso, o telefone do PAP não é exibido publicamente no mapa (uso interno da administração).';
+comment on column public.pontos_apoio.aceita_doacoes is 'Se verdadeiro, exibe no mapa que o PAP aceita doações e o que precisa.';
+
+-- ---------------------------------------------------------------------
+-- MEIO DE TRANSPORTE — opção "outros", com descrição livre
+-- ---------------------------------------------------------------------
+alter type meio_transporte_enum add value if not exists 'outros';
+
+alter table public.peregrinacoes add column if not exists meio_transporte_outro_desc text;
+alter table public.certificados add column if not exists meio_transporte_outro_desc text;
+
+-- Atualiza verificação pública de certificado com o novo campo
+drop function if exists public.verificar_certificado(text);
+create or replace function public.verificar_certificado(p_codigo text)
+returns table (
+  nome_peregrino text,
+  dias_caminhada int,
+  data_inicio timestamptz,
+  data_fim timestamptz,
+  total_checkins int,
+  emitido_em timestamptz,
+  rota_nome text,
+  meio_transporte text,
+  meio_transporte_outro_desc text,
+  duracao_texto text,
+  valido boolean
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select nome_peregrino, dias_caminhada, data_inicio, data_fim, total_checkins, emitido_em,
+         rota_nome, meio_transporte::text, meio_transporte_outro_desc, duracao_texto, true as valido
+  from public.certificados
+  where codigo = p_codigo;
+$$;
+
+grant execute on function public.verificar_certificado(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- ESTATÍSTICAS PÚBLICAS (home) — peregrinos ativos, check-ins realizados
+-- (total), PAP ativos e peregrinações concluídas
+-- ---------------------------------------------------------------------
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento') as peregrinos_ativos,
+    (select count(*) from public.checkins where criado_em >= current_date) as checkins_hoje,
+    (select count(*) from public.checkins) as checkins_total,
+    (select count(*) from public.pontos_apoio where ativo = true and status_aprovacao = 'aprovado') as pontos_apoio_ativos,
+    (select count(*) from public.peregrinacoes where status = 'concluida') as peregrinacoes_concluidas;
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- ESTATÍSTICAS ADMINISTRATIVAS — módulos PEREGRINOS (cadastrados, ativos,
+-- concluídas, concluídas hoje) e PAP (cadastrados, ativos, pendentes,
+-- locais de risco) para o drill-down do painel
+-- ---------------------------------------------------------------------
+drop function if exists public.estatisticas_admin();
+create or replace function public.estatisticas_admin()
+returns table (
+  peregrinos_ativos bigint,
+  peregrinacoes_concluidas bigint,
+  concluidas_hoje bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  pontos_risco_total bigint,
+  gerentes_pendentes bigint,
+  peregrinos_cadastrados bigint,
+  pap_cadastrados bigint,
+  pap_ativos bigint,
+  pap_pendentes bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  return query
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.peregrinacoes where status = 'concluida'),
+    (select count(*) from public.peregrinacoes where status = 'concluida' and data_fim >= current_date),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio where ativo = true and status_aprovacao = 'aprovado'),
+    (select count(*) from public.pontos_risco),
+    (select count(*) from public.gerentes_pap where status = 'pendente'),
+    (select count(*) from public.profiles p
+       where p.is_admin = false and p.is_agente = false
+         and not exists (select 1 from public.gerentes_pap g where g.id = p.id)),
+    (select count(*) from public.pontos_apoio),
+    (select count(*) from public.pontos_apoio where aberto_agora = true and status_aprovacao = 'aprovado'),
+    (select count(*) from public.pontos_apoio where status_aprovacao = 'pendente');
+end;
+$$;
+
+grant execute on function public.estatisticas_admin() to authenticated;
+
 -- FIM DO SCHEMA

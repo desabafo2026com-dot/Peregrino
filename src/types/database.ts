@@ -11,7 +11,8 @@ export type Motivo =
 export type StatusPeregrinacao = "planejada" | "em_andamento" | "concluida" | "cancelada";
 export type StatusGerentePap = "pendente" | "aprovado" | "rejeitado";
 export type StatusAprovacaoPap = "pendente" | "aprovado" | "rejeitado";
-export type MeioTransporte = "a_pe" | "bicicleta";
+export type MeioTransporte = "a_pe" | "bicicleta" | "outros";
+export type SentidoPista = "sp" | "rj";
 export type LadoRodovia =
   | "marginal_norte"
   | "marginal_sul"
@@ -98,6 +99,11 @@ export interface PontoApoio {
   aberto_agora: boolean;
   observacao_admin: string | null;
   rota_id: string | null;
+  cidade: string | null;
+  sentido_pista: SentidoPista | null;
+  exibir_telefone: boolean;
+  aceita_doacoes: boolean;
+  doacao_necessidade: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -136,6 +142,7 @@ export interface Peregrinacao {
   data_fim: string | null;
   compartilhar_localizacao: boolean;
   meio_transporte: MeioTransporte;
+  meio_transporte_outro_desc: string | null;
   rota_id: string | null;
   em_grupo: boolean;
   nome_grupo: string | null;
@@ -174,6 +181,7 @@ export interface Certificado {
   total_checkins: number;
   rota_nome: string | null;
   meio_transporte: MeioTransporte | null;
+  meio_transporte_outro_desc: string | null;
   duracao_texto: string | null;
   emitido_em: string;
 }

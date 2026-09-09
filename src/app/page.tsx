@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, ShieldCheck, Users, Footprints } from "lucide-react";
+import { MapPin, MapPinPlus, Route, ShieldCheck, Users, Footprints, CheckCircle2, Award } from "lucide-react";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -13,7 +13,9 @@ export default async function Home() {
     data: {
       peregrinos_ativos: number;
       checkins_hoje: number;
+      checkins_total: number;
       pontos_apoio_ativos: number;
+      peregrinacoes_concluidas: number;
     } | null;
   };
 
@@ -55,24 +57,30 @@ export default async function Home() {
       </section>
 
       {stats && (
-        <section className="grid grid-cols-3 gap-3 text-center">
+        <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
           <div className="card">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Users size={20} /> {stats.peregrinos_ativos}
             </p>
-            <p className="text-xs text-neutral-500">peregrinos ativos agora</p>
+            <p className="text-xs text-neutral-500">peregrinos ativos</p>
           </div>
           <div className="card">
-            <p className="text-2xl font-bold text-amber-800 dark:text-amber-500">
-              {stats.checkins_hoje}
+            <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
+              <CheckCircle2 size={20} /> {stats.checkins_total}
             </p>
-            <p className="text-xs text-neutral-500">check-ins hoje</p>
+            <p className="text-xs text-neutral-500">check-ins realizados</p>
           </div>
           <div className="card">
-            <p className="text-2xl font-bold text-amber-800 dark:text-amber-500">
-              {stats.pontos_apoio_ativos}
+            <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
+              <MapPin size={20} /> {stats.pontos_apoio_ativos}
             </p>
-            <p className="text-xs text-neutral-500">pontos de apoio</p>
+            <p className="text-xs text-neutral-500">PAP ativos</p>
+          </div>
+          <div className="card">
+            <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
+              <Award size={20} /> {stats.peregrinacoes_concluidas}
+            </p>
+            <p className="text-xs text-neutral-500">peregrinações concluídas</p>
           </div>
         </section>
       )}

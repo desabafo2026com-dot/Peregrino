@@ -14,11 +14,12 @@ interface Resultado {
   emitido_em: string;
   rota_nome: string | null;
   meio_transporte: string | null;
+  meio_transporte_outro_desc: string | null;
   duracao_texto: string | null;
   valido: boolean;
 }
 
-const MEIO_LABEL: Record<string, string> = { a_pe: "a pé", bicicleta: "de bicicleta" };
+const MEIO_LABEL: Record<string, string> = { a_pe: "a pé", bicicleta: "de bicicleta", outros: "outro meio de transporte" };
 
 export default function VerificarPage() {
   const [codigo, setCodigo] = useState("");
@@ -70,7 +71,12 @@ export default function VerificarPage() {
           <p className="mb-2 font-semibold text-green-700">✓ Certificado válido</p>
           <p className="text-sm">
             <strong>{resultado.nome_peregrino}</strong> concluiu{" "}
-            {resultado.meio_transporte ? MEIO_LABEL[resultado.meio_transporte] ?? "" : ""} a
+            {resultado.meio_transporte === "outros"
+              ? resultado.meio_transporte_outro_desc || "outro meio de transporte"
+              : resultado.meio_transporte
+                ? MEIO_LABEL[resultado.meio_transporte] ?? ""
+                : ""}{" "}
+            a
             peregrinação{resultado.rota_nome ? ` pela ${resultado.rota_nome}` : ""} em{" "}
             {resultado.duracao_texto ?? `${resultado.dias_caminhada} dia(s)`}, com{" "}
             {resultado.total_checkins} check-in(s).

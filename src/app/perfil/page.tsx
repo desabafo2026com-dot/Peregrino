@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/ProfileForm";
+import AlterarSenhaForm from "@/components/AlterarSenhaForm";
 import VoltarButton from "@/components/VoltarButton";
 import type { Profile } from "@/types/database";
 
@@ -38,6 +39,9 @@ export default async function PerfilPage() {
         aceitaCompartilharInicial={!!user.user_metadata?.aceita_termos}
         perfilExistente={perfil as Profile | null}
       />
+      <div className="mt-6">
+        <AlterarSenhaForm />
+      </div>
     </div>
   );
 }
