@@ -104,6 +104,7 @@ export interface PontoApoio {
   exibir_telefone: boolean;
   aceita_doacoes: boolean;
   doacao_necessidade: string | null;
+  datas_funcionamento: string[];
   criado_em: string;
   atualizado_em: string;
 }

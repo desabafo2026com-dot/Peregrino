@@ -1077,4 +1077,94 @@ drop policy if exists "gerentes_pap_insert_own" on public.gerentes_pap;
 create policy "gerentes_pap_insert_own" on public.gerentes_pap for insert to authenticated
   with check (auth.uid() = id);
 
+-- =====================================================================
+-- MIGRATION 8 — calendário de datas de funcionamento do PAP: além do
+-- horário semanal (dias da semana + hora), o gerente agora pode marcar
+-- datas específicas (ou um período) em que o PAP realmente vai funcionar
+-- (ex.: só durante uma festa/temporada). Um PAP sem datas marcadas
+-- continua sempre ativo (comportamento anterior, sem quebrar cadastros
+-- já existentes). "PAP ativos" na home e no admin passam a considerar
+-- essa data.
+-- =====================================================================
+
+alter table public.pontos_apoio add column if not exists datas_funcionamento date[] not null default '{}';
+
+comment on column public.pontos_apoio.datas_funcionamento is 'Datas específicas (ou período) em que o PAP funciona. Vazio = sem restrição, sempre ativo.';
+
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true and status_aprovacao = 'aprovado'
+         and (cardinality(datas_funcionamento) = 0 or current_date = any(datas_funcionamento))),
+    (select count(*) from public.certificados);
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
+drop function if exists public.estatisticas_admin();
+create or replace function public.estatisticas_admin()
+returns table (
+  peregrinos_ativos bigint,
+  peregrinacoes_concluidas bigint,
+  concluidas_hoje bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  pontos_risco_total bigint,
+  gerentes_pendentes bigint,
+  peregrinos_cadastrados bigint,
+  pap_cadastrados bigint,
+  pap_ativos bigint,
+  pap_pendentes bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  return query
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.peregrinacoes where status = 'concluida'),
+    (select count(*) from public.peregrinacoes where status = 'concluida' and data_fim >= current_date),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true and status_aprovacao = 'aprovado'
+         and (cardinality(datas_funcionamento) = 0 or current_date = any(datas_funcionamento))),
+    (select count(*) from public.pontos_risco),
+    (select count(*) from public.gerentes_pap where status = 'pendente'),
+    (select count(*) from public.profiles p
+       where p.is_admin = false and p.is_agente = false
+         and not exists (select 1 from public.gerentes_pap g where g.id = p.id)),
+    (select count(*) from public.pontos_apoio),
+    (select count(*) from public.pontos_apoio
+       where aberto_agora = true and status_aprovacao = 'aprovado'
+         and (cardinality(datas_funcionamento) = 0 or current_date = any(datas_funcionamento))),
+    (select count(*) from public.pontos_apoio where status_aprovacao = 'pendente');
+end;
+$$;
+
+grant execute on function public.estatisticas_admin() to authenticated;
+
 -- FIM DO SCHEMA

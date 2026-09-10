@@ -55,6 +55,18 @@ function servicosLabel(servicos: string[]) {
   return servicos.length ? servicos.join(", ") : "—";
 }
 
+function hojeISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Um PAP sem datas marcadas funciona o ano todo (sem restrição). Com datas
+// marcadas, só conta como ativo hoje se a data atual estiver entre elas.
+function ativoHoje(datas: string[] | undefined) {
+  if (!datas || datas.length === 0) return true;
+  return datas.includes(hojeISO());
+}
+
 export default function MapView({
   pontosApoio = [],
   pontosRisco = [],
@@ -126,9 +138,11 @@ export default function MapView({
               ${p.telefone && p.exibir_telefone !== false ? `Tel: ${p.telefone}<br/>` : ""}
               ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
               ${
-                p.aberto_agora === false
-                  ? `<span style="color:#dc2626;font-weight:600">Fechado no momento</span><br/>`
-                  : `<span style="color:#16a34a;font-weight:600">Aberto agora</span><br/>`
+                !ativoHoje(p.datas_funcionamento)
+                  ? `<span style="color:#dc2626;font-weight:600">Fora do período de funcionamento hoje</span><br/>`
+                  : p.aberto_agora === false
+                    ? `<span style="color:#dc2626;font-weight:600">Fechado no momento</span><br/>`
+                    : `<span style="color:#16a34a;font-weight:600">Aberto agora</span><br/>`
               }
               Serviços: ${servicosLabel(p.servicos)}<br/>
               ${

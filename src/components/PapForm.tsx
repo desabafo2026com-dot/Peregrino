@@ -9,6 +9,7 @@ import {
   DIAS_SEMANA_OPTIONS,
 } from "@/lib/constants";
 import { LocateFixed } from "lucide-react";
+import CalendarioDatas from "@/components/CalendarioDatas";
 import type { PontoApoio, SentidoPista } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
@@ -31,6 +32,7 @@ export interface PapFormDados {
   cidade: string | null;
   sentido_pista: SentidoPista | null;
   periodo_funcionamento: string | null;
+  datas_funcionamento: string[];
   servicos: string[];
   aceita_doacoes: boolean;
   doacao_necessidade: string | null;
@@ -76,6 +78,9 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
   const [diasSemana, setDiasSemana] = useState<string[]>([]);
   const [horarioAbertura, setHorarioAbertura] = useState("");
   const [horarioFechamento, setHorarioFechamento] = useState("");
+  const [datasFuncionamento, setDatasFuncionamento] = useState<string[]>(
+    pontoInicial?.datas_funcionamento ?? []
+  );
   const [servicos, setServicos] = useState<string[]>(pontoInicial?.servicos ?? []);
   const [aceitaDoacoes, setAceitaDoacoes] = useState(pontoInicial?.aceita_doacoes ?? false);
   const [doacaoNecessidade, setDoacaoNecessidade] = useState(pontoInicial?.doacao_necessidade ?? "");
@@ -128,6 +133,7 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
       // Se nenhum dia foi marcado agora, preserva o período que já estava
       // salvo (texto livre de antes desta mudança) em vez de apagá-lo.
       periodo_funcionamento: periodoNovo ?? pontoInicial?.periodo_funcionamento ?? null,
+      datas_funcionamento: datasFuncionamento,
       servicos,
       aceita_doacoes: aceitaDoacoes,
       doacao_necessidade: aceitaDoacoes ? doacaoNecessidade || null : null,
@@ -223,7 +229,7 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="label">Período de funcionamento</label>
+            <label className="label">Horário de funcionamento (dias da semana)</label>
             <div className="flex flex-wrap gap-2">
               {DIAS_SEMANA_OPTIONS.map((d) => (
                 <button
@@ -266,6 +272,17 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
                 alterá-lo.
               </p>
             )}
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Datas em que o PAP estará ativo (calendário)</label>
+            <p className="mb-2 text-xs text-neutral-500">
+              Marque dias específicos ou um período no calendário abaixo — nessas datas o PAP
+              aparece como ativo na página inicial. Deixe em branco se ele funciona o ano todo,
+              sem restrição de datas.
+            </p>
+            <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
+              <CalendarioDatas value={datasFuncionamento} onChange={setDatasFuncionamento} />
+            </div>
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input

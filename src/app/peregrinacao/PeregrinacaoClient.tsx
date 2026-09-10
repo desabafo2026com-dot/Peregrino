@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { intervalToDuration, formatDuration } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -14,13 +13,32 @@ import {
   Award,
   Footprints,
   Bike,
-  Route as RouteIcon,
   RotateCcw,
   Trash2,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
+import InformarRisco from "@/components/InformarRisco";
+import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
 import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte, Motivo } from "@/types/database";
+
+// Coordenadas aproximadas da Basílica de Nossa Senhora Aparecida — usadas
+// como referência para confirmar, por geolocalização, que o peregrino está
+// mesmo em Aparecida ao finalizar a peregrinação (fallback caso a rota não
+// tenha um ponto de check-in cadastrado em Aparecida).
+const APARECIDA_LAT = -22.8494;
+const APARECIDA_LNG = -45.2317;
+const DISTANCIA_AVISO_KM = 5;
+
+function distanciaKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 interface PeregrinacaoConcluida extends Peregrinacao {
   temCertificado: boolean;
@@ -295,6 +313,29 @@ export default function PeregrinacaoClient({
   async function finalizarPeregrinacao() {
     if (!peregrinacao) return;
     if (!confirm("Finalizar a peregrinação?")) return;
+
+    // Tenta confirmar, por geolocalização, que o peregrino está em
+    // Aparecida-SP. Se a posição não bater (ou não puder ser obtida), avisa
+    // mas não bloqueia — o GPS pode falhar ou o peregrino pode estar
+    // encerrando de um ponto próximo, não exatamente na Basílica.
+    const pontosOrdenadosParaAlvo = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem);
+    const pontoAparecida = pontosOrdenadosParaAlvo[pontosOrdenadosParaAlvo.length - 1];
+    const alvoLat = pontoAparecida?.latitude ?? APARECIDA_LAT;
+    const alvoLng = pontoAparecida?.longitude ?? APARECIDA_LNG;
+    const posAtual = await obterPosicaoAtual();
+    if (posAtual) {
+      const dist = distanciaKm(posAtual.coords.latitude, posAtual.coords.longitude, alvoLat, alvoLng);
+      if (dist > DISTANCIA_AVISO_KM) {
+        const distTexto = dist < 10 ? dist.toFixed(1) : Math.round(dist).toString();
+        if (
+          !confirm(
+            `Não conseguimos confirmar que você está em Aparecida-SP pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja finalizar mesmo assim?`
+          )
+        ) {
+          return;
+        }
+      }
+    }
 
     setLoading(true);
     await supabase.from("localizacoes_ativas").delete().eq("peregrinacao_id", peregrinacao.id);
@@ -604,26 +645,28 @@ export default function PeregrinacaoClient({
   } else if (peregrinacao.status === "em_andamento") {
     const rotaAtiva = rotas.find((r) => r.id === peregrinacao.rota_id);
     principal = (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
+        {/* Módulo 1 — Peregrinação em andamento: dados + linha do tempo com
+            origem, check-ins intermediários (destacados ao serem feitos) e
+            destino (Aparecida) + controle de compartilhamento de localização. */}
         <div className="card border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="flex items-center gap-2 font-semibold text-green-800 dark:text-green-400">
+            <div className="flex-1">
+              <p className="flex items-center justify-center gap-2 text-center font-bold text-green-800 dark:text-green-400">
                 <Radio size={18} /> Peregrinação em andamento
               </p>
-              <p className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
-                {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} /> : <Footprints size={14} />}
+              <p className="mt-1 text-justify text-sm text-neutral-600 dark:text-neutral-300">
+                {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} className="inline" /> : <Footprints size={14} className="inline" />}{" "}
                 {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
                 {rotaAtiva ? ` — ${rotaAtiva.nome} (${rotaAtiva.origem} → ${rotaAtiva.destino})` : ""}
                 {peregrinacao.em_grupo
                   ? ` — em grupo${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
                   : ""}
-              </p>
-              <p className="text-sm text-neutral-600 dark:text-neutral-300">
-                Iniciada em{" "}
+                {". Iniciada em "}
                 {peregrinacao.data_inicio
                   ? new Date(peregrinacao.data_inicio).toLocaleString("pt-BR")
                   : "-"}
+                .
               </p>
             </div>
             {pontosCheckin.length > 0 && (
@@ -634,76 +677,88 @@ export default function PeregrinacaoClient({
               />
             )}
           </div>
+
+          <div className="mt-4 border-t border-green-200/70 pt-4 dark:border-green-900/50">
+            <TrajetoTimelineCompact pontosCheckin={pontosCheckin} checkinsFeitosIds={checkinsFeitosIds} />
+          </div>
+
+          <div className="mt-4 flex items-center justify-center border-t border-green-200/70 pt-3 dark:border-green-900/50">
+            {compartilhando ? (
+              <button
+                onClick={pararCompartilhamento}
+                className="flex items-center gap-1.5 text-xs font-medium text-neutral-600 hover:text-neutral-800 dark:text-neutral-300"
+              >
+                <MapPin size={14} /> Localização compartilhada — pausar
+              </button>
+            ) : (
+              <button
+                onClick={retomarCompartilhamento}
+                className="flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:text-amber-900 dark:text-amber-500"
+              >
+                <MapPin size={14} /> Compartilhamento pausado — retomar
+              </button>
+            )}
+          </div>
         </div>
 
-        {pontosCheckin.length > 0 && (
-          <Link
-            href="/peregrinacao/trajeto"
-            className="btn-secondary flex items-center justify-center gap-2"
-          >
-            <RouteIcon size={18} /> Ver trajeto e pontos de check-in
-          </Link>
-        )}
+        {/* Módulos 2 e 3, lado a lado — Informar risco e Fazer check-in. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="card">
+            <h2 className="mb-3 text-center text-base font-bold text-red-700">
+              Informe risco ou suspeita
+            </h2>
+            <InformarRisco rotaId={peregrinacao.rota_id} />
+          </div>
 
-        <div className="card">
-          <h2 className="mb-2 text-base font-bold text-amber-800 dark:text-amber-500">
-            Compartilhar localização
-          </h2>
-          <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
-            {compartilhando
-              ? "Sua localização está sendo compartilhada com a equipe de apoio, para avisos de condições adversas e localização em emergência. Outros peregrinos não veem sua localização."
-              : "O compartilhamento está pausado no momento."}
-          </p>
-          {compartilhando ? (
-            <button onClick={pararCompartilhamento} className="btn-secondary flex items-center gap-2">
-              <MapPin size={18} /> Pausar compartilhamento
+          <div className="card">
+            <h2 className="mb-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
+              Fazer check-in ({checkinsCount})
+            </h2>
+            <p className="mb-3 text-justify text-xs text-neutral-500">
+              Aviso: você deve fazer pelo menos um check-in entre a origem e a
+              cidade de Aparecida para receber o certificado.
+            </p>
+            <select
+              className="input mb-3"
+              value={pontoSelecionado}
+              onChange={(e) => setPontoSelecionado(e.target.value)}
+            >
+              <option value="">Check-in livre (sem ponto de apoio)</option>
+              {pontosApoio.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => fazerCheckin()}
+              className="btn-primary flex w-full items-center justify-center gap-2"
+            >
+              <CheckCircle2 size={18} /> Fazer check-in aqui
             </button>
-          ) : (
-            <button onClick={retomarCompartilhamento} className="btn-primary flex items-center gap-2">
-              <MapPin size={18} /> Retomar compartilhamento
-            </button>
-          )}
+            {msg && <p className="mt-2 text-center text-sm text-green-700">{msg}</p>}
+          </div>
         </div>
 
-        <div className="card">
-          <h2 className="mb-2 text-base font-bold text-amber-800 dark:text-amber-500">
-            Check-in ({checkinsCount})
-          </h2>
-          <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
-            Confirme sua passagem para ajudar na localização de peregrinos.
-          </p>
-          <select
-            className="input mb-3"
-            value={pontoSelecionado}
-            onChange={(e) => setPontoSelecionado(e.target.value)}
-          >
-            <option value="">Check-in livre (sem ponto de apoio)</option>
-            {pontosApoio.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nome}
-              </option>
-            ))}
-          </select>
-          <button onClick={() => fazerCheckin()} className="btn-primary flex items-center gap-2">
-            <CheckCircle2 size={18} /> Fazer check-in aqui
-          </button>
-          {msg && <p className="mt-2 text-sm text-green-700">{msg}</p>}
-        </div>
+        {erro && <p className="text-center text-sm text-red-600">{erro}</p>}
 
-        {erro && <p className="text-sm text-red-600">{erro}</p>}
-
+        {/* Módulo final, em uma linha — Concluir. */}
         <div className="card">
-          <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-amber-800 dark:text-amber-500">
+          <h2 className="mb-2 flex items-center justify-center gap-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
             <Award size={18} /> Concluir
           </h2>
-          <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
-            Ao finalizar, seu certificado de peregrino será gerado
-            automaticamente — desde que você tenha feito o check-in inicial
+          <p className="mx-auto mb-4 max-w-md text-justify text-sm text-neutral-600 dark:text-neutral-300">
+            Ao finalizar, tentaremos confirmar por localização que você está
+            em Aparecida-SP — se não conseguirmos, você poderá confirmar
+            manualmente. Seu certificado de peregrino será gerado
+            automaticamente, desde que você tenha feito o check-in inicial
             fora de Aparecida e o check-in final em Aparecida.
           </p>
-          <button disabled={loading} onClick={finalizarPeregrinacao} className="btn-primary">
-            {loading ? "Finalizando..." : "Finalizar peregrinação"}
-          </button>
+          <div className="flex justify-center">
+            <button disabled={loading} onClick={finalizarPeregrinacao} className="btn-primary">
+              {loading ? "Finalizando..." : "Finalizar peregrinação"}
+            </button>
+          </div>
         </div>
       </div>
     );
