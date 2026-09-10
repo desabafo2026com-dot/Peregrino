@@ -52,6 +52,27 @@ export default async function PeregrinacaoPage() {
     .order("criado_em", { ascending: false })
     .maybeSingle();
 
+  const { data: concluidasData } = await supabase
+    .from("peregrinacoes")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("status", "concluida")
+    .order("data_fim", { ascending: false });
+
+  const { data: certificadosData } = await supabase
+    .from("certificados")
+    .select("peregrinacao_id")
+    .eq("user_id", user.id);
+
+  const idsComCertificado = new Set(
+    (certificadosData ?? []).map((c) => c.peregrinacao_id as string)
+  );
+
+  const peregrinacoesConcluidas = (concluidasData ?? []).map((p) => ({
+    ...(p as Peregrinacao),
+    temCertificado: idsComCertificado.has(p.id as string),
+  }));
+
   const { data: pontosApoio } = await supabase
     .from("pontos_apoio")
     .select("*")
@@ -100,6 +121,7 @@ export default async function PeregrinacaoPage() {
       <PeregrinacaoClient
         perfil={perfil as Profile}
         peregrinacaoInicial={peregrinacao as Peregrinacao | null}
+        peregrinacoesConcluidas={peregrinacoesConcluidas}
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
         rotas={(rotas ?? []) as Rota[]}
         checkinsCount={checkinsCount}

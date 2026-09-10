@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -22,9 +22,14 @@ import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTO
 import AlertaProximidade from "@/components/AlertaProximidade";
 import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte, Motivo } from "@/types/database";
 
+interface PeregrinacaoConcluida extends Peregrinacao {
+  temCertificado: boolean;
+}
+
 interface Props {
   perfil: Profile;
   peregrinacaoInicial: Peregrinacao | null;
+  peregrinacoesConcluidas: PeregrinacaoConcluida[];
   pontosApoio: PontoApoio[];
   rotas: Rota[];
   checkinsCount: number;
@@ -73,6 +78,7 @@ function obterPosicaoAtual(): Promise<GeolocationPosition | null> {
 export default function PeregrinacaoClient({
   perfil,
   peregrinacaoInicial,
+  peregrinacoesConcluidas,
   pontosApoio,
   rotas,
   checkinsCount: checkinsCountInicial,
@@ -83,6 +89,7 @@ export default function PeregrinacaoClient({
   const supabase = createClient();
 
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
+  const [loadingConcluidaId, setLoadingConcluidaId] = useState<string | null>(null);
   const [checkinsCount, setCheckinsCount] = useState(checkinsCountInicial);
   const [checkinsFeitosIds, setCheckinsFeitosIds] = useState(checkinsFeitosIdsInicial);
   const [diasPrevistos, setDiasPrevistos] = useState("");
@@ -327,10 +334,11 @@ export default function PeregrinacaoClient({
     setLoading(false);
 
     if (!elegivel) {
-      setPeregrinacao({ ...peregrinacao, status: "concluida", data_fim: agora.toISOString() });
       setMsg(
-        "Peregrinação concluída. Certificado não emitido: é necessário ter feito o check-in inicial em uma cidade diferente de Aparecida e o check-in final em Aparecida."
+        "Peregrinação concluída. Certificado não emitido: é necessário ter feito o check-in inicial em uma cidade diferente de Aparecida e o check-in final em Aparecida. Você encontra essa peregrinação na lista de concluídas abaixo."
       );
+      setPeregrinacao(null);
+      router.refresh();
       return;
     }
 
@@ -356,20 +364,25 @@ export default function PeregrinacaoClient({
     router.push("/certificado");
   }
 
-  async function reabrirPeregrinacao() {
-    if (!peregrinacao) return;
+  async function reabrirConcluida(id: string) {
+    if (peregrinacao) {
+      setErro(
+        "Finalize ou exclua a peregrinação atual antes de reabrir uma peregrinação concluída anterior."
+      );
+      return;
+    }
     if (
       !confirm(
         "Reabrir esta peregrinação? Ela voltará para 'em andamento' e o certificado emitido (se houver) deixa de ser válido."
       )
     )
       return;
-    setLoading(true);
+    setLoadingConcluidaId(id);
     const { error } = await supabase
       .from("peregrinacoes")
       .update({ status: "em_andamento", data_fim: null })
-      .eq("id", peregrinacao.id);
-    setLoading(false);
+      .eq("id", id);
+    setLoadingConcluidaId(null);
     if (error) {
       setErro(error.message);
       return;
@@ -377,17 +390,16 @@ export default function PeregrinacaoClient({
     router.refresh();
   }
 
-  async function excluirPeregrinacao() {
-    if (!peregrinacao) return;
+  async function excluirConcluida(id: string) {
     if (
       !confirm(
         "Excluir esta peregrinação? Essa ação não pode ser desfeita e apaga também seus check-ins e certificado."
       )
     )
       return;
-    setLoading(true);
-    const { error } = await supabase.from("peregrinacoes").delete().eq("id", peregrinacao.id);
-    setLoading(false);
+    setLoadingConcluidaId(id);
+    const { error } = await supabase.from("peregrinacoes").delete().eq("id", id);
+    setLoadingConcluidaId(null);
     if (error) {
       setErro(error.message);
       return;
@@ -395,12 +407,19 @@ export default function PeregrinacaoClient({
     router.refresh();
   }
 
+  let principal: ReactNode;
+
   if (!peregrinacao) {
-    return (
+    principal = (
       <div className="card">
         <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
           Iniciar peregrinação
         </h2>
+        {msg && (
+          <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+            {msg}
+          </p>
+        )}
         <div className="mb-4 grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label">Dias previstos de peregrinação</label>
@@ -559,11 +578,9 @@ export default function PeregrinacaoClient({
         </div>
       </div>
     );
-  }
-
-  if (peregrinacao.status === "planejada") {
+  } else if (peregrinacao.status === "planejada") {
     const rotaPlanejada = rotas.find((r) => r.id === peregrinacao.rota_id);
-    return (
+    principal = (
       <div className="card">
         <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
           {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
@@ -584,11 +601,9 @@ export default function PeregrinacaoClient({
         </button>
       </div>
     );
-  }
-
-  if (peregrinacao.status === "em_andamento") {
+  } else if (peregrinacao.status === "em_andamento") {
     const rotaAtiva = rotas.find((r) => r.id === peregrinacao.rota_id);
-    return (
+    principal = (
       <div className="flex flex-col gap-5">
         <div className="card border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
           <div className="flex items-start justify-between gap-3">
@@ -692,41 +707,69 @@ export default function PeregrinacaoClient({
         </div>
       </div>
     );
+  } else {
+    // Status "cancelada" ou algum outro caso não esperado — trata como se
+    // não houvesse peregrinação ativa.
+    principal = null;
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="card text-center">
-        <p className="mb-3 text-neutral-600 dark:text-neutral-300">
-          Sua última peregrinação já foi concluída. 🎉
-        </p>
-        {msg && <p className="mb-3 text-sm text-amber-700 dark:text-amber-500">{msg}</p>}
-        <a href="/certificado" className="btn-primary inline-block">
-          Ver certificado
-        </a>
-      </div>
-      {erro && <p className="text-sm text-red-600">{erro}</p>}
-      <div className="card flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-neutral-500">
-          Errou algo? Você pode reabrir esta peregrinação ou excluí-la.
-        </p>
-        <div className="flex gap-2">
-          <button
-            disabled={loading}
-            onClick={reabrirPeregrinacao}
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
-            <RotateCcw size={16} /> Reabrir
-          </button>
-          <button
-            disabled={loading}
-            onClick={excluirPeregrinacao}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-          >
-            <Trash2 size={16} /> Excluir
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col gap-6">
+      {principal}
+
+      {peregrinacoesConcluidas.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+            <Award size={20} /> Peregrinações concluídas
+          </h2>
+          <div className="flex flex-col gap-3">
+            {peregrinacoesConcluidas.map((p) => {
+              const rota = rotas.find((r) => r.id === p.rota_id);
+              return (
+                <div key={p.id} className="card flex flex-col gap-2">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
+                    {p.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
+                    {labelMeioTransporte(p.meio_transporte, p.meio_transporte_outro_desc)}
+                    {rota ? ` — ${rota.nome} (${rota.origem} → ${rota.destino})` : ""}
+                  </p>
+                  <p className="text-sm text-neutral-600 dark:text-neutral-300">
+                    {p.data_inicio ? new Date(p.data_inicio).toLocaleDateString("pt-BR") : "-"}
+                    {" a "}
+                    {p.data_fim ? new Date(p.data_fim).toLocaleDateString("pt-BR") : "-"}
+                    {!p.temCertificado && " — sem certificado"}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {p.temCertificado && (
+                      <a href="/certificado" className="btn-secondary text-xs">
+                        Ver certificado
+                      </a>
+                    )}
+                    <button
+                      disabled={loadingConcluidaId === p.id || !!peregrinacao}
+                      onClick={() => reabrirConcluida(p.id)}
+                      title={
+                        peregrinacao
+                          ? "Finalize ou exclua a peregrinação atual antes de reabrir esta"
+                          : undefined
+                      }
+                      className="btn-secondary flex items-center gap-2 text-xs"
+                    >
+                      <RotateCcw size={14} /> Reabrir
+                    </button>
+                    <button
+                      disabled={loadingConcluidaId === p.id}
+                      onClick={() => excluirConcluida(p.id)}
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                    >
+                      <Trash2 size={14} /> Excluir
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

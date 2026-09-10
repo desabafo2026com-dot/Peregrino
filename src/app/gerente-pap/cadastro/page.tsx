@@ -23,7 +23,6 @@ export default function CadastroGerentePapPage() {
   // Aba "Cadastrar"
   const [nomeCompleto, setNomeCompleto] = useState("");
   const [telefone, setTelefone] = useState("");
-  const [nomeOrganizacao, setNomeOrganizacao] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
@@ -34,11 +33,25 @@ export default function CadastroGerentePapPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setLogado(!!data.user);
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data.user;
+      setLogado(!!user);
+      if (user) {
+        // Já é gerente de PAP cadastrada? Não faz sentido mostrar esta tela
+        // de novo — vai direto para a área dela.
+        const { data: gerente } = await supabase
+          .from("gerentes_pap")
+          .select("id")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (gerente) {
+          router.replace("/gerente-pap");
+          return;
+        }
+      }
       setChecando(false);
     });
-  }, []);
+  }, [router]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -101,7 +114,6 @@ export default function CadastroGerentePapPage() {
           data: {
             nome_completo: nomeCompleto,
             telefone,
-            nome_organizacao: nomeOrganizacao || null,
             tipo_conta: "gerente_pap",
           },
           emailRedirectTo: `${window.location.origin}/auth/confirm`,
@@ -142,7 +154,6 @@ export default function CadastroGerentePapPage() {
       id: userId,
       nome_completo: nomeCompleto,
       telefone,
-      nome_organizacao: nomeOrganizacao || null,
     });
 
     setLoading(false);
@@ -164,12 +175,12 @@ export default function CadastroGerentePapPage() {
       <VoltarButton href="/mapa" />
       <div className="card">
         <h1 className="mb-1 flex items-center gap-2 text-xl font-bold">
-          <MapPinPlus size={22} className="text-amber-700" /> Cadastrar PAP
+          <MapPinPlus size={22} className="text-amber-700" /> Gerente de PAP
         </h1>
         <p className="mb-5 text-sm text-neutral-500">
           Este acesso é separado do cadastro de peregrino. Cadastre-se, entre
-          e você já pode cadastrar seu PAP — ele fica visível no mapa para
-          todos os peregrinos assim que um administrador aprovar a
+          e você já pode cadastrar os dados do seu PAP — ele fica visível no
+          mapa para todos os peregrinos assim que um administrador aprovar a
           divulgação.
         </p>
 
@@ -220,15 +231,6 @@ export default function CadastroGerentePapPage() {
                 placeholder="(00) 00000-0000"
               />
             </div>
-            <div>
-              <label className="label">Nome do PAP / organização (opcional)</label>
-              <input
-                className="input"
-                value={nomeOrganizacao}
-                onChange={(e) => setNomeOrganizacao(e.target.value)}
-              />
-            </div>
-
             {!logado && (
               <>
                 <div>

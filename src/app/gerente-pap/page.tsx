@@ -30,7 +30,6 @@ export default async function GerentePapPage() {
         id: user.id,
         nome_completo: (user.user_metadata.nome_completo as string) ?? "",
         telefone: (user.user_metadata.telefone as string) ?? "",
-        nome_organizacao: (user.user_metadata.nome_organizacao as string) ?? null,
       })
       .select()
       .maybeSingle();

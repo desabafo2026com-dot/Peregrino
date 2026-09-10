@@ -1065,4 +1065,16 @@ $$;
 
 grant execute on function public.estatisticas_publicas() to anon, authenticated;
 
+-- ---------------------------------------------------------------------
+-- MIGRATION 7 — correção crítica: a política de insert de gerentes_pap
+-- ainda exigia status = 'pendente', mas a coluna passou a ter default
+-- 'aprovado' (migration 4/expansão v3). Resultado: toda tentativa de
+-- criar o registro do gerente (seja na tela de cadastro, seja na
+-- autocorreção feita em /gerente-pap após confirmar o e-mail) era
+-- bloqueada pelo RLS, e o gerente nunca via seus próprios dados.
+-- ---------------------------------------------------------------------
+drop policy if exists "gerentes_pap_insert_own" on public.gerentes_pap;
+create policy "gerentes_pap_insert_own" on public.gerentes_pap for insert to authenticated
+  with check (auth.uid() = id);
+
 -- FIM DO SCHEMA

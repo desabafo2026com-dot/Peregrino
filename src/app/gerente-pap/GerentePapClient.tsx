@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon, Pencil } from "lucide-react";
 import { STATUS_PAP_LABELS } from "@/lib/constants";
+import PapForm, { type PapFormDados } from "@/components/PapForm";
 import type { GerentePap, PontoApoio } from "@/types/database";
 
 const STATUS_PAP_COLOR: Record<string, string> = {
@@ -21,7 +23,28 @@ export default function GerentePapClient({
   pontosIniciais: PontoApoio[];
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const [pontos, setPontos] = useState(pontosIniciais);
+
+  async function cadastrarPrimeiroPap(dados: PapFormDados) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from("pontos_apoio")
+      .insert({
+        criado_por: user?.id,
+        gerente_id: user?.id,
+        ...dados,
+        status_aprovacao: "pendente",
+      })
+      .select()
+      .single();
+    if (error) return { error: error.message };
+    setPontos((prev) => [data as PontoApoio, ...prev]);
+    router.refresh();
+    return {};
+  }
 
   async function excluir(id: string) {
     if (!confirm("Excluir este PAP?")) return;
@@ -53,6 +76,27 @@ export default function GerentePapClient({
             </p>
           )}
         </div>
+      </div>
+    );
+  }
+
+  if (pontos.length === 0) {
+    return (
+      <div className="card">
+        <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+          <MapPinPlus size={20} /> Cadastre seu PAP
+        </h2>
+        <p className="mb-5 text-sm text-neutral-500">
+          Preencha os dados do seu Ponto de Apoio ao Peregrino e marque a
+          localização no mapa. Ele fica pendente até um administrador aprovar
+          a divulgação — depois disso, você pode alterar esses dados quando
+          quiser.
+        </p>
+        <PapForm
+          onSalvar={cadastrarPrimeiroPap}
+          submitLabel="Cadastrar PAP"
+          submitLoadingLabel="Salvando..."
+        />
       </div>
     );
   }
@@ -109,9 +153,6 @@ export default function GerentePapClient({
             </button>
           </div>
         ))}
-        {pontos.length === 0 && (
-          <p className="text-sm text-neutral-400">Você ainda não cadastrou nenhum PAP.</p>
-        )}
       </div>
     </div>
   );
