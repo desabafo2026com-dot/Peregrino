@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AdminMapClient from "./AdminMapClient";
 import AdminDrilldownClient, {
@@ -9,7 +8,6 @@ import AdminDrilldownClient, {
   type RiscoInformadoLinha,
 } from "./AdminDrilldownClient";
 import VoltarButton from "@/components/VoltarButton";
-import { CheckCircle2, UserCheck } from "lucide-react";
 import type {
   PontoApoio,
   PontoRisco,
@@ -18,11 +16,6 @@ import type {
   Peregrinacao,
   RiscoInformado,
 } from "@/types/database";
-
-interface StatsAdmin {
-  checkins_hoje: number;
-  gerentes_pendentes: number;
-}
 
 function ehHoje(iso: string | null) {
   if (!iso) return false;
@@ -48,25 +41,11 @@ export default async function AdminDashboardPage() {
     .maybeSingle();
   const isAdmin = !!perfil?.is_admin;
 
-  const [{ data: stats }, { data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] =
-    await Promise.all([
-      supabase.rpc("estatisticas_admin").maybeSingle() as unknown as Promise<{ data: StatsAdmin | null }>,
-      supabase.from("pontos_apoio").select("*"),
-      supabase.from("pontos_risco").select("*"),
-      supabase.from("localizacoes_ativas").select("user_id, latitude, longitude"),
-    ]);
-
-  const cards = stats
-    ? [
-        { icon: CheckCircle2, label: "Check-ins hoje", value: stats.checkins_hoje },
-        {
-          icon: UserCheck,
-          label: "Gerentes PAP pendentes",
-          value: stats.gerentes_pendentes,
-          href: "/admin/gerentes",
-        },
-      ]
-    : [];
+  const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] = await Promise.all([
+    supabase.from("pontos_apoio").select("*"),
+    supabase.from("pontos_risco").select("*"),
+    supabase.from("localizacoes_ativas").select("user_id, latitude, longitude"),
+  ]);
 
   let peregrinosCadastrados: PeregrinoLinha[] = [];
   let peregrinosAtivos: PeregrinoLinha[] = [];
@@ -247,35 +226,12 @@ export default async function AdminDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <VoltarButton href="/" />
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {cards.map((c) =>
-          "href" in c && c.href ? (
-            <Link key={c.label} href={c.href} className="card text-center transition hover:border-amber-300">
-              <c.icon className="mx-auto mb-1 text-amber-700" size={20} />
-              <p className="text-2xl font-bold text-amber-800 dark:text-amber-500">{c.value}</p>
-              <p className="text-xs text-neutral-500">{c.label}</p>
-            </Link>
-          ) : (
-            <div key={c.label} className="card text-center">
-              <c.icon className="mx-auto mb-1 text-amber-700" size={20} />
-              <p className="text-2xl font-bold text-amber-800 dark:text-amber-500">{c.value}</p>
-              <p className="text-xs text-neutral-500">{c.label}</p>
-            </div>
-          )
-        )}
-        {!stats && (
-          <p className="col-span-full text-sm text-neutral-400">
-            Não foi possível carregar as estatísticas administrativas.
-          </p>
-        )}
-      </section>
 
       {isAdmin && (
         <AdminDrilldownClient
           peregrinosCadastrados={peregrinosCadastrados}
           peregrinosAtivos={peregrinosAtivos}
           peregrinacoesIniciadasHoje={peregrinacoesIniciadasHoje}
-          peregrinacoesTerminadasHoje={peregrinacoesTerminadasHoje}
           peregrinacoesConcluidasHoje={peregrinacoesConcluidasHoje}
           peregrinacoesConcluidasTotal={peregrinacoesConcluidasTotal}
           papCadastrados={papCadastrados}

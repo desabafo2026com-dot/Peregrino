@@ -79,14 +79,48 @@ export const MEIO_TRANSPORTE_LABELS: Record<string, string> = {
 export const DIAS_PREVISTOS_OPTIONS: number[] = Array.from({ length: 15 }, (_, i) => i + 1);
 
 export const SENTIDO_PISTA_OPTIONS: { value: string; label: string }[] = [
-  { value: "sp", label: "Sentido São Paulo (Rota Norte)" },
-  { value: "rj", label: "Sentido Rio de Janeiro (Rota Sul)" },
+  { value: "sp", label: "Sentido São Paulo" },
+  { value: "rj", label: "Sentido Rio de Janeiro" },
 ];
 
 export const SENTIDO_PISTA_LABELS: Record<string, string> = {
   sp: "Sentido São Paulo",
   rj: "Sentido Rio de Janeiro",
 };
+
+// Municípios cortados pela Rodovia Presidente Dutra (BR-116) entre São
+// Paulo e Queluz-SP, na ordem em que a rodovia passa por eles — usado para
+// escolher a cidade do PAP a partir de uma lista, em vez de texto livre.
+export const CIDADES_DUTRA_SP_QUELUZ: string[] = [
+  "São Paulo",
+  "Guarulhos",
+  "Arujá",
+  "Santa Isabel",
+  "Jacareí",
+  "São José dos Campos",
+  "Caçapava",
+  "Taubaté",
+  "Tremembé",
+  "Pindamonhangaba",
+  "Roseira",
+  "Guaratinguetá",
+  "Aparecida",
+  "Potim",
+  "Lorena",
+  "Cachoeira Paulista",
+  "Canas",
+  "Queluz",
+];
+
+export const DIAS_SEMANA_OPTIONS: { value: string; label: string; abrev: string }[] = [
+  { value: "seg", label: "Segunda", abrev: "Seg" },
+  { value: "ter", label: "Terça", abrev: "Ter" },
+  { value: "qua", label: "Quarta", abrev: "Qua" },
+  { value: "qui", label: "Quinta", abrev: "Qui" },
+  { value: "sex", label: "Sexta", abrev: "Sex" },
+  { value: "sab", label: "Sábado", abrev: "Sáb" },
+  { value: "dom", label: "Domingo", abrev: "Dom" },
+];
 
 export const PAP_SIGLA = "PAP";
 export const PAP_NOME_COMPLETO = "PAP — Ponto de Apoio ao Peregrino";

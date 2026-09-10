@@ -10,7 +10,6 @@ import {
   Radio,
   Flag as FlagIcon,
   CalendarPlus,
-  CalendarCheck2,
   Award,
   CalendarCheck,
   MapPinned,
@@ -122,7 +121,6 @@ interface Props {
   peregrinosCadastrados: PeregrinoLinha[];
   peregrinosAtivos: PeregrinoLinha[];
   peregrinacoesIniciadasHoje: PeregrinacaoLinha[];
-  peregrinacoesTerminadasHoje: PeregrinacaoLinha[];
   peregrinacoesConcluidasHoje: PeregrinacaoLinha[];
   peregrinacoesConcluidasTotal: PeregrinacaoLinha[];
   papCadastrados: PapLinha[];
@@ -163,7 +161,6 @@ export default function AdminDrilldownClient({
   peregrinosCadastrados,
   peregrinosAtivos,
   peregrinacoesIniciadasHoje,
-  peregrinacoesTerminadasHoje,
   peregrinacoesConcluidasHoje,
   peregrinacoesConcluidasTotal,
   papCadastrados,
@@ -269,21 +266,13 @@ export default function AdminDrilldownClient({
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Peregrinações</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Card
             icon={CalendarPlus}
             label="Iniciadas hoje"
             value={peregrinacoesIniciadasHoje.length}
             onClick={() =>
               abrir({ tipo: "peregrinacao", titulo: "Peregrinações iniciadas hoje", dados: peregrinacoesIniciadasHoje })
-            }
-          />
-          <Card
-            icon={CalendarCheck2}
-            label="Terminadas hoje"
-            value={peregrinacoesTerminadasHoje.length}
-            onClick={() =>
-              abrir({ tipo: "peregrinacao", titulo: "Peregrinações terminadas hoje", dados: peregrinacoesTerminadasHoje })
             }
           />
           <Card

@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
-import { createClient } from "@/lib/supabase/client";
-import { SERVICOS_PONTO_APOIO, SENTIDO_PISTA_OPTIONS } from "@/lib/constants";
+import {
+  SERVICOS_PONTO_APOIO,
+  SENTIDO_PISTA_OPTIONS,
+  CIDADES_DUTRA_SP_QUELUZ,
+  DIAS_SEMANA_OPTIONS,
+} from "@/lib/constants";
 import { LocateFixed } from "lucide-react";
-import type { PontoApoio, Rota, SentidoPista } from "@/types/database";
+import type { PontoApoio, SentidoPista } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -26,13 +30,30 @@ export interface PapFormDados {
   km_referencia: number | null;
   cidade: string | null;
   sentido_pista: SentidoPista | null;
-  rota_id: string | null;
   periodo_funcionamento: string | null;
   servicos: string[];
   aceita_doacoes: boolean;
   doacao_necessidade: string | null;
   contato_doacao: string | null;
   observacoes: string | null;
+}
+
+function formatarPeriodo(dias: string[], abertura: string, fechamento: string) {
+  if (dias.length === 0) return null;
+  const selecionados = DIAS_SEMANA_OPTIONS.filter((d) => dias.includes(d.value));
+  const todos = DIAS_SEMANA_OPTIONS.every((d) => dias.includes(d.value));
+  const somenteSemana =
+    dias.length === 5 && ["seg", "ter", "qua", "qui", "sex"].every((v) => dias.includes(v));
+  const somenteFimDeSemana = dias.length === 2 && dias.includes("sab") && dias.includes("dom");
+
+  let diasTexto: string;
+  if (todos) diasTexto = "Todos os dias";
+  else if (somenteSemana) diasTexto = "Seg a Sex";
+  else if (somenteFimDeSemana) diasTexto = "Sáb e Dom";
+  else diasTexto = selecionados.map((d) => d.abrev).join(", ");
+
+  const horarioTexto = abertura && fechamento ? `, ${abertura}–${fechamento}` : "";
+  return diasTexto + horarioTexto;
 }
 
 interface Props {
@@ -43,8 +64,6 @@ interface Props {
 }
 
 export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoadingLabel }: Props) {
-  const [rotas, setRotas] = useState<Rota[]>([]);
-  const [rotaId, setRotaId] = useState<string>(pontoInicial?.rota_id ?? "");
   const [nome, setNome] = useState(pontoInicial?.nome ?? "");
   const [cidade, setCidade] = useState(pontoInicial?.cidade ?? "");
   const [sentidoPista, setSentidoPista] = useState<string>(pontoInicial?.sentido_pista ?? "");
@@ -54,7 +73,9 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
   const [kmReferencia, setKmReferencia] = useState(
     pontoInicial?.km_referencia != null ? String(pontoInicial.km_referencia) : ""
   );
-  const [periodo, setPeriodo] = useState(pontoInicial?.periodo_funcionamento ?? "");
+  const [diasSemana, setDiasSemana] = useState<string[]>([]);
+  const [horarioAbertura, setHorarioAbertura] = useState("");
+  const [horarioFechamento, setHorarioFechamento] = useState("");
   const [servicos, setServicos] = useState<string[]>(pontoInicial?.servicos ?? []);
   const [aceitaDoacoes, setAceitaDoacoes] = useState(pontoInicial?.aceita_doacoes ?? false);
   const [doacaoNecessidade, setDoacaoNecessidade] = useState(pontoInicial?.doacao_necessidade ?? "");
@@ -66,14 +87,9 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("rotas")
-      .select("*")
-      .order("ordem")
-      .then(({ data }) => setRotas((data ?? []) as Rota[]));
-  }, []);
+  function toggleDiaSemana(v: string) {
+    setDiasSemana((prev) => (prev.includes(v) ? prev.filter((d) => d !== v) : [...prev, v]));
+  }
 
   function toggleServico(v: string) {
     setServicos((prev) => (prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v]));
@@ -98,6 +114,7 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
       return;
     }
     setLoading(true);
+    const periodoNovo = formatarPeriodo(diasSemana, horarioAbertura, horarioFechamento);
     const { error } = await onSalvar({
       nome,
       responsavel: responsavel || null,
@@ -108,8 +125,9 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
       km_referencia: kmReferencia ? Number(kmReferencia) : null,
       cidade: cidade || null,
       sentido_pista: (sentidoPista || null) as SentidoPista | null,
-      rota_id: rotaId || null,
-      periodo_funcionamento: periodo || null,
+      // Se nenhum dia foi marcado agora, preserva o período que já estava
+      // salvo (texto livre de antes desta mudança) em vez de apagá-lo.
+      periodo_funcionamento: periodoNovo ?? pontoInicial?.periodo_funcionamento ?? null,
       servicos,
       aceita_doacoes: aceitaDoacoes,
       doacao_necessidade: aceitaDoacoes ? doacaoNecessidade || null : null,
@@ -156,7 +174,24 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
           </div>
           <div>
             <label className="label">Cidade</label>
-            <input required className="input" value={cidade} onChange={(e) => setCidade(e.target.value)} />
+            <select
+              required
+              className="input"
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+            >
+              <option value="" disabled>
+                Selecione
+              </option>
+              {pontoInicial?.cidade && !CIDADES_DUTRA_SP_QUELUZ.includes(pontoInicial.cidade) && (
+                <option value={pontoInicial.cidade}>{pontoInicial.cidade} (cadastro anterior)</option>
+              )}
+              {CIDADES_DUTRA_SP_QUELUZ.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Pista — sentido</label>
@@ -187,25 +222,50 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
               onChange={(e) => setKmReferencia(e.target.value)}
             />
           </div>
-          <div>
-            <label className="label">Rota</label>
-            <select className="input" value={rotaId} onChange={(e) => setRotaId(e.target.value)}>
-              <option value="">Ambas as rotas</option>
-              {rotas.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.nome} ({r.origem} → {r.destino})
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="sm:col-span-2">
             <label className="label">Período de funcionamento</label>
-            <input
-              className="input"
-              placeholder="Ex: todos os dias, 6h-22h"
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
-            />
+            <div className="flex flex-wrap gap-2">
+              {DIAS_SEMANA_OPTIONS.map((d) => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => toggleDiaSemana(d.value)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                    diasSemana.includes(d.value)
+                      ? "border-amber-700 bg-amber-800 text-white"
+                      : "border-neutral-200 text-neutral-600 dark:border-neutral-800 dark:text-neutral-300"
+                  }`}
+                >
+                  {d.abrev}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <label className="label text-xs">Horário de abertura</label>
+                <input
+                  type="time"
+                  className="input"
+                  value={horarioAbertura}
+                  onChange={(e) => setHorarioAbertura(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Horário de encerramento</label>
+                <input
+                  type="time"
+                  className="input"
+                  value={horarioFechamento}
+                  onChange={(e) => setHorarioFechamento(e.target.value)}
+                />
+              </div>
+            </div>
+            {pontoInicial?.periodo_funcionamento && diasSemana.length === 0 && (
+              <p className="mt-2 text-xs text-neutral-500">
+                Período atual: {pontoInicial.periodo_funcionamento}. Marque os dias acima para
+                alterá-lo.
+              </p>
+            )}
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input

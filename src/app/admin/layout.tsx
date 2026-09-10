@@ -13,12 +13,13 @@ import {
   UserCog,
 } from "lucide-react";
 
+// "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
+// na home) — mantê-lo aqui também seria redundante.
 const ADMIN_LINKS = [
   { href: "/admin", label: "Painel", icon: LayoutDashboard },
   { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
   { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
   { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
-  { href: "/admin/riscos/novo", label: "Locais de risco", icon: TriangleAlert },
   { href: "/admin/rotas", label: "Rotas (Norte/Sul)", icon: Route },
   { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
 ];
