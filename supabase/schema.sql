@@ -1585,3 +1585,39 @@ create policy "riscos_informados_select_publicos" on public.riscos_informados fo
   );
 
 -- FIM DA MIGRATION 11
+-- =====================================================================
+-- MIGRATION 12 — Rodada 5: Romaria Plus (compra paga via Mercado Pago)
+-- =====================================================================
+
+-- Compras da "Romaria Plus" — arte personalizada paga (R$14,90), vinculada
+-- a um certificado já emitido (a peregrinação precisa estar concluída e
+-- certificada para ter dados reais para a arte). Todo insert/update nesta
+-- tabela é feito pelo servidor com a service role key (rotas
+-- /api/mercadopago/...) — nunca diretamente pelo cliente, para que preço e
+-- status de pagamento nunca dependam de nada que o navegador envie.
+create table if not exists public.compras_romaria_plus (
+  id uuid primary key default gen_random_uuid(),
+  certificado_id uuid not null references public.certificados(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  valor_centavos int not null default 1490,
+  status text not null default 'pendente' check (status in ('pendente', 'pago', 'cancelado', 'estornado')),
+  mp_preference_id text,
+  mp_payment_id text,
+  criado_em timestamptz not null default now(),
+  pago_em timestamptz
+);
+
+create index if not exists idx_compras_romaria_plus_certificado on public.compras_romaria_plus(certificado_id);
+create index if not exists idx_compras_romaria_plus_user on public.compras_romaria_plus(user_id);
+
+alter table public.compras_romaria_plus enable row level security;
+
+-- O próprio usuário só pode LER as próprias compras (para acompanhar o
+-- status e liberar a arte quando pago = true). Sem policy de insert/update/
+-- delete para authenticated: essas operações só acontecem via service role,
+-- que ignora RLS.
+drop policy if exists "compras_romaria_plus_select_own" on public.compras_romaria_plus;
+create policy "compras_romaria_plus_select_own" on public.compras_romaria_plus for select to authenticated
+  using (user_id = auth.uid());
+
+-- FIM DA MIGRATION 12

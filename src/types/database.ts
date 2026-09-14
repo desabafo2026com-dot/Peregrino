@@ -233,6 +233,25 @@ export interface Certificado {
   emitido_em: string;
 }
 
+export type StatusCompraRomariaPlus = "pendente" | "pago" | "cancelado" | "estornado";
+
+// Compra do produto pago "Romaria Plus" (arte personalizada para
+// compartilhar), vinculada a um certificado já emitido. Todo insert/update
+// é feito pelo servidor (rotas /api/mercadopago/...) com a service role —
+// nunca diretamente pelo cliente, já que preço e status de pagamento não
+// podem depender de nada que o navegador envie.
+export interface CompraRomariaPlus {
+  id: string;
+  certificado_id: string;
+  user_id: string;
+  valor_centavos: number;
+  status: StatusCompraRomariaPlus;
+  mp_preference_id: string | null;
+  mp_payment_id: string | null;
+  criado_em: string;
+  pago_em: string | null;
+}
+
 // Tipagem mínima para o cliente Supabase tipado (@supabase/ssr)
 // Mantida simples de propósito — pode ser substituída pelo gerador oficial
 // `supabase gen types typescript` quando o projeto estiver criado.

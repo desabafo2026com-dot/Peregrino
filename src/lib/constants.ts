@@ -203,6 +203,15 @@ export const NIVEL_RISCO_LABELS: Record<number, string> = {
   5: "Muito alto",
 };
 
+export const ROMARIA_PLUS_VALOR_CENTAVOS = 1490;
+
+export const STATUS_COMPRA_ROMARIA_PLUS_LABELS: Record<string, string> = {
+  pendente: "Pagamento em processamento",
+  pago: "Pago",
+  cancelado: "Pagamento não concluído",
+  estornado: "Estornado",
+};
+
 export const EMERGENCIAS = [
   { numero: "190", nome: "Polícia Militar", descricao: "Ocorrências policiais / assaltos" },
   { numero: "191", nome: "PRF", descricao: "Polícia Rodoviária Federal — acidentes na rodovia" },

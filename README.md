@@ -25,8 +25,10 @@ conclusão e botão de emergência.
   Bombeiros (193) e SAMU (192).
 - Iniciar/finalizar peregrinação, compartilhar localização em tempo real
   (opt-in), check-in em pontos de apoio.
-- Certificado de conclusão gerado automaticamente ao finalizar, com código
-  de verificação público (`/verificar`).
+- Certificado de conclusão gerado automaticamente ao finalizar (PDF e
+  imagem, com código de verificação público em `/verificar`), e "Romaria
+  Plus": arte personalizada paga (Mercado Pago) para compartilhar, com
+  conteúdo sempre derivado dos dados reais da peregrinação.
 
 ## Configuração local
 
@@ -62,11 +64,27 @@ repositório do GitHub. Configure as mesmas variáveis de ambiente
 (`NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY`) no painel do
 projeto na Vercel.
 
+Para o produto pago "Romaria Plus" (Mercado Pago), configure também, só no
+painel da Vercel (nunca com o prefixo `NEXT_PUBLIC_`, para não serem
+expostas no navegador):
+
+- `SUPABASE_SERVICE_ROLE_KEY` — Supabase → Project Settings → API →
+  `service_role` (secret). Usada só pelas rotas `/api/mercadopago/*` para
+  gravar o status do pagamento ignorando RLS.
+- `MERCADOPAGO_ACCESS_TOKEN` — painel do Mercado Pago → Suas integrações →
+  credenciais (produção ou teste). Sem essa variável configurada, o botão
+  de compra da Romaria Plus mostra uma mensagem amigável em vez de falhar.
+
+O webhook do Mercado Pago deve apontar para
+`https://<seu-domínio>/api/mercadopago/webhook` — a própria rota que cria o
+pagamento já envia essa URL automaticamente a cada compra, então não é
+preciso configurar nada manualmente no painel do Mercado Pago além da
+credencial acima.
+
 ## Próximos passos sugeridos
 
 - Configurar autenticação por telefone (SMS/OTP) via provedor no Supabase
   (ex: Twilio), hoje o cadastro usa e-mail e senha.
-- Criar o modelo visual definitivo do certificado (hoje é um modelo simples
-  imprimível em PDF pelo navegador).
-- Moderação/aprovação de pontos de apoio cadastrados pela comunidade.
+- Configurar as credenciais reais do Mercado Pago (ver seção Deploy) para
+  ativar de fato os pagamentos da Romaria Plus.
 - Notificações push para peregrinos próximos de pontos de risco.

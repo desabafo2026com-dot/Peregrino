@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Printer, Download } from "lucide-react";
+import { Printer, Download, FileText } from "lucide-react";
 import { MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
 import type { Certificado } from "@/types/database";
 
@@ -32,6 +32,7 @@ function extrairOrigem(rotaNome: string | null) {
 export default function CertificadoView({ certificado: c }: { certificado: Certificado }) {
   const ref = useRef<HTMLDivElement>(null);
   const [baixando, setBaixando] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const meioLabel =
@@ -90,6 +91,34 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
     }
   }
 
+  async function baixarPdf() {
+    if (!ref.current) return;
+    setErro(null);
+    setGerandoPdf(true);
+    try {
+      const [{ toPng }, { jsPDF }] = await Promise.all([
+        import("html-to-image"),
+        import("jspdf"),
+      ]);
+      const dataUrl = await toPng(ref.current, { pixelRatio: 2 });
+      // Página do PDF com a mesma proporção do certificado, na largura de
+      // uma A4 paisagem — a imagem preenche a página inteira, sem margens.
+      const larguraMm = 297;
+      const alturaMm = (larguraMm * MODELO_ALTURA) / MODELO_LARGURA;
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: [larguraMm, alturaMm],
+      });
+      pdf.addImage(dataUrl, "PNG", 0, 0, larguraMm, alturaMm);
+      pdf.save(`certificado-peregrino-${c.codigo}.pdf`);
+    } catch {
+      setErro("Não foi possível gerar o PDF agora. Tente novamente.");
+    } finally {
+      setGerandoPdf(false);
+    }
+  }
+
   return (
     <div>
       <div
@@ -142,13 +171,22 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
       </div>
 
       <div className="mt-4 flex flex-col items-center gap-2 print:hidden">
-        <button
-          onClick={baixarImagem}
-          disabled={baixando}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Download size={16} /> {baixando ? "Gerando imagem..." : "Baixar certificado (imagem)"}
-        </button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            onClick={baixarPdf}
+            disabled={gerandoPdf}
+            className="btn-primary flex items-center gap-2"
+          >
+            <FileText size={16} /> {gerandoPdf ? "Gerando PDF..." : "Baixar certificado (PDF)"}
+          </button>
+          <button
+            onClick={baixarImagem}
+            disabled={baixando}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <Download size={16} /> {baixando ? "Gerando imagem..." : "Baixar como imagem"}
+          </button>
+        </div>
         {erro && <p className="text-xs text-red-600">{erro}</p>}
         <button
           onClick={imprimir}
