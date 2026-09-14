@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -90,6 +90,29 @@ function gerarCodigoCertificado() {
       ? crypto.randomUUID()
       : Math.random().toString(36);
   return "PGR-" + raw.replace(/-/g, "").slice(0, 8).toUpperCase();
+}
+
+// Contador de tempo total decorrido desde o início da peregrinação —
+// atualiza a cada minuto para mostrar dias/horas/minutos de caminhada em
+// andamento (item pedido pelo usuário: mostrar o tempo total, não só a
+// data/hora de início).
+function ContadorTempoTotal({ dataInicio }: { dataInicio: string | null }) {
+  const [agora, setAgora] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setAgora(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!dataInicio) return null;
+  const texto = formatarDuracao(dataInicio, agora);
+  if (!texto) return null;
+
+  return (
+    <p className="mt-1 flex items-center justify-center gap-1.5 text-center text-sm font-bold text-green-800 dark:text-green-400">
+      <Radio size={14} /> Tempo total de caminhada: {texto}
+    </p>
+  );
 }
 
 function obterPosicaoAtual(): Promise<GeolocationPosition | null> {
@@ -195,7 +218,7 @@ export default function PeregrinacaoClient({
       .eq("id", user.id);
   }
 
-  async function criarPeregrinacao(iniciarAgora: boolean) {
+  async function criarPeregrinacao() {
     setErro(null);
     if (!diasPrevistos) {
       setErro("Selecione os dias previstos de caminhada.");
@@ -213,18 +236,41 @@ export default function PeregrinacaoClient({
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const agora = new Date().toISOString();
+    if (!user) {
+      setLoading(false);
+      setErro("Sua sessão expirou. Faça login novamente.");
+      return;
+    }
+
+    // Proteção contra peregrinação duplicada: se a tela ainda mostra o
+    // formulário de planejamento por estar desatualizada (ex.: voltou pelo
+    // navegador), confirmamos no banco antes de inserir — quem já tem uma
+    // peregrinação ativa não deve conseguir criar outra.
+    const { data: existente } = await supabase
+      .from("peregrinacoes")
+      .select("*")
+      .eq("user_id", user.id)
+      .in("status", ["planejada", "em_andamento"])
+      .order("criado_em", { ascending: false })
+      .maybeSingle();
+    if (existente) {
+      setLoading(false);
+      setErro("Você já tem uma peregrinação ativa. Atualizando a tela...");
+      setPeregrinacao(existente as Peregrinacao);
+      router.refresh();
+      return;
+    }
 
     await salvarDadosPeregrino();
 
     const { data, error } = await supabase
       .from("peregrinacoes")
       .insert({
-        user_id: user!.id,
-        status: iniciarAgora ? "em_andamento" : "planejada",
+        user_id: user.id,
+        status: "planejada",
         dias_previstos: diasPrevistos ? Number(diasPrevistos) : null,
         data_inicio_prevista: dataInicioPrevista || null,
-        data_inicio: iniciarAgora ? agora : null,
+        data_inicio: null,
         meio_transporte: meioTransporte,
         meio_transporte_outro_desc: meioTransporte === "outros" ? meioTransporteOutro : null,
         rota_id: rotaId || null,
@@ -232,48 +278,47 @@ export default function PeregrinacaoClient({
         em_grupo: emGrupo,
         nome_grupo: emGrupo ? nomeGrupo || null : null,
         tamanho_grupo: emGrupo && tamanhoGrupo ? Number(tamanhoGrupo) : null,
-        compartilhar_localizacao: iniciarAgora,
+        compartilhar_localizacao: false,
       })
       .select()
       .single();
 
+    setLoading(false);
+
     if (error) {
-      setLoading(false);
+      // 23505 = violação do índice único que garante uma só peregrinação
+      // ativa por usuário (rede de proteção no banco, além da checagem acima).
+      if ((error as { code?: string }).code === "23505") {
+        setErro("Você já tem uma peregrinação ativa. Atualizando a tela...");
+        router.refresh();
+        return;
+      }
       setErro(error.message);
       return;
     }
 
-    const novaPeregrinacao = data as Peregrinacao;
-
-    if (iniciarAgora && rotaId) {
-      // O início da peregrinação já conta como o primeiro check-in — na
-      // cidade escolhida como início, ou na primeira cidade da rota caso
-      // nenhuma tenha sido escolhida.
-      const primeiroPonto = cidadeInicio
-        ? cidadesDaRota.find((p) => p.cidade === cidadeInicio)
-        : cidadesDaRota[0];
-      if (primeiroPonto) {
-        const pos = await obterPosicaoAtual();
-        await supabase.from("checkins").insert({
-          peregrinacao_id: novaPeregrinacao.id,
-          user_id: user!.id,
-          ponto_checkin_id: primeiroPonto.id,
-          latitude: pos?.coords.latitude ?? primeiroPonto.latitude,
-          longitude: pos?.coords.longitude ?? primeiroPonto.longitude,
-        });
-      }
-      setLoading(false);
-      router.push("/peregrinacao/trajeto");
-      return;
-    }
-
-    setLoading(false);
-    setPeregrinacao(novaPeregrinacao);
+    setPeregrinacao(data as Peregrinacao);
   }
 
   async function iniciarCaminhada() {
     if (!peregrinacao) return;
     setLoading(true);
+
+    // Confere o status atual no banco antes de iniciar — evita reiniciar o
+    // cronômetro (e duplicar o check-in inicial) caso a tela esteja
+    // desatualizada e a caminhada já tenha sido iniciada antes.
+    const { data: atual } = await supabase
+      .from("peregrinacoes")
+      .select("*")
+      .eq("id", peregrinacao.id)
+      .maybeSingle();
+    if (atual && (atual as Peregrinacao).status === "em_andamento") {
+      setLoading(false);
+      setPeregrinacao(atual as Peregrinacao);
+      router.push("/peregrinacao/trajeto");
+      return;
+    }
+
     const agora = new Date().toISOString();
     const { data, error } = await supabase
       .from("peregrinacoes")
@@ -710,17 +755,14 @@ export default function PeregrinacaoClient({
           )}
         </div>
         <p className="mb-3 text-xs text-neutral-500">
-          Ao iniciar agora, sua localização passa a ser compartilhada
-          automaticamente com a equipe de apoio até o fim da peregrinação
-          (você pode pausar quando quiser).
+          Salve seu plano agora; o botão para iniciar a caminhada (e passar a
+          compartilhar sua localização com a equipe de apoio) aparece logo em
+          seguida, quando você realmente for começar.
         </p>
         {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
         <div className="flex flex-wrap gap-3">
-          <button disabled={loading} onClick={() => criarPeregrinacao(false)} className="btn-secondary">
-            Salvar plano
-          </button>
-          <button disabled={loading} onClick={() => criarPeregrinacao(true)} className="btn-primary flex items-center gap-2">
-            <Flag size={18} /> Iniciar peregrinação agora
+          <button disabled={loading} onClick={criarPeregrinacao} className="btn-primary">
+            {loading ? "Salvando..." : "Salvar plano"}
           </button>
         </div>
       </div>
@@ -766,6 +808,7 @@ export default function PeregrinacaoClient({
               <p className="flex items-center justify-center gap-2 text-center font-bold text-green-800 dark:text-green-400">
                 <Radio size={18} /> Peregrinação em andamento
               </p>
+              <ContadorTempoTotal dataInicio={peregrinacao.data_inicio} />
               <p className="mt-1 text-justify text-sm text-neutral-600 dark:text-neutral-300">
                 {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} className="inline" /> : <Footprints size={14} className="inline" />}{" "}
                 {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}

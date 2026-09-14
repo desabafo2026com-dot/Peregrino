@@ -3,7 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import MapClient from "./MapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { MapPinPlus, TriangleAlert } from "lucide-react";
-import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
+import type { PontoApoio, PontoRisco, RiscoInformado, Rota, PontoCheckin } from "@/types/database";
+
+// Cores claras (pastel), para diferenciar visualmente as duas rotas sem
+// competir com as cores mais fortes já usadas por PAP/risco/avisos.
+const COR_ROTA: Record<string, string> = {
+  norte: "#7dd3fc",
+  sul: "#fdba74",
+};
 
 export default async function MapaPage() {
   const supabase = await createClient();
@@ -21,7 +28,7 @@ export default async function MapaPage() {
     isAdmin = !!perfil?.is_admin;
   }
 
-  const [{ data: pontosApoio }, { data: pontosRisco }, { data: avisos }, { data: localizacoes }] =
+  const [{ data: pontosApoio }, { data: pontosRisco }, { data: avisos }, { data: localizacoes }, { data: rotas }, { data: pontosCheckin }] =
     await Promise.all([
       supabase
         .from("pontos_apoio")
@@ -34,7 +41,17 @@ export default async function MapaPage() {
       isAdmin
         ? supabase.from("localizacoes_ativas").select("user_id, latitude, longitude")
         : Promise.resolve({ data: [] as { user_id: string; latitude: number; longitude: number }[] }),
+      supabase.from("rotas").select("*").order("ordem"),
+      supabase.from("pontos_checkin").select("*").order("ordem"),
     ]);
+
+  const rotasLinhas = ((rotas ?? []) as Rota[]).map((r) => ({
+    nome: r.nome,
+    cor: COR_ROTA[r.slug] ?? r.cor,
+    pontos: ((pontosCheckin ?? []) as PontoCheckin[])
+      .filter((p) => p.rota_id === r.id)
+      .map((p) => ({ lat: p.latitude, lng: p.longitude, ordem: p.ordem })),
+  }));
 
   return (
     <div>
@@ -64,6 +81,7 @@ export default async function MapaPage() {
         pontosRisco={(pontosRisco ?? []) as PontoRisco[]}
         avisos={(avisos ?? []) as RiscoInformado[]}
         peregrinos={localizacoes ?? []}
+        rotasLinhas={rotasLinhas}
       />
 
       <p className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">

@@ -151,6 +151,7 @@ export interface PontoRisco {
   nivel_risco: number;
   ponto_referencia: string | null;
   rota_id: string | null;
+  foto_url: string | null;
   criado_em: string;
 }
 

@@ -4,7 +4,13 @@ import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
-import type { PontoRisco, Rota } from "@/types/database";
+import type { PontoRisco, Rota, PontoCheckin } from "@/types/database";
+
+// Cores claras (pastel), consistentes com o mapa geral (/mapa).
+const COR_ROTA: Record<string, string> = {
+  norte: "#7dd3fc",
+  sul: "#fdba74",
+};
 
 const DICAS_GERAIS = [
   "Caminhe sempre de frente para o tráfego quando não houver marginal ou acostamento largo.",
@@ -46,6 +52,15 @@ export default async function RotasPage({
         .select("*")
         .or(`rota_id.eq.${rotaAtual.id},rota_id.is.null`)
     : { data: [] as PontoRisco[] };
+
+  const { data: pontosCheckin } = await supabase.from("pontos_checkin").select("*").order("ordem");
+  const rotasLinhas = rotas.map((r) => ({
+    nome: r.nome,
+    cor: COR_ROTA[r.slug] ?? r.cor,
+    pontos: ((pontosCheckin ?? []) as PontoCheckin[])
+      .filter((p) => p.rota_id === r.id)
+      .map((p) => ({ lat: p.latitude, lng: p.longitude, ordem: p.ordem })),
+  }));
 
   // Ordem de leitura ao longo do trajeto: no Sentido Norte (São Paulo →
   // Aparecida) o km da rodovia diminui conforme se avança; no Sentido Sul
@@ -157,7 +172,7 @@ export default async function RotasPage({
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
           <TriangleAlert size={20} /> Mapa dos pontos de risco
         </h2>
-        <RiscoMapClient pontosRisco={riscosOrdenados} />
+        <RiscoMapClient pontosRisco={riscosOrdenados} rotasLinhas={rotasLinhas} />
       </section>
     </div>
   );

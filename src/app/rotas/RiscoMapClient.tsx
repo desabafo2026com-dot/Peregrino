@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { PontoRisco } from "@/types/database";
+import type { RotaLinha } from "@/components/MapView";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -12,6 +13,30 @@ const MapView = dynamic(() => import("@/components/MapView"), {
   ),
 });
 
-export default function RiscoMapClient({ pontosRisco }: { pontosRisco: PontoRisco[] }) {
-  return <MapView pontosRisco={pontosRisco} height="400px" />;
+export default function RiscoMapClient({
+  pontosRisco,
+  rotasLinhas,
+}: {
+  pontosRisco: PontoRisco[];
+  rotasLinhas: RotaLinha[];
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {rotasLinhas.length > 0 && (
+        <div className="flex flex-wrap gap-4 text-xs text-neutral-500">
+          {rotasLinhas.map((r) => (
+            <span key={r.nome} className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-1.5 w-5 rounded-full"
+                style={{ backgroundColor: r.cor }}
+                aria-hidden="true"
+              />
+              {r.nome}
+            </span>
+          ))}
+        </div>
+      )}
+      <MapView pontosRisco={pontosRisco} rotasLinhas={rotasLinhas} height="400px" />
+    </div>
+  );
 }

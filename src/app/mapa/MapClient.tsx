@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Tent, TriangleAlert, Megaphone } from "lucide-react";
+import { Tent, TriangleAlert, Megaphone, Route } from "lucide-react";
 import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
+import type { RotaLinha } from "@/components/MapView";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -19,23 +20,35 @@ interface Props {
   pontosRisco: PontoRisco[];
   avisos: RiscoInformado[];
   peregrinos: { user_id: string; latitude: number; longitude: number }[];
+  rotasLinhas: RotaLinha[];
 }
 
 // PAP aparece marcado por padrão (é o que a maioria vem buscar); locais de
 // risco e avisos de peregrinos ficam opcionais, para não poluir o mapa de
-// quem só quer achar apoio.
-export default function MapClient({ pontosApoio, pontosRisco, avisos, peregrinos }: Props) {
+// quem só quer achar apoio. As rotas Norte/Sul também vêm marcadas por
+// padrão, para ajudar a situar os demais elementos na rodovia.
+export default function MapClient({ pontosApoio, pontosRisco, avisos, peregrinos, rotasLinhas }: Props) {
   const [mostrarPap, setMostrarPap] = useState(true);
   const [mostrarRisco, setMostrarRisco] = useState(false);
   const [mostrarAvisos, setMostrarAvisos] = useState(false);
+  const [mostrarRotas, setMostrarRotas] = useState(true);
 
   const pontosApoioVisiveis = useMemo(() => (mostrarPap ? pontosApoio : []), [mostrarPap, pontosApoio]);
   const pontosRiscoVisiveis = useMemo(() => (mostrarRisco ? pontosRisco : []), [mostrarRisco, pontosRisco]);
   const avisosVisiveis = useMemo(() => (mostrarAvisos ? avisos : []), [mostrarAvisos, avisos]);
+  const rotasVisiveis = useMemo(() => (mostrarRotas ? rotasLinhas : []), [mostrarRotas, rotasLinhas]);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={mostrarRotas}
+            onChange={(e) => setMostrarRotas(e.target.checked)}
+          />
+          <Route size={16} className="text-sky-500" /> Rotas Norte/Sul
+        </label>
         <label className="flex items-center gap-2 text-sm font-medium">
           <input
             type="checkbox"
@@ -62,11 +75,27 @@ export default function MapClient({ pontosApoio, pontosRisco, avisos, peregrinos
         </label>
       </div>
 
+      {mostrarRotas && rotasLinhas.length > 0 && (
+        <div className="flex flex-wrap gap-4 text-xs text-neutral-500">
+          {rotasLinhas.map((r) => (
+            <span key={r.nome} className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-1.5 w-5 rounded-full"
+                style={{ backgroundColor: r.cor }}
+                aria-hidden="true"
+              />
+              {r.nome}
+            </span>
+          ))}
+        </div>
+      )}
+
       <MapView
         pontosApoio={pontosApoioVisiveis}
         pontosRisco={pontosRiscoVisiveis}
         avisos={avisosVisiveis}
         peregrinos={peregrinos}
+        rotasLinhas={rotasVisiveis}
         calorPeregrinos={peregrinos.length > 0}
         height="65vh"
       />

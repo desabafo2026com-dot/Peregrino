@@ -97,7 +97,17 @@ function LoginForm() {
         .eq("id", data.user.id)
         .maybeSingle();
       const ehGerente = !!gerente || data.user.user_metadata?.tipo_conta === "gerente_pap";
-      if (ehGerente) destino = "/gerente-pap";
+      if (ehGerente) {
+        destino = "/gerente-pap";
+      } else if (tipoPreset === "gerente_pap") {
+        // A pessoa entrou pelo caminho "Sou gerente de PAP" (ex.: card
+        // "PAP — vincular ou cadastrar" da home), mas a conta já existia e
+        // era só de peregrino — antes desta correção ela caía direto no
+        // ambiente de peregrino, sem chance de completar o cadastro de
+        // gerente. Agora mandamos para a página que permite virar gerente
+        // de PAP com a mesma conta.
+        destino = "/gerente-pap/cadastro";
+      }
     }
 
     setLoading(false);
@@ -245,6 +255,12 @@ function LoginForm() {
         {passo === "senha" && (
           <form onSubmit={handleEntrar} className="flex flex-col gap-4">
             <BotaoVoltarEmail email={email} onVoltar={voltarParaEmail} />
+            {tipoPreset === "gerente_pap" && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                Esta conta já existe. Depois de entrar, se ela ainda não for
+                de Gerente de PAP, você poderá completar esse cadastro.
+              </p>
+            )}
             <div>
               <label className="label">Senha</label>
               <input

@@ -7,9 +7,9 @@ import { useAuthRole } from "./AuthRoleProvider";
 
 const LINKS_PEREGRINO = [
   { href: "/", label: "Início", icon: Home },
+  { href: "/peregrinacao", label: "Minha peregrinação", icon: Footprints, destaque: true },
   { href: "/mapa", label: "Mapa", icon: MapPin },
   { href: "/rotas", label: "Rotas", icon: Route },
-  { href: "/peregrinacao", label: "Minha peregrinação", icon: Footprints },
 ];
 
 const LINKS_GERENTE = [
@@ -38,22 +38,26 @@ export default function BottomNav() {
       >
         {links.map((l) => {
           const ativo = pathname === l.href;
+          // "Minha peregrinação" (ou "Meu PAP") fica com destaque visual
+          // permanente — não só quando ativo — para ficar mais fácil de
+          // encontrar, como pedido pelo usuário.
+          const destacado = ativo || "destaque" in l;
           return (
             <Link
               key={l.href}
               href={l.href}
-              className="relative flex flex-col items-center gap-0.5 px-1 py-2 text-center"
+              className="relative flex flex-col items-center gap-1 px-1 py-2.5 text-center"
             >
               {ativo && (
                 <span className="absolute top-0 h-0.5 w-8 rounded-full bg-stripe-500" aria-hidden="true" />
               )}
               <l.icon
-                size={20}
-                className={ativo ? "text-amber-700 dark:text-amber-500" : "text-neutral-500 dark:text-neutral-400"}
+                size={24}
+                className={destacado ? "text-amber-700 dark:text-amber-500" : "text-neutral-500 dark:text-neutral-400"}
               />
               <span
-                className={`text-[10px] leading-tight font-medium ${
-                  ativo ? "text-amber-700 dark:text-amber-500" : "text-neutral-500 dark:text-neutral-400"
+                className={`text-[11px] leading-tight font-medium ${
+                  destacado ? "text-amber-700 dark:text-amber-500" : "text-neutral-500 dark:text-neutral-400"
                 }`}
               >
                 {l.label}

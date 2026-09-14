@@ -21,6 +21,7 @@ const ADMIN_LINKS = [
   { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
   { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
   { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
+  { href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert },
   { href: "/admin/rotas", label: "Rotas (Norte/Sul)", icon: Route },
   { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
   { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },

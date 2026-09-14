@@ -1697,3 +1697,58 @@ create policy "mensagens_contato_update_admin" on public.mensagens_contato for u
   using (public.is_admin());
 
 -- FIM DA MIGRATION 14
+
+-- =====================================================================
+-- MIGRATION 15 — Rodada 8:
+-- 1) Impede peregrinação duplicada: no máximo uma peregrinação ativa
+--    (planejada ou em andamento) por usuário, garantido por índice único
+--    (além da checagem já feita no app antes de inserir).
+-- 2) Pontos de risco: coluna de foto, para o admin ilustrar o local.
+-- =====================================================================
+
+-- 1a) Antes de criar o índice único, "limpa" eventuais duplicatas que já
+-- possam existir (mantém a mais relevante — em andamento mais recente,
+-- senão a planejada mais recente — e cancela as demais).
+with rankeadas as (
+  select id,
+         row_number() over (
+           partition by user_id
+           order by (status = 'em_andamento') desc, criado_em desc
+         ) as rn
+  from public.peregrinacoes
+  where status in ('planejada', 'em_andamento')
+)
+update public.peregrinacoes
+set status = 'cancelada'
+where id in (select id from rankeadas where rn > 1);
+
+-- 1b) Índice único parcial: garante, a partir de agora, que nunca haja mais
+-- de uma peregrinação ativa por usuário.
+create unique index if not exists peregrinacoes_ativa_unica_por_usuario
+  on public.peregrinacoes (user_id)
+  where status in ('planejada', 'em_andamento');
+
+-- 2) Foto do ponto de risco (mesmo padrão já usado para foto do PAP).
+alter table public.pontos_risco add column if not exists foto_url text;
+
+insert into storage.buckets (id, name, public)
+values ('risco-fotos', 'risco-fotos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "risco_fotos_select_all" on storage.objects;
+create policy "risco_fotos_select_all" on storage.objects for select
+  using (bucket_id = 'risco-fotos');
+
+drop policy if exists "risco_fotos_insert_admin_ou_agente" on storage.objects;
+create policy "risco_fotos_insert_admin_ou_agente" on storage.objects for insert to authenticated
+  with check (bucket_id = 'risco-fotos' and (public.is_admin() or public.is_agente()));
+
+drop policy if exists "risco_fotos_update_admin_ou_agente" on storage.objects;
+create policy "risco_fotos_update_admin_ou_agente" on storage.objects for update to authenticated
+  using (bucket_id = 'risco-fotos' and (public.is_admin() or public.is_agente()));
+
+drop policy if exists "risco_fotos_delete_admin_ou_agente" on storage.objects;
+create policy "risco_fotos_delete_admin_ou_agente" on storage.objects for delete to authenticated
+  using (bucket_id = 'risco-fotos' and (public.is_admin() or public.is_agente()));
+
+-- FIM DA MIGRATION 15

@@ -37,12 +37,22 @@ export interface PontoTrajeto {
   feito: boolean;
 }
 
+// Uma rota inteira (Norte ou Sul), para destacar no mapa geral com uma cor
+// clara própria — diferente do trajeto pessoal do peregrino (tracejado
+// marrom) e sem marcadores numerados, só a linha.
+export interface RotaLinha {
+  nome: string;
+  cor: string;
+  pontos: { lat: number; lng: number; ordem: number }[];
+}
+
 interface Props {
   pontosApoio?: PontoApoio[];
   pontosRisco?: PontoRisco[];
   avisos?: RiscoInformado[];
   peregrinos?: PeregrinoAtivo[];
   trajeto?: PontoTrajeto[];
+  rotasLinhas?: RotaLinha[];
   center?: [number, number];
   zoom?: number;
   height?: string;
@@ -81,6 +91,7 @@ export default function MapView({
   avisos = [],
   peregrinos = [],
   trajeto = [],
+  rotasLinhas = [],
   center = DEFAULT_CENTER,
   zoom = 9,
   height = "500px",
@@ -96,6 +107,7 @@ export default function MapView({
   const trajetoMarkersRef = useRef<Marker[]>([]);
   const previewMarkerRef = useRef<Marker | null>(null);
   const minhaPosicaoMarkerRef = useRef<Marker | null>(null);
+  const rotasLayerIdsRef = useRef<string[]>([]);
 
   // Cria o mapa uma única vez
   useEffect(() => {
@@ -331,6 +343,66 @@ export default function MapView({
       map.once("load", desenhar);
     }
   }, [trajeto]);
+
+  // Rotas Norte/Sul destacadas no mapa geral — uma linha clara por rota, a
+  // partir dos pontos de check-in de cada uma, para deixar claro qual
+  // trecho da rodovia corresponde a cada rota de peregrinação.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    function limpar() {
+      rotasLayerIdsRef.current.forEach((id) => {
+        if (map!.getLayer(id)) map!.removeLayer(id);
+        if (map!.getSource(id)) map!.removeSource(id);
+      });
+      rotasLayerIdsRef.current = [];
+    }
+
+    function desenhar() {
+      limpar();
+      rotasLinhas.forEach((rota, i) => {
+        const ordenado = [...rota.pontos].sort((a, b) => a.ordem - b.ordem);
+        if (ordenado.length < 2) return;
+        const id = `rota-linha-${i}`;
+        const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+          type: "Feature",
+          properties: { nome: rota.nome },
+          geometry: {
+            type: "LineString",
+            coordinates: ordenado.map((p) => [p.lng, p.lat]),
+          },
+        };
+        map!.addSource(id, { type: "geojson", data: geojson });
+        map!.addLayer(
+          {
+            id,
+            type: "line",
+            source: id,
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": rota.cor,
+              "line-width": 6,
+              "line-opacity": 0.75,
+            },
+          },
+          // Insere abaixo dos marcadores (que são elementos HTML, não
+          // layers) mas isso não importa aqui — só cuidamos de não cobrir
+          // a camada base do mapa.
+          undefined
+        );
+        rotasLayerIdsRef.current.push(id);
+      });
+    }
+
+    if (map.isStyleLoaded()) {
+      desenhar();
+    } else {
+      map.once("load", desenhar);
+    }
+
+    return () => limpar();
+  }, [rotasLinhas]);
 
   // Mapa de calor de peregrinos ativos — intensidade conforme a
   // concentração de peregrinos naquele ponto do trajeto (uso administrativo).
