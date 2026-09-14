@@ -7,6 +7,7 @@ import AdminDrilldownClient, {
   type PapLinha,
   type RiscoLinha,
   type RiscoInformadoLinha,
+  type GerenteLinha,
 } from "./AdminDrilldownClient";
 import VoltarButton from "@/components/VoltarButton";
 import type {
@@ -62,6 +63,9 @@ export default async function AdminDashboardPage() {
   let papVinculados: PapLinha[] = [];
   let riscosCadastrados: RiscoLinha[] = [];
   let riscosInformados: RiscoInformadoLinha[] = [];
+  let gerentesCadastrados: GerenteLinha[] = [];
+  let gerentesPendentes: GerenteLinha[] = [];
+  let gerentesAprovados: GerenteLinha[] = [];
   let mensagensNovas = 0;
 
   if (isAdmin) {
@@ -75,7 +79,7 @@ export default async function AdminDashboardPage() {
       { count: contagemMensagensNovas },
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome_completo, cidade, uf"),
-      supabase.from("gerentes_pap").select("id, nome_completo"),
+      supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
       supabase.from("peregrinacoes").select("*").order("criado_em", { ascending: false }),
       supabase.from("rotas").select("*"),
       supabase.from("certificados").select("peregrinacao_id"),
@@ -238,6 +242,40 @@ export default async function AdminDashboardPage() {
     papAtivos = papRows.filter((p) => p.abertoAgora && p.statusAprovacao === "aprovado");
     papPendentes = papRows.filter((p) => p.statusAprovacao === "pendente");
     papVinculados = papRows.filter((p) => p.vinculadoPreCadastro);
+
+    // Nome(s) do(s) PAP de cada gerente — mesma lógica do /admin/gerentes,
+    // repetida aqui para o Painel também trazer nome, telefone e PAP juntos
+    // (antes só existia essa informação completa na tela separada).
+    const papsDoGerentePorId = new Map<string, string[]>();
+    ((pontosApoio ?? []) as PontoApoio[]).forEach((p) => {
+      if (!p.gerente_id) return;
+      const lista = papsDoGerentePorId.get(p.gerente_id) ?? [];
+      lista.push(p.nome);
+      papsDoGerentePorId.set(p.gerente_id, lista);
+    });
+
+    interface GerenteBasico {
+      id: string;
+      nome_completo: string;
+      telefone: string;
+      nome_organizacao: string | null;
+      status: string;
+      criado_em: string;
+    }
+
+    gerentesCadastrados = ((gerentes ?? []) as GerenteBasico[]).map(
+      (g): GerenteLinha => ({
+        id: g.id,
+        nome: g.nome_completo,
+        telefone: g.telefone,
+        nomeOrganizacao: g.nome_organizacao,
+        status: g.status,
+        papNomes: papsDoGerentePorId.get(g.id) ?? [],
+        criadoEm: g.criado_em,
+      })
+    );
+    gerentesPendentes = gerentesCadastrados.filter((g) => g.status === "pendente");
+    gerentesAprovados = gerentesCadastrados.filter((g) => g.status === "aprovado");
   }
 
   return (
@@ -259,6 +297,9 @@ export default async function AdminDashboardPage() {
           papVinculados={papVinculados}
           riscosCadastrados={riscosCadastrados}
           riscosInformados={riscosInformados}
+          gerentesCadastrados={gerentesCadastrados}
+          gerentesPendentes={gerentesPendentes}
+          gerentesAprovados={gerentesAprovados}
           mensagensNovas={mensagensNovas}
         />
       )}

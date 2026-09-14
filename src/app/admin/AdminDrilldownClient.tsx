@@ -33,6 +33,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   MEIO_TRANSPORTE_LABELS,
   STATUS_PAP_LABELS,
+  STATUS_GERENTE_LABELS,
   SENTIDO_PISTA_LABELS,
   SENTIDO_KM_ABREV,
   STATUS_RISCO_INFORMADO_LABELS,
@@ -94,6 +95,16 @@ export interface RiscoLinha {
   rotaNome: string | null;
 }
 
+export interface GerenteLinha {
+  id: string;
+  nome: string;
+  telefone: string;
+  nomeOrganizacao: string | null;
+  status: string;
+  papNomes: string[];
+  criadoEm: string;
+}
+
 export interface RiscoInformadoLinha {
   id: string;
   titulo: string;
@@ -146,6 +157,7 @@ type Categoria =
   | { tipo: "peregrinacao"; titulo: string; dados: PeregrinacaoLinha[] }
   | { tipo: "pap"; titulo: string; dados: PapLinha[] }
   | { tipo: "risco"; titulo: string; dados: RiscoLinha[] }
+  | { tipo: "gerente"; titulo: string; dados: GerenteLinha[] }
   // "filtro" em vez de uma lista fixa: assim a lista aberta no modal
   // reflete confirmações/edições feitas sem precisar fechar e reabrir.
   | { tipo: "riscoInformado"; titulo: string; filtro: "todos" | "semRevisao" };
@@ -164,6 +176,9 @@ interface Props {
   papVinculados: PapLinha[];
   riscosCadastrados: RiscoLinha[];
   riscosInformados: RiscoInformadoLinha[];
+  gerentesCadastrados: GerenteLinha[];
+  gerentesPendentes: GerenteLinha[];
+  gerentesAprovados: GerenteLinha[];
   mensagensNovas: number;
 }
 
@@ -208,6 +223,9 @@ export default function AdminDrilldownClient({
   papVinculados,
   riscosCadastrados,
   riscosInformados: riscosInformadosIniciais,
+  gerentesCadastrados,
+  gerentesPendentes,
+  gerentesAprovados,
   mensagensNovas,
 }: Props) {
   const router = useRouter();
@@ -264,7 +282,14 @@ export default function AdminDrilldownClient({
     return (dadosBase as unknown as Array<Record<string, unknown>>).filter((d) => {
       const nome = (d.nome as string) ?? (d.titulo as string) ?? "";
       const local = (d.local as string) ?? (d.cidade as string) ?? "";
-      return nome.toLowerCase().includes(termo) || local.toLowerCase().includes(termo);
+      const telefone = (d.telefone as string) ?? "";
+      const papNomes = ((d.papNomes as string[]) ?? []).join(" ");
+      return (
+        nome.toLowerCase().includes(termo) ||
+        local.toLowerCase().includes(termo) ||
+        telefone.toLowerCase().includes(termo) ||
+        papNomes.toLowerCase().includes(termo)
+      );
     });
   }, [categoria, busca, dadosBase]);
 
@@ -476,6 +501,34 @@ export default function AdminDrilldownClient({
       </section>
 
       <section>
+        <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Gerentes de PAP</h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Card
+            icon={Users}
+            label="Cadastrados"
+            value={gerentesCadastrados.length}
+            onClick={() => abrir({ tipo: "gerente", titulo: "Gerentes de PAP cadastrados", dados: gerentesCadastrados })}
+          />
+          <Card
+            icon={Clock}
+            label="Pendentes"
+            value={gerentesPendentes.length}
+            destaque={gerentesPendentes.length > 0}
+            onClick={() => abrir({ tipo: "gerente", titulo: "Gerentes de PAP pendentes de aprovação", dados: gerentesPendentes })}
+          />
+          <Card
+            icon={Check}
+            label="Aprovados"
+            value={gerentesAprovados.length}
+            onClick={() => abrir({ tipo: "gerente", titulo: "Gerentes de PAP aprovados", dados: gerentesAprovados })}
+          />
+        </div>
+        <Link href="/admin/gerentes" className="mt-3 inline-block w-fit text-sm text-amber-700 dark:text-amber-500">
+          Aprovar / rejeitar gerentes →
+        </Link>
+      </section>
+
+      <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Riscos</h2>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Card
@@ -623,6 +676,34 @@ export default function AdminDrilldownClient({
                     </div>
                   ))}
 
+                {categoria.tipo === "gerente" &&
+                  (dadosPagina as GerenteLinha[]).map((g) => (
+                    <div key={g.id} className="card">
+                      <p className="flex items-center gap-2 font-semibold">
+                        <Users size={16} className="text-amber-700" />
+                        {g.nome}
+                      </p>
+                      <p className="text-xs text-neutral-500">
+                        Tel: {g.telefone}
+                        {g.nomeOrganizacao ? ` — ${g.nomeOrganizacao}` : ""}
+                      </p>
+                      <p className="text-xs text-neutral-500">
+                        {g.papNomes.length > 0 ? `PAP: ${g.papNomes.join(", ")}` : "Ainda sem PAP cadastrado"}
+                      </p>
+                      <p
+                        className={`text-xs font-medium ${
+                          g.status === "aprovado"
+                            ? "text-green-700"
+                            : g.status === "rejeitado"
+                              ? "text-red-700"
+                              : "text-amber-700"
+                        }`}
+                      >
+                        {STATUS_GERENTE_LABELS[g.status] ?? g.status}
+                      </p>
+                    </div>
+                  ))}
+
                 {categoria.tipo === "risco" &&
                   (dadosPagina as RiscoLinha[]).map((r) => (
                     <div key={r.id} className="card">
@@ -631,7 +712,7 @@ export default function AdminDrilldownClient({
                         {r.titulo}
                       </p>
                       <p className="text-xs text-neutral-500">
-                        Tipo: {r.tipo} — Nível de risco: {r.nivelRisco}/5
+                        Tipo: {r.tipo} — Nível de risco: {NIVEL_RISCO_LABELS[r.nivelRisco] ?? r.nivelRisco}
                         {r.kmReferencia != null
                           ? ` — km ${r.kmReferencia}${r.sentido ? ` ${SENTIDO_KM_ABREV[r.sentido] ?? ""}` : ""}`
                           : ""}

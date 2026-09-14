@@ -234,9 +234,12 @@ export const STATUS_RISCO_INFORMADO_LABELS: Record<string, string> = {
   rejeitado: "Não aprovado",
 };
 
+// Só 3 níveis de risco (Moderado/Alto/Muito alto) — "Muito baixo"/"Baixo"
+// foram removidos porque, na prática, ninguém cadastrava um "local de
+// risco" que não fosse ao menos moderado; o próprio nome "ponto de risco"
+// já implica isso. Ver Migration 18 (atualiza dados antigos com nível 1/2
+// para 3, e restringe o banco a 3-5).
 export const NIVEL_RISCO_LABELS: Record<number, string> = {
-  1: "Muito baixo",
-  2: "Baixo",
   3: "Moderado",
   4: "Alto",
   5: "Muito alto",
@@ -257,9 +260,11 @@ export const STATUS_MENSAGEM_CONTATO_LABELS: Record<string, string> = {
   respondida: "Respondida",
 };
 
+// Sigla em cima (é o que a pessoa reconhece de relance num momento de
+// emergência), nome/explicação embaixo — ver EmergencyButton.tsx.
 export const EMERGENCIAS = [
-  { numero: "190", nome: "Polícia Militar", descricao: "Ocorrências policiais / assaltos" },
-  { numero: "191", nome: "PRF", descricao: "Polícia Rodoviária Federal — acidentes na rodovia" },
+  { numero: "190", nome: "PM", descricao: "Ocorrências / assaltos em área urbana" },
+  { numero: "191", nome: "PRF", descricao: "Acidentes / assaltos em rodovias" },
   { numero: "193", nome: "Bombeiros", descricao: "Resgate, incêndio, emergência médica" },
   { numero: "192", nome: "SAMU", descricao: "Emergência médica" },
 ];

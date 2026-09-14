@@ -24,12 +24,15 @@ interface Props {
   papsPreCadastro: PapPreCadastroMapa[];
 }
 
-// PAP aparece marcado por padrão (é o que a maioria vem buscar); locais de
-// risco e avisos de peregrinos ficam opcionais, para não poluir o mapa de
-// quem só quer achar apoio. As rotas Norte/Sul também vêm marcadas por
-// padrão, para ajudar a situar os demais elementos na rodovia. PAP
-// pré-cadastrados (ainda sem gerente vinculado) também ficam opcionais —
-// são localização aproximada, não o PAP confirmado.
+// PAP (confirmados/vinculados e os que ainda aguardam vínculo) aparecem
+// juntos, no mesmo toggle, marcados por padrão — é o que a maioria vem
+// buscar. A cor de cada tenda já diferencia os dois (verde = confirmado
+// pela administração; cinza tracejado = aguardando vínculo de um
+// gerente), então não faz sentido escondê-los atrás de um segundo toggle
+// separado. Locais de risco e avisos de peregrinos continuam opcionais,
+// para não poluir o mapa de quem só quer achar apoio. As rotas Norte/Sul
+// também vêm marcadas por padrão, para ajudar a situar os demais
+// elementos na rodovia.
 export default function MapClient({
   pontosApoio,
   pontosRisco,
@@ -42,15 +45,14 @@ export default function MapClient({
   const [mostrarRisco, setMostrarRisco] = useState(false);
   const [mostrarAvisos, setMostrarAvisos] = useState(false);
   const [mostrarRotas, setMostrarRotas] = useState(true);
-  const [mostrarPreCadastro, setMostrarPreCadastro] = useState(false);
 
   const pontosApoioVisiveis = useMemo(() => (mostrarPap ? pontosApoio : []), [mostrarPap, pontosApoio]);
   const pontosRiscoVisiveis = useMemo(() => (mostrarRisco ? pontosRisco : []), [mostrarRisco, pontosRisco]);
   const avisosVisiveis = useMemo(() => (mostrarAvisos ? avisos : []), [mostrarAvisos, avisos]);
   const rotasVisiveis = useMemo(() => (mostrarRotas ? rotasLinhas : []), [mostrarRotas, rotasLinhas]);
   const papsPreCadastroVisiveis = useMemo(
-    () => (mostrarPreCadastro ? papsPreCadastro : []),
-    [mostrarPreCadastro, papsPreCadastro]
+    () => (mostrarPap ? papsPreCadastro : []),
+    [mostrarPap, papsPreCadastro]
   );
 
   return (
@@ -70,7 +72,7 @@ export default function MapClient({
             checked={mostrarPap}
             onChange={(e) => setMostrarPap(e.target.checked)}
           />
-          <Tent size={16} className="text-green-600" /> PAP ({pontosApoio.length})
+          <Tent size={16} className="text-green-600" /> PAP ({pontosApoio.length + papsPreCadastro.length})
         </label>
         <label className="flex items-center gap-2 text-sm font-medium">
           <input
@@ -88,15 +90,19 @@ export default function MapClient({
           />
           <Megaphone size={16} className="text-orange-600" /> Avisos de peregrinos ({avisos.length})
         </label>
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={mostrarPreCadastro}
-            onChange={(e) => setMostrarPreCadastro(e.target.checked)}
-          />
-          <Tent size={16} className="text-neutral-400" /> PAP aguardando vínculo ({papsPreCadastro.length})
-        </label>
       </div>
+      {mostrarPap && (papsPreCadastro.length > 0 || pontosApoio.length > 0) && (
+        <div className="flex flex-wrap gap-4 text-xs text-neutral-500">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-600" aria-hidden="true" />
+            Confirmado / vinculado a um gerente
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-full border border-dashed border-neutral-400 bg-neutral-400" aria-hidden="true" />
+            Aguardando vínculo (localização aproximada)
+          </span>
+        </div>
+      )}
 
       {mostrarRotas && rotasLinhas.length > 0 && (
         <div className="flex flex-wrap gap-4 text-xs text-neutral-500">

@@ -15,14 +15,16 @@ import {
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
-// na home) — mantê-lo aqui também seria redundante.
+// na home) — mantê-lo aqui também seria redundante. "Rotas (Norte/Sul)"
+// saiu do menu do administrador — era uma ferramenta antiga de trechos de
+// segurança que não reflete mais como o app mostra risco (por ponto, não
+// por trecho); continua existindo só para o agente cadastrar trechos.
 const ADMIN_LINKS = [
   { href: "/admin", label: "Painel", icon: LayoutDashboard },
   { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
   { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
   { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
   { href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert },
-  { href: "/admin/rotas", label: "Rotas (Norte/Sul)", icon: Route },
   { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
   { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
 ];

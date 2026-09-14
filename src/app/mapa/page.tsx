@@ -106,10 +106,12 @@ export default async function MapaPage() {
         <div>
           <h1 className="text-2xl font-bold">Mapa de Apoio e Segurança</h1>
           <p className="text-sm text-neutral-500">
-            PAP — Pontos de Apoio ao Peregrino (tenda verde), locais de risco
-            (bandeira vermelha ou amarela) e avisos recentes de peregrinos
-            (sinistro, suspeita ou chuva, em laranja). Use as opções abaixo do
-            mapa para mostrar ou esconder cada camada.
+            PAP — Pontos de Apoio ao Peregrino (tenda verde = confirmado pela
+            administração; tenda cinza tracejada = aguardando vínculo de um
+            gerente, localização aproximada), locais de risco (bandeira
+            vermelha ou amarela) e avisos recentes de peregrinos (sinistro,
+            suspeita ou chuva, em laranja). Use as opções abaixo do mapa para
+            mostrar ou esconder cada camada.
           </p>
         </div>
         {isAdmin && (

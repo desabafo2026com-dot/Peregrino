@@ -13,10 +13,9 @@ function kmSentidoLabel(km: number | null, sentido: string | null) {
   return `km ${km}${abrev ? ` ${abrev}` : ""}`;
 }
 
+// Só existem 3 níveis (Moderado/Alto/Muito alto) — ver NIVEL_RISCO_LABELS.
 function riscoColor(nivel: number) {
-  if (nivel >= 4) return "text-red-700 dark:text-red-400";
-  if (nivel === 3) return "text-amber-700 dark:text-amber-500";
-  return "text-green-700 dark:text-green-400";
+  return nivel >= 4 ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-500";
 }
 
 export default function RiscosAdminClient({
@@ -80,7 +79,7 @@ export default function RiscosAdminClient({
                 {r.rota_id ? ` — ${nomeDaRota.get(r.rota_id) ?? "rota"}` : " — ambas as rotas"}
               </p>
               <p className={`text-xs font-medium ${riscoColor(r.nivel_risco)}`}>
-                Nível {r.nivel_risco}/5 — {NIVEL_RISCO_LABELS[r.nivel_risco]}
+                Nível de risco: {NIVEL_RISCO_LABELS[r.nivel_risco] ?? r.nivel_risco}
               </p>
             </div>
           </div>

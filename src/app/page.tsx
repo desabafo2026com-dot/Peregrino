@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, ShieldCheck, Users, Footprints, CheckCircle2, Award } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 
 export default async function Home() {
@@ -68,15 +68,6 @@ export default async function Home() {
       icon: Route,
       title: "Rotas de peregrinação",
       desc: "São Paulo - Aparecida ou Rio de Janeiro - Aparecida: dicas de segurança e pontos de maior risco em cada rota.",
-    },
-  ];
-
-  const cardsDepoisCompartilhar = [
-    {
-      href: "/verificar",
-      icon: ShieldCheck,
-      title: "Verificar certificado",
-      desc: "Confirme a autenticidade de um certificado de peregrinação.",
     },
   ];
 
@@ -151,13 +142,6 @@ export default async function Home() {
           </Link>
         ))}
         <CompartilharInstalarCard />
-        {cardsDepoisCompartilhar.map((c) => (
-          <Link key={c.href} href={c.href} className="card transition hover:border-amber-300">
-            <c.icon className="mb-3 text-amber-700" size={26} />
-            <h2 className="mb-1 font-bold">{c.title}</h2>
-            <p className="text-sm text-neutral-500">{c.desc}</p>
-          </Link>
-        ))}
       </section>
 
       <p className="text-center text-xs text-neutral-400">

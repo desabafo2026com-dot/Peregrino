@@ -23,10 +23,9 @@ const DICAS_GERAIS = [
   "Em caso de mal-estar, procure o PAP mais próximo ou acione a emergência.",
 ];
 
+// Só existem 3 níveis (Moderado/Alto/Muito alto) — ver NIVEL_RISCO_LABELS.
 function riscoColor(nivel: number) {
-  if (nivel >= 4) return "text-red-600";
-  if (nivel === 3) return "text-amber-600";
-  return "text-green-600";
+  return nivel >= 4 ? "text-red-600" : "text-amber-600";
 }
 
 function kmSentidoLabel(km: number | null, sentido: string | null) {

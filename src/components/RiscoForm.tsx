@@ -225,7 +225,7 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
             <select className="input" value={nivelRisco} onChange={(e) => setNivelRisco(e.target.value)}>
               {Object.entries(NIVEL_RISCO_LABELS).map(([v, label]) => (
                 <option key={v} value={v}>
-                  {v} — {label}
+                  {label}
                 </option>
               ))}
             </select>

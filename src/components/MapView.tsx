@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
+import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
 import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
 
 const OSM_STYLE: StyleSpecification = {
@@ -207,7 +207,7 @@ export default function MapView({
 
     pontosRisco.forEach((r) => {
       // Bandeira vermelha para risco alto/muito alto (4-5), amarela para
-      // moderado/baixo (1-3).
+      // moderado (3) — só existem esses 3 níveis (ver NIVEL_RISCO_LABELS).
       const alto = r.nivel_risco >= 4;
       const cor = alto ? "#dc2626" : "#eab308";
       const el = document.createElement("div");
@@ -225,7 +225,7 @@ export default function MapView({
               <strong style="color:${cor}">🚩 ${r.titulo}</strong><br/>
               ${kmSentidoLabel(r.km_referencia, r.sentido) ? `${kmSentidoLabel(r.km_referencia, r.sentido)}<br/>` : ""}
               ${r.descricao ?? ""}<br/>
-              Nível de risco: ${r.nivel_risco}/5 (${alto ? "Alto/Muito alto" : "Moderado/baixo"})
+              Nível de risco: ${NIVEL_RISCO_LABELS[r.nivel_risco] ?? r.nivel_risco}
             </div>
           `)
         )
