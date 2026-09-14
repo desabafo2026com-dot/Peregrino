@@ -83,6 +83,16 @@ export const SENTIDO_PISTA_OPTIONS: { value: string; label: string }[] = [
   { value: "rj", label: "Sentido Rio de Janeiro" },
 ];
 
+export const BR_OPTIONS: { value: string; label: string }[] = [
+  { value: "116", label: "BR-116 (Rodovia Presidente Dutra)" },
+  { value: "488", label: "BR-488 (variante)" },
+];
+
+export const BR_LABELS: Record<string, string> = {
+  "116": "BR-116",
+  "488": "BR-488",
+};
+
 export const SENTIDO_PISTA_LABELS: Record<string, string> = {
   sp: "Sentido São Paulo",
   rj: "Sentido Rio de Janeiro",

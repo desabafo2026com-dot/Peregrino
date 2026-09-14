@@ -6,10 +6,11 @@ import {
   SERVICOS_PONTO_APOIO,
   SENTIDO_PISTA_OPTIONS,
   CIDADES_DUTRA_SP_QUELUZ,
+  BR_OPTIONS,
 } from "@/lib/constants";
 import { LocateFixed } from "lucide-react";
 import CalendarioDatas from "@/components/CalendarioDatas";
-import type { PontoApoio, SentidoPista } from "@/types/database";
+import type { PontoApoio, SentidoPista, Br, PapPreCadastro } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -29,6 +30,7 @@ export interface PapFormDados {
   longitude: number;
   km_referencia: number | null;
   cidade: string | null;
+  br: Br;
   sentido_pista: SentidoPista | null;
   periodo_funcionamento: string | null;
   datas_funcionamento: string[];
@@ -37,6 +39,7 @@ export interface PapFormDados {
   doacao_necessidade: string | null;
   contato_doacao: string | null;
   observacoes: string | null;
+  pre_cadastro_id: string | null;
 }
 
 function formatarPeriodo(is24h: boolean, abertura: string, fechamento: string) {
@@ -47,20 +50,37 @@ function formatarPeriodo(is24h: boolean, abertura: string, fechamento: string) {
 
 interface Props {
   pontoInicial?: PontoApoio;
+  // Quando o gerente veio de "vincular um PAP já pré-cadastrado", os dados
+  // públicos da base (nome/cidade/BR/km/sentido) já chegam prontos aqui —
+  // ela só completa o resto (localização exata, telefone, calendário etc.).
+  preCadastro?: PapPreCadastro | null;
   onSalvar: (dados: PapFormDados) => Promise<{ error?: string }>;
   submitLabel: string;
   submitLoadingLabel: string;
 }
 
-export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoadingLabel }: Props) {
-  const [nome, setNome] = useState(pontoInicial?.nome ?? "");
-  const [cidade, setCidade] = useState(pontoInicial?.cidade ?? "");
-  const [sentidoPista, setSentidoPista] = useState<string>(pontoInicial?.sentido_pista ?? "");
+export default function PapForm({
+  pontoInicial,
+  preCadastro,
+  onSalvar,
+  submitLabel,
+  submitLoadingLabel,
+}: Props) {
+  const [nome, setNome] = useState(pontoInicial?.nome ?? preCadastro?.nome ?? "");
+  const [cidade, setCidade] = useState(pontoInicial?.cidade ?? preCadastro?.cidade ?? "");
+  const [br, setBr] = useState<string>(pontoInicial?.br ?? preCadastro?.br ?? "116");
+  const [sentidoPista, setSentidoPista] = useState<string>(
+    pontoInicial?.sentido_pista ?? preCadastro?.sentido_pista ?? ""
+  );
   const [responsavel, setResponsavel] = useState(pontoInicial?.responsavel ?? "");
   const [telefone, setTelefone] = useState(pontoInicial?.telefone ?? "");
   const [exibirTelefone, setExibirTelefone] = useState(pontoInicial?.exibir_telefone ?? true);
   const [kmReferencia, setKmReferencia] = useState(
-    pontoInicial?.km_referencia != null ? String(pontoInicial.km_referencia) : ""
+    pontoInicial?.km_referencia != null
+      ? String(pontoInicial.km_referencia)
+      : preCadastro?.km != null
+        ? String(preCadastro.km)
+        : ""
   );
   const [is24h, setIs24h] = useState(pontoInicial?.periodo_funcionamento === "Aberto 24h");
   const [horarioAbertura, setHorarioAbertura] = useState("");
@@ -112,6 +132,7 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
       longitude: coords.lng,
       km_referencia: kmReferencia ? Number(kmReferencia) : null,
       cidade: cidade || null,
+      br: br as Br,
       sentido_pista: (sentidoPista || null) as SentidoPista | null,
       // Se nenhum dia foi marcado agora, preserva o período que já estava
       // salvo (texto livre de antes desta mudança) em vez de apagá-lo.
@@ -122,6 +143,7 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
       doacao_necessidade: aceitaDoacoes ? doacaoNecessidade || null : null,
       contato_doacao: contatoDoacao || null,
       observacoes: observacoes || null,
+      pre_cadastro_id: pontoInicial?.pre_cadastro_id ?? preCadastro?.id ?? null,
     });
     setLoading(false);
     if (error) setErro(error);
@@ -156,10 +178,31 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
 
       <div className="card">
         <h3 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">Dados do PAP</h3>
+        {preCadastro && (
+          <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            Dados vindos da base pública de PAPs — confira e complete o que faltar.
+            {preCadastro.data_funcionamento_texto && (
+              <>
+                {" "}Data de funcionamento sugerida (revise para o ano atual):{" "}
+                <strong>{preCadastro.data_funcionamento_texto}</strong>.
+              </>
+            )}
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="label">Nome do local</label>
             <input required className="input" value={nome} onChange={(e) => setNome(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Rodovia</label>
+            <select className="input" value={br} onChange={(e) => setBr(e.target.value)}>
+              {BR_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Cidade</label>

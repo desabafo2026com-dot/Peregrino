@@ -13,6 +13,7 @@ export type StatusGerentePap = "pendente" | "aprovado" | "rejeitado";
 export type StatusAprovacaoPap = "pendente" | "aprovado" | "rejeitado";
 export type MeioTransporte = "a_pe" | "bicicleta" | "outros";
 export type SentidoPista = "sp" | "rj";
+export type Br = "116" | "488";
 export type LadoRodovia =
   | "marginal_norte"
   | "marginal_sul"
@@ -105,8 +106,23 @@ export interface PontoApoio {
   aceita_doacoes: boolean;
   doacao_necessidade: string | null;
   datas_funcionamento: string[];
+  br: Br;
+  pre_cadastro_id: string | null;
   criado_em: string;
   atualizado_em: string;
+}
+
+export interface PapPreCadastro {
+  id: string;
+  nome: string;
+  cidade: string | null;
+  br: Br;
+  km: number | null;
+  sentido_pista: SentidoPista | null;
+  data_funcionamento_texto: string | null;
+  reivindicado_por: string | null;
+  reivindicado_em: string | null;
+  criado_em: string;
 }
 
 export interface TrechoSeguranca {
@@ -128,6 +144,7 @@ export interface PontoRisco {
   longitude: number;
   km_referencia: number | null;
   sentido: SentidoPista | null;
+  br: Br;
   tipo: string;
   nivel_risco: number;
   rota_id: string | null;

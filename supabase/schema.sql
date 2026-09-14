@@ -1285,4 +1285,266 @@ from public.rotas r
 where r.slug = 'sul'
 on conflict (rota_id, ordem) do nothing;
 
--- FIM DO SCHEMA
+-- =====================================================================
+-- MIGRATION 10 — Rodada 2: login/cadastro por e-mail (verificação por
+-- código) e pré-cadastro de PAP a partir de uma base pública de 138
+-- pontos reais (fonte: reportagem do G1), que um gerente pode
+-- pesquisar e "reivindicar" ao cadastrar seu PAP, em vez de digitar
+-- tudo do zero.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Rodovia (BR) do PAP / ponto de risco — hoje só existe o km e o
+-- sentido da pista; a rodovia em si (116 é o padrão, 488 é a variante
+-- que passa por Guaratinguetá) precisa ficar explícita.
+-- ---------------------------------------------------------------------
+alter table public.pontos_apoio
+  add column if not exists br text not null default '116' check (br in ('116', '488'));
+
+alter table public.pontos_risco
+  add column if not exists br text not null default '116' check (br in ('116', '488'));
+
+comment on column public.pontos_apoio.br is 'Rodovia: 116 (Presidente Dutra, padrão) ou 488 (variante).';
+comment on column public.pontos_risco.br is 'Rodovia: 116 (Presidente Dutra, padrão) ou 488 (variante).';
+
+-- ---------------------------------------------------------------------
+-- Verificação de e-mail já cadastrado — usada pela nova tela de
+-- entrada única (peregrino digita o e-mail primeiro; se já existe,
+-- pede senha; se não existe, começa o cadastro). Função com
+-- SECURITY DEFINER porque auth.users não é consultável direto pelo
+-- cliente — o app decide expor essa checagem de propósito, para essa
+-- experiência de "e-mail primeiro" que o usuário pediu (é uma escolha
+-- deliberada de UX, diferente da proteção padrão do Supabase contra
+-- enumeração de e-mails, que continua valendo em todos os outros
+-- pontos, como o próprio signUp).
+-- ---------------------------------------------------------------------
+create or replace function public.email_ja_cadastrado(p_email text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1 from auth.users where lower(email) = lower(p_email)
+  );
+$$;
+
+grant execute on function public.email_ja_cadastrado(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- PAPS PRÉ-CADASTRO — base pública de PAPs reais (nome, cidade, br,
+-- km, sentido, período de funcionamento em texto livre) que um
+-- gerente pode pesquisar e vincular ao cadastrar o dele, evitando
+-- digitar tudo de novo. Quando vinculado, guarda quem reivindicou;
+-- continua visível (mostrando que já foi reivindicado) para não sumir
+-- da lista e alguém tentar cadastrar de novo.
+-- ---------------------------------------------------------------------
+create table if not exists public.paps_pre_cadastro (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  cidade text,
+  br text not null default '116' check (br in ('116', '488')),
+  km numeric(6,1),
+  sentido_pista text check (sentido_pista in ('sp', 'rj')),
+  data_funcionamento_texto text,
+  reivindicado_por uuid references public.gerentes_pap(id) on delete set null,
+  reivindicado_em timestamptz,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.paps_pre_cadastro is 'Base pública de PAPs reais (fonte: reportagem G1) para um gerente pesquisar e vincular ao cadastrar o seu, em vez de digitar do zero.';
+comment on column public.paps_pre_cadastro.data_funcionamento_texto is 'Texto livre da fonte original (ex.: "06 a 08 de outubro"), sem ano definido — o gerente deve revisar/ajustar para o ano corrente da romaria ao vincular.';
+
+alter table public.paps_pre_cadastro enable row level security;
+
+-- Qualquer pessoa (mesmo sem login) pode ver a lista, para poder
+-- pesquisar antes mesmo de se cadastrar como gerente.
+drop policy if exists paps_pre_cadastro_select_all on public.paps_pre_cadastro;
+create policy paps_pre_cadastro_select_all
+  on public.paps_pre_cadastro for select
+  using (true);
+
+-- Sem insert/update/delete direto por RLS — tudo passa pela função
+-- abaixo (reivindicar) ou por administrador via SQL.
+
+-- Vincula o PAP (referência criada em pontos_apoio) a uma entrada do
+-- pré-cadastro, marcando quem reivindicou. Bloqueia reivindicar de
+-- novo uma entrada já reivindicada (evita corrida entre duas gerentes
+-- clicando ao mesmo tempo).
+create or replace function public.reivindicar_pap_pre_cadastro(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.gerentes_pap where id = auth.uid()) then
+    raise exception 'apenas gerentes de PAP podem reivindicar um pré-cadastro';
+  end if;
+
+  update public.paps_pre_cadastro
+  set reivindicado_por = auth.uid(), reivindicado_em = now()
+  where id = p_id and reivindicado_por is null;
+
+  if not found then
+    raise exception 'este PAP já foi reivindicado por outro gerente ou não existe';
+  end if;
+end;
+$$;
+
+grant execute on function public.reivindicar_pap_pre_cadastro(uuid) to authenticated;
+
+-- pontos_apoio.pre_cadastro_id — de qual entrada do pré-cadastro este
+-- PAP veio (null quando cadastrado direto, sem usar a base pública).
+alter table public.pontos_apoio
+  add column if not exists pre_cadastro_id uuid references public.paps_pre_cadastro(id) on delete set null;
+
+-- ---------------------------------------------------------------------
+-- Seed — 138 PAPs reais extraídos da reportagem do G1 (documento
+-- fornecido pelo usuário). Idempotente: só insere se a tabela ainda
+-- estiver vazia, para não duplicar em uma nova execução da migration.
+-- ---------------------------------------------------------------------
+insert into public.paps_pre_cadastro (nome, cidade, br, km, sentido_pista, data_funcionamento_texto)
+select * from (values
+  ('Mãezinha do Céu', 'Guarulhos', '116', 216.0, 'sp', '06 a 08 de outubro'),
+  ('Cantinho do Bem', 'Guarulhos', '116', 210.5, 'sp', '05 a 11 de outubro'),
+  ('Família Silva', 'Guarulhos', '116', 208.0, 'rj', '04 a 10 de outubro'),
+  ('Irmãos da Fé', 'Guarulhos', '116', 207.0, 'sp', '07 e 08 de outubro'),
+  ('Centro Industrial Arujá', 'Arujá', '116', 203.5, 'sp', 'Sem informação de data'),
+  ('Ballance', 'Arujá', '116', 201.8, 'rj', '08 e 09 de outubro'),
+  ('Lions', 'Arujá', '116', 201.8, 'rj', '05 a 08 de outubro'),
+  ('Família Oliveira & Amigos', 'Arujá', '116', 201.6, 'sp', '05 a 08 de outubro'),
+  ('Amor em Ação Arujá', 'Arujá', '116', 199.0, 'rj', '07 e 08 de outubro'),
+  ('Juntos na Superação', 'Arujá', '116', 199.0, 'sp', '06 a 09 de outubro'),
+  ('Nossa Senhora Aparecida', 'Arujá', '116', 198.0, 'sp', '05 a 10 de outubro'),
+  ('Somos da Imaculada', 'Santa Isabel', '116', 196.7, 'rj', '05 a 10 de outubro'),
+  ('Comitiva de Aparecida', 'Santa Isabel', '116', 194.0, 'rj', '08 de outubro'),
+  ('Anjos dos Romeiros', 'Santa Isabel', '116', 190.0, 'sp', '08 e 09 de outubro'),
+  ('Nascimento da Fé', 'Santa Isabel', '116', 190.0, 'rj', '04 a 12 de outubro'),
+  ('Rancho da Pamonha', 'Santa Isabel', '116', 189.0, 'rj', '05 a 11 de outubro'),
+  ('Acolher Bem é Evangelizar', 'Santa Isabel', '116', 187.0, 'rj', '02 a 12 de outubro'),
+  ('Maria: Advogada Nossa', 'Santa Isabel', '116', 184.0, 'rj', '07 a 09 de outubro'),
+  ('Lions Guararema', 'Guararema', '116', 179.4, 'rj', '05 a 09 de outubro'),
+  ('Com Sagradas Mãos', 'Guararema', '116', 177.0, 'sp', '08 de outubro'),
+  ('Peregrinos de Aparecida 1', 'Guararema', '116', 177.0, 'sp', '08 de outubro'),
+  ('Romaria Mãos Que Servem', 'Guararema', '116', 174.5, 'rj', '07 de outubro'),
+  ('Romaria Fé na Estrada', 'Guararema', '116', 174.5, 'rj', '07 de outubro'),
+  ('Mãos de Maria', 'Jacareí', '116', 169.0, 'rj', '08 de outubro'),
+  ('Anjos e Acolhidos', 'Jacareí', '116', 165.0, 'sp', '07 a 10 de outubro'),
+  ('Movidos Pela Fé 1', 'Jacareí', '116', 160.0, 'sp', '07 a 10 de outubro'),
+  ('Romaria Com Fé Chegaremos', 'Jacareí', '116', 160.0, 'rj', 'Sem informação de data'),
+  ('Ponto de Apoio aos Peregrinos de Aparecida', 'Jacareí', '116', 159.0, 'rj', '05 a 11 de outubro'),
+  ('Amigos de São José', 'São José dos Campos', '116', 154.0, 'rj', '07 a 10 de outubro'),
+  ('Amigos do Portuga', 'São José dos Campos', '116', 152.0, 'rj', '08 a 12 de outubro'),
+  ('Centro de Apoio Bem Te Vi', 'São José dos Campos', '116', 150.0, 'rj', '02 a 11 de outubro'),
+  ('Saúde e Fé Univ. Anhembi Morumbi', 'São José dos Campos', '116', 150.0, 'sp', '08 e 09 de outubro'),
+  ('Lions Clube Internacional', 'São José dos Campos', '116', 149.1, 'rj', '08 a 10 de outubro'),
+  ('Somos Todos Irmãos', 'São José dos Campos', '116', 148.6, 'rj', '10 de outubro'),
+  ('Grupo de Escoteiros Cassiano Ricardo', 'São José dos Campos', '116', 148.0, 'sp', '09 a 11 de outubro'),
+  ('Amigos - Em Agradecimento à Vida', 'São José dos Campos', '116', 145.0, 'rj', '07 a 12 de outubro'),
+  ('São Peregrino', 'São José dos Campos', '116', 144.0, 'sp', '08 a 11 de outubro'),
+  ('Tenda de Apoio aos Romeiros - Jardim Diamante', 'São José dos Campos', '116', 144.0, 'rj', '28 de setembro a 15 de outubro'),
+  ('Comitiva de Aparecida', 'São José dos Campos', '116', 142.0, 'rj', '09 de outubro'),
+  ('Do Mundo', 'São José dos Campos', '116', 142.0, 'rj', '09 a 12 de outubro'),
+  ('Grupo de Apoio aos Peregrinos', 'São José dos Campos', '116', 140.0, 'rj', '09 de outubro'),
+  ('Com Sagradas Mãos', 'São José dos Campos', '116', 140.0, 'rj', '09 de outubro'),
+  ('Caminho dos Irmãos de Fé', 'São José dos Campos', '116', 140.0, 'rj', '09 a 11 de outubro'),
+  ('Mãos que servem', 'São José dos Campos', '116', 138.0, 'rj', '08 de outubro'),
+  ('Romaria Fé na Estrada', 'São José dos Campos', '116', 138.0, 'rj', '08 de outubro'),
+  ('S.O.S Risos', 'São José dos Campos', '116', 137.0, 'rj', '08 a 11 de outubro'),
+  ('Eugênio de Melo', 'São José dos Campos', '116', 136.5, 'rj', '07 a 11 de outubro'),
+  ('Maria Passa na Frente', 'São José dos Campos', '116', 136.0, 'sp', '09 a 12 de outubro'),
+  ('Unidos por Nossa Senhora', 'São José dos Campos', '116', 135.0, 'rj', '09 a 12 de outubro'),
+  ('Anjos e Acolhidos 2', 'Caçapava', '116', 134.0, 'rj', '10 e 11 de outubro'),
+  ('Perseverantes na Fé', 'Caçapava', '116', 133.0, 'sp', '09 a 11 de outubro'),
+  ('Filhos de Maria', 'Caçapava', '116', 133.0, 'sp', '06 a 12 de outubro'),
+  ('Silvia e Família', 'Caçapava', '116', 132.0, 'rj', '08 a 11 de outubro'),
+  ('Amigos do Inocop', 'Caçapava', '116', 130.0, 'rj', '10 de outubro'),
+  ('Ponto de Apoio aos Romeiros', 'Caçapava', '116', 129.0, 'rj', '08 a 12 de outubro'),
+  ('Pássaro Marrom', 'Caçapava', '116', 129.0, 'sp', '10 de outubro'),
+  ('Amigos da Fé 3', 'Caçapava', '116', 128.0, 'rj', '09 e 10 de outubro'),
+  ('Prova de Amor', 'Caçapava', '116', 126.6, 'sp', '08 a 11 de outubro'),
+  ('Amigos da Fé (ao lado PRF)', 'Caçapava', '116', 126.5, 'rj', '07 a 12 de outubro'),
+  ('Família Romeiros', 'Caçapava', '116', 125.0, 'rj', 'Sem informação de data'),
+  ('Amigos da Val', 'Caçapava', '116', 125.0, 'rj', '09 a 11 de outubro'),
+  ('Dos Amigos', 'Caçapava', '116', 122.0, 'rj', '02 a 11 de outubro'),
+  ('Amigos Pela Fé', 'Caçapava', '116', 118.0, 'rj', '08 a 12 de outubro'),
+  ('IBG (Igreja Batista)', 'Taubaté', '116', 117.0, 'sp', 'Sem informação de data'),
+  ('Estação do Peregrino', 'Taubaté', '116', 117.0, 'rj', '10 e 11 de outubro'),
+  ('Com Sagradas Mãos', 'Taubaté', '116', 115.5, 'rj', '10 de outubro'),
+  ('Romaria Com Fé Chegaremos', 'Taubaté', '116', 115.0, 'rj', '11 de outubro'),
+  ('Sucesso e Alegria', 'Taubaté', '116', 115.0, 'rj', '09 a 11 de outubro'),
+  ('Filhos de Maria', 'Taubaté', '116', 114.0, 'sp', '09 a 12 de outubro'),
+  ('União das Pensionistas PMESP', 'Taubaté', '116', 113.0, 'sp', '08 a 12 de outubro'),
+  ('Unidos Pela Fé', 'Taubaté', '116', 113.0, 'rj', '02 a 12 de outubro'),
+  ('Polenta Solidária', 'Taubaté', '116', 113.0, 'rj', '10 de outubro'),
+  ('Estação Decolores', 'Taubaté', '116', 111.0, 'rj', '10 e 11 de outubro'),
+  ('Unidos Pelo Amor e Pela Fé', 'Taubaté', '116', 110.0, 'rj', '08 a 12 de outubro'),
+  ('Terço dos Homens', 'Taubaté', '116', 108.5, 'rj', '04 a 12 de outubro'),
+  ('Mãos que Servem', 'Taubaté', '116', 108.0, 'rj', '09 de outubro'),
+  ('Romaria Fé na Estrada', 'Taubaté', '116', 108.0, 'rj', '09 de outubro'),
+  ('Abutres Moto Clube', 'Taubaté', '116', 108.0, 'rj', '05 a 12 de outubro'),
+  ('Nossa Senhora de Nazaré', 'Taubaté', '116', 107.0, 'rj', '09 a 12 de outubro'),
+  ('Anjo Pietra', 'Taubaté', '116', 107.0, 'rj', 'Sem informação de data'),
+  ('Madre Tereza de Calcutá', 'Taubaté', '116', 107.0, 'rj', '11 e 12 de outubro'),
+  ('Fé e Saúde', 'Taubaté', '116', 107.0, 'rj', '10 e 11 de outubro'),
+  ('Ao Pai e por Maria', 'Taubaté', '116', 107.0, 'rj', '09 a 11 de outubro'),
+  ('Sentinelas de Nossa Senhora Aparecida', 'Taubaté', '116', 107.0, 'rj', '06 a 11 de outubro'),
+  ('Vó Jandira', 'Taubaté', '116', 107.0, 'sp', '08 a 12 de outubro'),
+  ('Estação São Miguel', 'Pindamonhangaba', '116', 104.0, 'rj', 'Sem informação de data'),
+  ('Esperança', 'Pindamonhangaba', '116', 102.5, 'rj', '09 a 12 de outubro'),
+  ('Villar e Amigos', 'Pindamonhangaba', '116', 101.0, 'rj', '08 a 12 de outubro'),
+  ('Amigos da Fé Interlagos', 'Pindamonhangaba', '116', 101.0, 'rj', '08 a 12 de outubro'),
+  ('Manto Azul', 'Pindamonhangaba', '116', 101.0, 'rj', '08 a 11 de outubro'),
+  ('Colo de Mãe', 'Pindamonhangaba', '116', 101.0, 'rj', '11 e 12 de outubro'),
+  ('Comitiva de Aparecida', 'Pindamonhangaba', '116', 101.0, 'rj', '10 de outubro'),
+  ('Gueri Gueri, Enrolados nas Trilhas', 'Pindamonhangaba', '116', 100.0, 'sp', 'Sem informação de data'),
+  ('Amigos da Fé SP', 'Pindamonhangaba', '116', 99.0, 'sp', '08 a 12 de outubro'),
+  ('Imaculado Coração de Maria', 'Pindamonhangaba', '116', 98.0, 'sp', '11 de outubro'),
+  ('Amigos em Oração', 'Pindamonhangaba', '116', 97.8, 'sp', '10 a 12 de outubro'),
+  ('Maria Passa à Frente', 'Pindamonhangaba', '116', 96.0, 'sp', '03 de outubro'),
+  ('Coração Valente', 'Pindamonhangaba', '116', 96.0, 'sp', '09 a 12 de outubro'),
+  ('Nossa Senhora Rainha do Brasil', 'Pindamonhangaba', '116', 96.0, 'sp', '08 a 11 de outubro'),
+  ('Filhos de Aparecida', 'Pindamonhangaba', '116', 94.0, 'sp', '08 a 11 de outubro'),
+  ('Aldeia Estelar', 'Pindamonhangaba', '116', 93.0, 'sp', '10 de outubro'),
+  ('Café Romeiro', 'Pindamonhangaba', '116', 92.0, 'sp', '10 de outubro'),
+  ('Tenda do Acolhimento', 'Pindamonhangaba', '116', 92.0, 'sp', '09 a 11 de outubro'),
+  ('Igreja da Cidade', 'Pindamonhangaba', '116', 92.0, 'sp', '12 de outubro'),
+  ('Amigos da Fé 3', 'Pindamonhangaba', '116', 88.0, 'sp', '11 de outubro'),
+  ('Peregrinos de Aparecida 2', 'Pindamonhangaba', '116', 87.0, 'sp', '10 e 11 de outubro'),
+  ('Mãe Peregrina', 'Pindamonhangaba', '116', 87.0, 'sp', '10 a 12 de outubro'),
+  ('Aliança pelos Romeiros', 'Pindamonhangaba', '116', 85.5, 'sp', '10 e 11 de outubro'),
+  ('Amigos da Fé 3', 'Pindamonhangaba', '116', 85.5, 'sp', '12 de outubro'),
+  ('Arco-Íris', 'Roseira', '116', 82.0, 'rj', '09 a 12 de outubro'),
+  ('Unifatea', 'Roseira', '116', 82.0, 'rj', '10 e 11 de outubro'),
+  ('Luz no Caminho', 'Roseira', '116', 82.0, 'sp', '11 de outubro'),
+  ('Caminho dos Milagres', 'Roseira', '116', 81.0, 'sp', '11 e 12 de outubro'),
+  ('Unidos Pela Fé', 'Roseira', '116', 81.0, 'sp', '10 a 12 de outubro'),
+  ('Igreja Nova Vida', 'Roseira', '116', 80.0, 'sp', '10 e 11 de outubro'),
+  ('Pássaro Marrom', 'Roseira', '116', 79.0, 'sp', '10 e 11 de outubro'),
+  ('Tenda de Apoio Mãe Aparecida', 'Roseira', '116', 79.0, 'sp', '11 de outubro'),
+  ('Amigos na Vida e Unidos Pela Fé', 'Roseira', '116', 79.0, 'sp', '11 e 12 de outubro'),
+  ('União', 'Roseira', '116', 79.0, 'sp', '11 e 12 de outubro'),
+  ('Polenta Solidária', 'Roseira', '116', 79.0, 'sp', '11 de outubro'),
+  ('Bom Fran', 'Aparecida', '116', 75.0, 'sp', '11 de outubro'),
+  ('Refúgio da Imaculada', 'Aparecida', '116', 75.0, 'sp', '11 e 12 de outubro'),
+  ('Voluntários Pela Fé', 'Aparecida', '116', 75.0, 'sp', '10 a 12 de outubro'),
+  ('Ektor', 'Aparecida', '116', 75.0, 'sp', '11 e 12 de outubro'),
+  ('Mãos que Servem', 'Aparecida', '116', 75.0, 'sp', '10 de outubro'),
+  ('Romaria Fé na Estrada', 'Aparecida', '116', 75.0, 'sp', '10 de outubro'),
+  ('Família Ferreira-Madinha', 'Aparecida', '116', 74.5, 'sp', '03 a 12 de outubro'),
+  ('Comitiva de Aparecida', 'Aparecida', '116', 74.5, 'sp', '11 de outubro'),
+  ('Coração de Mãe Sempre Cabe Mais Um', 'Aparecida', '116', 72.0, 'sp', '10 a 12 de outubro'),
+  ('Amigos na Fé', 'Aparecida', '488', null, 'sp', '11 e 12 de outubro'),
+  ('Casa da Mãe', 'Aparecida', '488', null, 'sp', '09 a 12 de outubro'),
+  ('Tenda Amigos dos Irmãos Peregrinos', 'Aparecida', '488', null, 'sp', '02 a 18 de outubro'),
+  ('Rosa Azul', 'Guaratinguetá', '116', 59.0, 'sp', 'Sem informação de data'),
+  ('Lion Canas', 'Canas', '116', 47.0, 'rj', '11 e 12 de outubro'),
+  ('Pousada São João Batista', 'Cachoeira Paulista', '116', 38.0, 'sp', 'Sem informação de data'),
+  ('Unidos pela Fé', 'Queluz', '116', 9.0, 'rj', '07 a 12 de outubro'),
+  ('Anjos da Estrada', 'Apoio Móvel (Itinerante)', '116', null, 'rj', '09 a 12 de outubro'),
+  ('Parada da Relíquia', 'Rio de Janeiro - Engenheiro Passos', '116', 336.0, 'rj', '08 a 10 de outubro')) as v(nome, cidade, br, km, sentido_pista, data_funcionamento_texto)
+where not exists (select 1 from public.paps_pre_cadastro limit 1);
+
+-- FIM DA MIGRATION 10

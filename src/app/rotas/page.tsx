@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { LADO_RODOVIA_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import VoltarButton from "@/components/VoltarButton";
-import { ShieldAlert, TriangleAlert } from "lucide-react";
+import { ShieldAlert, TriangleAlert, Share2 } from "lucide-react";
 import type { PontoRisco, Rota, TrechoSeguranca } from "@/types/database";
 
 const DICAS_GERAIS = [
@@ -147,6 +147,19 @@ export default async function RotasPage({
         </h2>
         <RiscoMapClient pontosRisco={(riscos ?? []) as PontoRisco[]} />
       </section>
+
+      <Link
+        href="/instalar"
+        className="card flex items-center gap-3 transition hover:border-amber-300"
+      >
+        <Share2 className="shrink-0 text-amber-700" size={24} />
+        <span>
+          <span className="block font-bold">Compartilhar ou instalar o app</span>
+          <span className="block text-sm text-neutral-500">
+            Indique o Peregrino para outro romeiro ou coloque o ícone na tela do seu celular.
+          </span>
+        </span>
+      </Link>
     </div>
   );
 }

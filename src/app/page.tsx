@@ -39,12 +39,12 @@ export default async function Home() {
       desc: "Veja os PAP (Pontos de Apoio ao Peregrino) — água, alimentação, descanso e doações ao longo da rota.",
     },
     {
-      href: isGerente ? "/gerente-pap" : "/gerente-pap/cadastro",
+      href: isGerente ? "/gerente-pap" : "/login?tipo=gerente_pap",
       icon: MapPinPlus,
-      title: "Cadastrar/Alterar PAP",
+      title: "PAP — vincular ou cadastrar",
       desc: isGerente
         ? "Acesse sua área de gerente para alterar os dados do seu Ponto de Apoio ao Peregrino a qualquer momento."
-        : "Cadastro para gerentes de PAP: cadastre-se, confirme seu e-mail e cadastre seu Ponto de Apoio ao Peregrino — ele aparece no mapa após aprovação da administração. Depois, altere os dados quando quiser.",
+        : "É gerente de um PAP? Encontre o seu numa lista pública de pontos já conhecidos e vincule com poucos toques, ou cadastre um novo — ele aparece no mapa após aprovação da administração.",
     },
     {
       href: "/rotas",

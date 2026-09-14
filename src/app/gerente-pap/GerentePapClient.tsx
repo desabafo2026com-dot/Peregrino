@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon, Pencil } from "lucide-react";
 import { STATUS_PAP_LABELS } from "@/lib/constants";
 import PapForm, { type PapFormDados } from "@/components/PapForm";
-import type { GerentePap, PontoApoio } from "@/types/database";
+import PapPreCadastroBusca from "@/components/PapPreCadastroBusca";
+import type { GerentePap, PontoApoio, PapPreCadastro } from "@/types/database";
 
 const STATUS_PAP_COLOR: Record<string, string> = {
   pendente: "text-amber-700 dark:text-amber-500",
@@ -25,8 +26,20 @@ export default function GerentePapClient({
   const supabase = createClient();
   const router = useRouter();
   const [pontos, setPontos] = useState(pontosIniciais);
+  const [preCadastro, setPreCadastro] = useState<PapPreCadastro | null | undefined>(undefined);
 
   async function cadastrarPrimeiroPap(dados: PapFormDados) {
+    if (dados.pre_cadastro_id) {
+      const { error: erroReivindicar } = await supabase.rpc("reivindicar_pap_pre_cadastro", {
+        p_id: dados.pre_cadastro_id,
+      });
+      if (erroReivindicar) {
+        return {
+          error:
+            "Este PAP da lista pública já foi vinculado por outra pessoa. Volte e escolha outro, ou cadastre do zero.",
+        };
+      }
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -81,6 +94,14 @@ export default function GerentePapClient({
   }
 
   if (pontos.length === 0) {
+    if (preCadastro === undefined) {
+      return (
+        <PapPreCadastroBusca
+          onSelecionar={(item) => setPreCadastro(item)}
+          onPular={() => setPreCadastro(null)}
+        />
+      );
+    }
     return (
       <div className="card">
         <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
@@ -92,7 +113,17 @@ export default function GerentePapClient({
           a divulgação — depois disso, você pode alterar esses dados quando
           quiser.
         </p>
+        {preCadastro && (
+          <button
+            type="button"
+            onClick={() => setPreCadastro(undefined)}
+            className="mb-4 text-xs font-medium text-amber-700"
+          >
+            ← Escolher outro da lista pública
+          </button>
+        )}
         <PapForm
+          preCadastro={preCadastro}
           onSalvar={cadastrarPrimeiroPap}
           submitLabel="Cadastrar PAP"
           submitLoadingLabel="Salvando..."
