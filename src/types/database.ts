@@ -127,6 +127,7 @@ export interface PontoRisco {
   latitude: number;
   longitude: number;
   km_referencia: number | null;
+  sentido: SentidoPista | null;
   tipo: string;
   nivel_risco: number;
   rota_id: string | null;

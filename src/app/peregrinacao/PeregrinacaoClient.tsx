@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { intervalToDuration, formatDuration } from "date-fns";
@@ -8,6 +9,7 @@ import { ptBR } from "date-fns/locale";
 import {
   Flag,
   MapPin,
+  MapPinned,
   CheckCircle2,
   Radio,
   Award,
@@ -21,6 +23,15 @@ import AlertaProximidade from "@/components/AlertaProximidade";
 import InformarRisco from "@/components/InformarRisco";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
 import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte, Motivo } from "@/types/database";
+
+const MapView = dynamic(() => import("@/components/MapView"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[300px] w-full items-center justify-center rounded-2xl bg-neutral-100 text-neutral-400 dark:bg-neutral-900">
+      Carregando mapa...
+    </div>
+  ),
+});
 
 // Coordenadas aproximadas da Basílica de Nossa Senhora Aparecida — usadas
 // como referência para confirmar, por geolocalização, que o peregrino está
@@ -126,7 +137,6 @@ export default function PeregrinacaoClient({
   const [compartilhando, setCompartilhando] = useState(
     peregrinacaoInicial?.compartilhar_localizacao ?? false
   );
-  const [pontoSelecionado, setPontoSelecionado] = useState("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -291,7 +301,6 @@ export default function PeregrinacaoClient({
         const { error } = await supabase.from("checkins").insert({
           peregrinacao_id: peregrinacao.id,
           user_id: peregrinacao.user_id,
-          ponto_apoio_id: pontoSelecionado || null,
           ponto_checkin_id: pontoCheckinId || null,
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
@@ -644,6 +653,8 @@ export default function PeregrinacaoClient({
     );
   } else if (peregrinacao.status === "em_andamento") {
     const rotaAtiva = rotas.find((r) => r.id === peregrinacao.rota_id);
+    const pontosOrdenados = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem);
+    const proximoPonto = pontosOrdenados.find((p) => !checkinsFeitosIds.includes(p.id));
     principal = (
       <div className="flex flex-col gap-4">
         {/* Módulo 1 — Peregrinação em andamento: dados + linha do tempo com
@@ -718,26 +729,30 @@ export default function PeregrinacaoClient({
               Aviso: você deve fazer pelo menos um check-in entre a origem e a
               cidade de Aparecida para receber o certificado.
             </p>
-            <select
-              className="input mb-3"
-              value={pontoSelecionado}
-              onChange={(e) => setPontoSelecionado(e.target.value)}
-            >
-              <option value="">Check-in livre (sem ponto de apoio)</option>
-              {pontosApoio.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome}
-                </option>
-              ))}
-            </select>
             <button
-              onClick={() => fazerCheckin()}
-              className="btn-primary flex w-full items-center justify-center gap-2"
+              onClick={() => fazerCheckin(proximoPonto?.id)}
+              disabled={!proximoPonto}
+              className="btn-primary flex w-full items-center justify-center gap-2 disabled:opacity-50"
             >
-              <CheckCircle2 size={18} /> Fazer check-in aqui
+              <CheckCircle2 size={18} />{" "}
+              {proximoPonto ? `Fazer check-in em ${proximoPonto.cidade}` : "Todos os check-ins feitos"}
             </button>
             {msg && <p className="mt-2 text-center text-sm text-green-700">{msg}</p>}
           </div>
+        </div>
+
+        {/* Módulo 4 — PAPs ativos hoje, no mapa. */}
+        <div className="card">
+          <h2 className="mb-3 flex items-center justify-center gap-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
+            <MapPinned size={18} /> PAPs ativos hoje
+          </h2>
+          {pontosApoio.length === 0 ? (
+            <p className="text-center text-sm text-neutral-500">
+              Nenhum PAP marcado como ativo para hoje no momento.
+            </p>
+          ) : (
+            <MapView pontosApoio={pontosApoio} height="300px" zoom={8} />
+          )}
         </div>
 
         {erro && <p className="text-center text-sm text-red-600">{erro}</p>}

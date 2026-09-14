@@ -57,6 +57,21 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
     periodoTexto = c.duracao_texto ? `em ${c.duracao_texto}` : "";
   }
 
+  function imprimir() {
+    // Marca só este certificado (útil quando há vários na mesma página) para
+    // que o CSS de impressão esconda o restante da página.
+    ref.current?.classList.add("print-alvo");
+    document.body.classList.add("imprimindo-certificado");
+    const limpar = () => {
+      document.body.classList.remove("imprimindo-certificado");
+      ref.current?.classList.remove("print-alvo");
+      window.removeEventListener("afterprint", limpar);
+    };
+    window.addEventListener("afterprint", limpar);
+    // Dá um instante para o browser aplicar a classe antes de abrir o diálogo.
+    setTimeout(() => window.print(), 50);
+  }
+
   async function baixarImagem() {
     if (!ref.current) return;
     setErro(null);
@@ -136,7 +151,7 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
         </button>
         {erro && <p className="text-xs text-red-600">{erro}</p>}
         <button
-          onClick={() => window.print()}
+          onClick={imprimir}
           className="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
         >
           <Printer size={14} /> imprimir (alternativa)

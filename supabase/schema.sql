@@ -1167,4 +1167,122 @@ $$;
 
 grant execute on function public.estatisticas_admin() to authenticated;
 
+-- =====================================================================
+-- MIGRATION 9 — (1) PAP só conta como ativo (contador da home/admin e mapa
+-- de "PAPs ativos" da peregrinação) nas datas explicitamente marcadas no
+-- calendário; sem nenhuma data marcada, o PAP não entra mais nessa conta
+-- por padrão (revisão da Migration 8, a pedido do usuário). O mapa geral
+-- de PAP (/mapa) continua mostrando todos os cadastrados aprovados,
+-- independente de data — esse filtro já foi removido em código.
+-- (2) Pontos de risco passam a ter um "sentido da via" (mesmo domínio de
+-- pontos_apoio.sentido_pista), exibido no mapa como "km X N/S".
+-- (3) Correção de dado geográfico: Guaratinguetá fica depois de Aparecida
+-- (sentido São Paulo → Rio), então não pertence à Rota Norte (que chega
+-- em Aparecida vindo de São Paulo) e sim à Rota Sul (que chega em
+-- Aparecida vindo de Queluz/Rio, passando por Cachoeira Paulista antes).
+-- =====================================================================
+
+comment on column public.pontos_apoio.datas_funcionamento is 'Datas específicas (ou período) em que o PAP funciona. Vazio = nunca conta como ativo no contador/mapa de ativos.';
+
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true and status_aprovacao = 'aprovado'
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento)),
+    (select count(*) from public.certificados);
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
+drop function if exists public.estatisticas_admin();
+create or replace function public.estatisticas_admin()
+returns table (
+  peregrinos_ativos bigint,
+  peregrinacoes_concluidas bigint,
+  concluidas_hoje bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  pontos_risco_total bigint,
+  gerentes_pendentes bigint,
+  peregrinos_cadastrados bigint,
+  pap_cadastrados bigint,
+  pap_ativos bigint,
+  pap_pendentes bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  return query
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.peregrinacoes where status = 'concluida'),
+    (select count(*) from public.peregrinacoes where status = 'concluida' and data_fim >= current_date),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true and status_aprovacao = 'aprovado'
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento)),
+    (select count(*) from public.pontos_risco),
+    (select count(*) from public.gerentes_pap where status = 'pendente'),
+    (select count(*) from public.profiles p
+       where p.is_admin = false and p.is_agente = false
+         and not exists (select 1 from public.gerentes_pap g where g.id = p.id)),
+    (select count(*) from public.pontos_apoio),
+    (select count(*) from public.pontos_apoio
+       where aberto_agora = true and status_aprovacao = 'aprovado'
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento)),
+    (select count(*) from public.pontos_apoio where status_aprovacao = 'pendente');
+end;
+$$;
+
+grant execute on function public.estatisticas_admin() to authenticated;
+
+alter table public.pontos_risco add column if not exists sentido text check (sentido in ('sp', 'rj'));
+comment on column public.pontos_risco.sentido is 'Sentido da via onde o risco fica: sp (sentido São Paulo / pista Norte) ou rj (sentido Rio / pista Sul).';
+
+-- Guaratinguetá saiu da Rota Norte (não fica entre Roseira e Aparecida
+-- nesse sentido) e entrou na Rota Sul, entre Cachoeira Paulista e Aparecida.
+delete from public.pontos_checkin
+where cidade = 'Guaratinguetá'
+  and rota_id in (select id from public.rotas where slug = 'norte');
+
+update public.pontos_checkin
+set ordem = 11
+where cidade = 'Aparecida' and ordem = 12
+  and rota_id in (select id from public.rotas where slug = 'norte');
+
+update public.pontos_checkin
+set ordem = 6
+where cidade = 'Aparecida' and ordem = 5
+  and rota_id in (select id from public.rotas where slug = 'sul');
+
+insert into public.pontos_checkin (rota_id, cidade, ordem, km_aproximado, latitude, longitude, descricao)
+select r.id, 'Guaratinguetá', 5::smallint, 40.0, -22.8161, -45.1919, null
+from public.rotas r
+where r.slug = 'sul'
+on conflict (rota_id, ordem) do nothing;
+
 -- FIM DO SCHEMA

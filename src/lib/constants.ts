@@ -88,6 +88,13 @@ export const SENTIDO_PISTA_LABELS: Record<string, string> = {
   rj: "Sentido Rio de Janeiro",
 };
 
+// Abreviação usada junto ao km de referência (ex.: "km 111 N"), seguindo a
+// sinalização da rodovia: pista sentido São Paulo = Norte, sentido Rio = Sul.
+export const SENTIDO_KM_ABREV: Record<string, string> = {
+  sp: "N",
+  rj: "S",
+};
+
 // Municípios cortados pela Rodovia Presidente Dutra (BR-116) entre São
 // Paulo e Queluz-SP, na ordem em que a rodovia passa por eles — usado para
 // escolher a cidade do PAP a partir de uma lista, em vez de texto livre.
@@ -103,9 +110,9 @@ export const CIDADES_DUTRA_SP_QUELUZ: string[] = [
   "Tremembé",
   "Pindamonhangaba",
   "Roseira",
-  "Guaratinguetá",
   "Aparecida",
   "Potim",
+  "Guaratinguetá",
   "Lorena",
   "Cachoeira Paulista",
   "Canas",

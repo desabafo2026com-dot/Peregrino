@@ -134,7 +134,14 @@ export default function InformarRisco({ rotaId }: Props) {
           />
         </div>
         {erro && <p className="text-sm text-red-600">{erro}</p>}
-        {sucesso && <p className="text-sm text-green-700">{sucesso}</p>}
+        {sucesso && (
+          <div className="flex flex-col gap-1">
+            <p className="text-sm text-green-700">{sucesso}</p>
+            <p className="text-sm font-semibold text-red-700">
+              Em caso de urgência, ligue para o órgão competente!
+            </p>
+          </div>
+        )}
         <button disabled={loading} className="btn-primary">
           {loading ? "Enviando..." : "Enviar relato"}
         </button>

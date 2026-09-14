@@ -26,7 +26,6 @@ export default async function MapaPage() {
       supabase
         .from("pontos_apoio")
         .select("*")
-        .eq("ativo", true)
         .eq("status_aprovacao", "aprovado"),
       supabase.from("pontos_risco").select("*"),
       isAdmin

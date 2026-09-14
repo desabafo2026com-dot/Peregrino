@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { NIVEL_RISCO_LABELS } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
 import { LocateFixed } from "lucide-react";
 import type { Rota } from "@/types/database";
@@ -36,6 +36,7 @@ export default function NovoRiscoPage() {
   const [tipo, setTipo] = useState("geral");
   const [nivelRisco, setNivelRisco] = useState("3");
   const [kmReferencia, setKmReferencia] = useState("");
+  const [sentido, setSentido] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,6 +76,7 @@ export default function NovoRiscoPage() {
       latitude: coords.lat,
       longitude: coords.lng,
       km_referencia: kmReferencia ? Number(kmReferencia) : null,
+      sentido: sentido || null,
       tipo,
       nivel_risco: Number(nivelRisco),
       rota_id: rotaId || null,
@@ -161,6 +163,17 @@ export default function NovoRiscoPage() {
                 value={kmReferencia}
                 onChange={(e) => setKmReferencia(e.target.value)}
               />
+            </div>
+            <div>
+              <label className="label">Sentido da via</label>
+              <select className="input" value={sentido} onChange={(e) => setSentido(e.target.value)}>
+                <option value="">Não informado</option>
+                {SENTIDO_PISTA_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="label">Rota</label>

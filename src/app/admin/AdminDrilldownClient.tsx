@@ -27,6 +27,7 @@ import {
   MEIO_TRANSPORTE_LABELS,
   STATUS_PAP_LABELS,
   SENTIDO_PISTA_LABELS,
+  SENTIDO_KM_ABREV,
   STATUS_RISCO_INFORMADO_LABELS,
 } from "@/lib/constants";
 import type { StatusRiscoInformado } from "@/types/database";
@@ -75,6 +76,7 @@ export interface RiscoLinha {
   tipo: string;
   nivelRisco: number;
   kmReferencia: number | null;
+  sentido: string | null;
   rotaNome: string | null;
 }
 
@@ -443,7 +445,9 @@ export default function AdminDrilldownClient({
                       </p>
                       <p className="text-xs text-neutral-500">
                         Tipo: {r.tipo} — Nível de risco: {r.nivelRisco}/5
-                        {r.kmReferencia != null ? ` — km ${r.kmReferencia}` : ""}
+                        {r.kmReferencia != null
+                          ? ` — km ${r.kmReferencia}${r.sentido ? ` ${SENTIDO_KM_ABREV[r.sentido] ?? ""}` : ""}`
+                          : ""}
                         {r.rotaNome ? ` — ${r.rotaNome}` : ""}
                       </p>
                     </div>
@@ -462,6 +466,20 @@ export default function AdminDrilldownClient({
                         {r.kmReferencia != null ? ` — km ${r.kmReferencia}` : ""}
                       </p>
                       {r.descricao && <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">{r.descricao}</p>}
+                      {r.latitude != null && r.longitude != null && (
+                        <p className="mt-1 text-xs text-neutral-500">
+                          Localização: {r.latitude.toFixed(5)}, {r.longitude.toFixed(5)}
+                          {" — "}
+                          <a
+                            href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-amber-700 hover:underline"
+                          >
+                            ver no mapa
+                          </a>
+                        </p>
+                      )}
                       <p className="mt-1 flex items-center justify-between gap-2">
                         <span className="text-xs font-medium text-neutral-500">
                           {STATUS_RISCO_INFORMADO_LABELS[r.status] ?? r.status}

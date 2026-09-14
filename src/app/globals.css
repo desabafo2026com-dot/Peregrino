@@ -90,3 +90,22 @@ body {
   background: rgb(23 23 23);
   border-color: rgb(64 64 64);
 }
+
+/* Impressão do certificado: ao imprimir, some com o resto da página e
+   deixa só o elemento marcado com .print-alvo visível, ocupando a folha. */
+@media print {
+  body.imprimindo-certificado * {
+    visibility: hidden;
+  }
+  body.imprimindo-certificado .print-alvo,
+  body.imprimindo-certificado .print-alvo * {
+    visibility: visible;
+  }
+  body.imprimindo-certificado .print-alvo {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+}

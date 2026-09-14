@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { SENTIDO_KM_ABREV } from "@/lib/constants";
 import type { PontoApoio, PontoRisco } from "@/types/database";
 
 const OSM_STYLE: StyleSpecification = {
@@ -60,11 +61,17 @@ function hojeISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Um PAP sem datas marcadas funciona o ano todo (sem restrição). Com datas
-// marcadas, só conta como ativo hoje se a data atual estiver entre elas.
+// Um PAP só conta como ativo hoje se tiver datas marcadas e a data atual
+// estiver entre elas. Sem nenhuma data marcada, nunca aparece como ativo.
 function ativoHoje(datas: string[] | undefined) {
-  if (!datas || datas.length === 0) return true;
+  if (!datas || datas.length === 0) return false;
   return datas.includes(hojeISO());
+}
+
+function kmSentidoLabel(km: number | null | undefined, sentido: string | null | undefined) {
+  if (km == null) return null;
+  const abrev = sentido ? SENTIDO_KM_ABREV[sentido] : null;
+  return `km ${km}${abrev ? ` ${abrev}` : ""}`;
 }
 
 export default function MapView({
@@ -175,6 +182,7 @@ export default function MapView({
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px">
               <strong style="color:${cor}">🚩 ${r.titulo}</strong><br/>
+              ${kmSentidoLabel(r.km_referencia, r.sentido) ? `${kmSentidoLabel(r.km_referencia, r.sentido)}<br/>` : ""}
               ${r.descricao ?? ""}<br/>
               Nível de risco: ${r.nivel_risco}/5 (${alto ? "Alto/Muito alto" : "Moderado/baixo"})
             </div>

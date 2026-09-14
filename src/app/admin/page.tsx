@@ -100,6 +100,7 @@ export default async function AdminDashboardPage() {
       tipo: r.tipo,
       nivelRisco: r.nivel_risco,
       kmReferencia: r.km_referencia,
+      sentido: r.sentido,
       rotaNome: r.rota_id ? nomeDaRota.get(r.rota_id) ?? null : null,
     }));
 

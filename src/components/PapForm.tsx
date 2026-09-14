@@ -6,7 +6,6 @@ import {
   SERVICOS_PONTO_APOIO,
   SENTIDO_PISTA_OPTIONS,
   CIDADES_DUTRA_SP_QUELUZ,
-  DIAS_SEMANA_OPTIONS,
 } from "@/lib/constants";
 import { LocateFixed } from "lucide-react";
 import CalendarioDatas from "@/components/CalendarioDatas";
@@ -40,22 +39,10 @@ export interface PapFormDados {
   observacoes: string | null;
 }
 
-function formatarPeriodo(dias: string[], abertura: string, fechamento: string) {
-  if (dias.length === 0) return null;
-  const selecionados = DIAS_SEMANA_OPTIONS.filter((d) => dias.includes(d.value));
-  const todos = DIAS_SEMANA_OPTIONS.every((d) => dias.includes(d.value));
-  const somenteSemana =
-    dias.length === 5 && ["seg", "ter", "qua", "qui", "sex"].every((v) => dias.includes(v));
-  const somenteFimDeSemana = dias.length === 2 && dias.includes("sab") && dias.includes("dom");
-
-  let diasTexto: string;
-  if (todos) diasTexto = "Todos os dias";
-  else if (somenteSemana) diasTexto = "Seg a Sex";
-  else if (somenteFimDeSemana) diasTexto = "Sáb e Dom";
-  else diasTexto = selecionados.map((d) => d.abrev).join(", ");
-
-  const horarioTexto = abertura && fechamento ? `, ${abertura}–${fechamento}` : "";
-  return diasTexto + horarioTexto;
+function formatarPeriodo(is24h: boolean, abertura: string, fechamento: string) {
+  if (is24h) return "Aberto 24h";
+  if (abertura && fechamento) return `${abertura}–${fechamento}`;
+  return null;
 }
 
 interface Props {
@@ -75,7 +62,7 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
   const [kmReferencia, setKmReferencia] = useState(
     pontoInicial?.km_referencia != null ? String(pontoInicial.km_referencia) : ""
   );
-  const [diasSemana, setDiasSemana] = useState<string[]>([]);
+  const [is24h, setIs24h] = useState(pontoInicial?.periodo_funcionamento === "Aberto 24h");
   const [horarioAbertura, setHorarioAbertura] = useState("");
   const [horarioFechamento, setHorarioFechamento] = useState("");
   const [datasFuncionamento, setDatasFuncionamento] = useState<string[]>(
@@ -91,10 +78,6 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
   );
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  function toggleDiaSemana(v: string) {
-    setDiasSemana((prev) => (prev.includes(v) ? prev.filter((d) => d !== v) : [...prev, v]));
-  }
 
   function toggleServico(v: string) {
     setServicos((prev) => (prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v]));
@@ -119,7 +102,7 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
       return;
     }
     setLoading(true);
-    const periodoNovo = formatarPeriodo(diasSemana, horarioAbertura, horarioFechamento);
+    const periodoNovo = formatarPeriodo(is24h, horarioAbertura, horarioFechamento);
     const { error } = await onSalvar({
       nome,
       responsavel: responsavel || null,
@@ -229,29 +212,31 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="label">Horário de funcionamento (dias da semana)</label>
-            <div className="flex flex-wrap gap-2">
-              {DIAS_SEMANA_OPTIONS.map((d) => (
-                <button
-                  key={d.value}
-                  type="button"
-                  onClick={() => toggleDiaSemana(d.value)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                    diasSemana.includes(d.value)
-                      ? "border-amber-700 bg-amber-800 text-white"
-                      : "border-neutral-200 text-neutral-600 dark:border-neutral-800 dark:text-neutral-300"
-                  }`}
-                >
-                  {d.abrev}
-                </button>
-              ))}
+            <label className="label">Datas em que o PAP estará ativo (calendário)</label>
+            <p className="mb-2 text-xs text-neutral-500">
+              Marque dias específicos ou um período no calendário abaixo — somente nessas datas o
+              PAP aparece como ativo na contagem e no mapa da página inicial.
+            </p>
+            <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
+              <CalendarioDatas value={datasFuncionamento} onChange={setDatasFuncionamento} />
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+
+            <label className="label mt-4">Horário de funcionamento</label>
+            <label className="mb-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={is24h}
+                onChange={(e) => setIs24h(e.target.checked)}
+              />
+              Funciona 24 horas
+            </label>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label text-xs">Horário de abertura</label>
                 <input
                   type="time"
-                  className="input"
+                  className="input disabled:opacity-50"
+                  disabled={is24h}
                   value={horarioAbertura}
                   onChange={(e) => setHorarioAbertura(e.target.value)}
                 />
@@ -260,29 +245,19 @@ export default function PapForm({ pontoInicial, onSalvar, submitLabel, submitLoa
                 <label className="label text-xs">Horário de encerramento</label>
                 <input
                   type="time"
-                  className="input"
+                  className="input disabled:opacity-50"
+                  disabled={is24h}
                   value={horarioFechamento}
                   onChange={(e) => setHorarioFechamento(e.target.value)}
                 />
               </div>
             </div>
-            {pontoInicial?.periodo_funcionamento && diasSemana.length === 0 && (
+            {pontoInicial?.periodo_funcionamento && !is24h && !horarioAbertura && !horarioFechamento && (
               <p className="mt-2 text-xs text-neutral-500">
-                Período atual: {pontoInicial.periodo_funcionamento}. Marque os dias acima para
-                alterá-lo.
+                Período atual: {pontoInicial.periodo_funcionamento}. Preencha os horários acima
+                para alterá-lo.
               </p>
             )}
-          </div>
-          <div className="sm:col-span-2">
-            <label className="label">Datas em que o PAP estará ativo (calendário)</label>
-            <p className="mb-2 text-xs text-neutral-500">
-              Marque dias específicos ou um período no calendário abaixo — nessas datas o PAP
-              aparece como ativo na página inicial. Deixe em branco se ele funciona o ano todo,
-              sem restrição de datas.
-            </p>
-            <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-              <CalendarioDatas value={datasFuncionamento} onChange={setDatasFuncionamento} />
-            </div>
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input

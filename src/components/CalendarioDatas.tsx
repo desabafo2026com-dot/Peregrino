@@ -102,7 +102,7 @@ export default function CalendarioDatas({ value, onChange }: Props) {
 
   function resumo() {
     if (value.length === 0) {
-      return "Nenhuma data marcada — sem restrição, o PAP aparece sempre como ativo.";
+      return "Nenhuma data marcada — o PAP não aparece como ativo enquanto nenhuma data for marcada.";
     }
     const ordenadas = [...value].sort();
     // Detecta se as datas formam um período contínuo (dias consecutivos).

@@ -73,10 +73,19 @@ export default async function PeregrinacaoPage() {
     temCertificado: idsComCertificado.has(p.id as string),
   }));
 
+  // PAPs ativos hoje (para o módulo de mapa em "Minha peregrinação") — só
+  // entram os que estão marcados como ativos, aprovados e com a data de
+  // hoje no calendário de funcionamento.
+  const hoje = new Date();
+  const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(
+    hoje.getDate()
+  ).padStart(2, "0")}`;
   const { data: pontosApoio } = await supabase
     .from("pontos_apoio")
     .select("*")
-    .eq("ativo", true);
+    .eq("ativo", true)
+    .eq("status_aprovacao", "aprovado")
+    .contains("datas_funcionamento", [hojeISO]);
 
   const { data: rotas } = await supabase.from("rotas").select("*").order("ordem");
 
