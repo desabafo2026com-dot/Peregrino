@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, nomeRota } from "@/lib/constants";
 import { TriangleAlert, Pencil, Trash2 } from "lucide-react";
 import type { PontoRisco, Rota } from "@/types/database";
 
@@ -29,7 +29,7 @@ export default function RiscosAdminClient({
   const [riscos, setRiscos] = useState(riscosIniciais);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
 
-  const nomeDaRota = new Map(rotas.map((r) => [r.id, r.nome]));
+  const nomeDaRota = new Map(rotas.map((r) => [r.id, nomeRota(r)]));
 
   async function excluir(id: string) {
     if (

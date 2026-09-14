@@ -19,7 +19,7 @@ import {
   Trash2,
   LocateFixed,
 } from "lucide-react";
-import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS } from "@/lib/constants";
+import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
 import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
@@ -514,7 +514,7 @@ export default function PeregrinacaoClient({
       data_inicio: peregrinacao.data_inicio,
       data_fim: agora.toISOString(),
       total_checkins: checkinsCount,
-      rota_nome: rotaAtual ? `${rotaAtual.nome} (${rotaAtual.origem} → ${rotaAtual.destino})` : null,
+      rota_nome: rotaAtual ? nomeRota(rotaAtual) : null,
       meio_transporte: meioAtual,
       meio_transporte_outro_desc: peregrinacao.meio_transporte_outro_desc,
       duracao_texto: duracaoTexto,
@@ -650,7 +650,7 @@ export default function PeregrinacaoClient({
               >
                 {rotas.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.nome} ({r.origem} → {r.destino})
+                    {nomeRota(r)}
                   </option>
                 ))}
               </select>
@@ -798,7 +798,7 @@ export default function PeregrinacaoClient({
         <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
           {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
           {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
-          {rotaPlanejada ? ` — ${rotaPlanejada.nome} (${rotaPlanejada.origem} → ${rotaPlanejada.destino})` : ""}
+          {rotaPlanejada ? ` — ${nomeRota(rotaPlanejada)}` : ""}
           {peregrinacao.cidade_inicio ? ` — início em ${peregrinacao.cidade_inicio}` : ""}
           {peregrinacao.em_grupo
             ? ` — em grupo${peregrinacao.tamanho_grupo ? ` de ${peregrinacao.tamanho_grupo}` : ""}${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
@@ -836,7 +836,7 @@ export default function PeregrinacaoClient({
               <p className="mt-1 text-justify text-sm text-neutral-600 dark:text-neutral-300">
                 {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} className="inline" /> : <Footprints size={14} className="inline" />}{" "}
                 {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
-                {rotaAtiva ? ` — ${rotaAtiva.nome} (${rotaAtiva.origem} → ${rotaAtiva.destino})` : ""}
+                {rotaAtiva ? ` — ${nomeRota(rotaAtiva)}` : ""}
                 {peregrinacao.cidade_inicio ? ` — início em ${peregrinacao.cidade_inicio}` : ""}
                 {peregrinacao.em_grupo
                   ? ` — em grupo${peregrinacao.tamanho_grupo ? ` de ${peregrinacao.tamanho_grupo}` : ""}${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
@@ -968,7 +968,7 @@ export default function PeregrinacaoClient({
                   <p className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
                     {p.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
                     {labelMeioTransporte(p.meio_transporte, p.meio_transporte_outro_desc)}
-                    {rota ? ` — ${rota.nome} (${rota.origem} → ${rota.destino})` : ""}
+                    {rota ? ` — ${nomeRota(rota)}` : ""}
                   </p>
                   <p className="text-sm text-neutral-600 dark:text-neutral-300">
                     {p.data_inicio ? new Date(p.data_inicio).toLocaleDateString("pt-BR") : "-"}

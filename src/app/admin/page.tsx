@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { nomeRota } from "@/lib/constants";
 import AdminMapClient from "./AdminMapClient";
 import AdminDrilldownClient, {
   type PeregrinoLinha,
@@ -97,7 +98,7 @@ export default async function AdminDashboardPage() {
       (p) => !idsGerentes.has(p.id)
     );
 
-    const nomeDaRota = new Map(((rotas ?? []) as Rota[]).map((r) => [r.id, r.nome]));
+    const nomeDaRota = new Map(((rotas ?? []) as Rota[]).map((r) => [r.id, nomeRota(r)]));
     const nomeDoGerente = new Map(
       (gerentes ?? []).map((g) => [g.id as string, g.nome_completo as string])
     );

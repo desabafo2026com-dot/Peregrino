@@ -109,13 +109,40 @@ export const SENTIDO_KM_ABREV: Record<string, string> = {
 };
 
 // Faixa real de km da rodovia coberta por cada rota (informada pelo
-// usuário), mostrada como referência nos formulários que pedem a rota —
-// não é usada para calcular nada automaticamente, só para ajudar a
-// escolher a rota certa a partir do km real do local.
+// usuário), mostrada como referência nos formulários que pedem a rota, e
+// também usada por `kmPertenceARota` (abaixo) para decidir automaticamente
+// a qual rota um ponto de risco pertence a partir do seu km.
 export const ROTA_FAIXA_KM: Record<string, string> = {
   norte: "km 231 a 71",
   sul: "km 70 a 0",
 };
+
+// Nome de exibição de cada rota, pelo slug — usado em vez do campo
+// `rotas.nome` do banco diretamente, para que o nome correto ("São Paulo -
+// Aparecida"/"Rio de Janeiro - Aparecida", sem "Norte"/"Sul") apareça no
+// app mesmo antes de rodar a migration que renomeia as linhas no banco.
+export const ROTA_NOME_LABELS: Record<string, string> = {
+  norte: "São Paulo - Aparecida",
+  sul: "Rio de Janeiro - Aparecida",
+};
+
+export function nomeRota(rota: { slug: string; nome: string } | null | undefined): string {
+  if (!rota) return "";
+  return ROTA_NOME_LABELS[rota.slug] ?? rota.nome;
+}
+
+// A qual rota um km real da rodovia pertence — independente do sentido da
+// pista (Norte/Sul) e independente de qualquer rota_id escolhido
+// manualmente no cadastro: o km 231 a 71 é sempre da rota São Paulo -
+// Aparecida, e o km 70 a 0 é sempre da rota Rio de Janeiro - Aparecida.
+// Usada para filtrar pontos de risco por rota a partir do km cadastrado,
+// evitando que um ponto (por rota_id incorreto, ou marcado como "ambas as
+// rotas") apareça na tabela de riscos da rota errada.
+export function kmPertenceARota(km: number, rotaSlug: string): boolean {
+  if (rotaSlug === "norte") return km > 70;
+  if (rotaSlug === "sul") return km >= 0 && km <= 70;
+  return true;
+}
 
 // Municípios cortados pela Rodovia Presidente Dutra (BR-116) entre São
 // Paulo e Queluz-SP, na ordem em que a rodovia passa por eles — usado para

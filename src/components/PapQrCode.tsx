@@ -78,13 +78,13 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
             <Image
               src="/icons/logo-emblema.png"
               alt=""
-              width={80}
-              height={80}
-              style={{ width: "18%", height: "auto" }}
+              width={120}
+              height={120}
+              style={{ width: "30%", height: "auto" }}
               className="rounded-lg"
             />
             <p className="font-semibold tracking-[0.15em] text-amber-800" style={{ fontSize: "3cqw" }}>
-              PEREGRINO — PAP
+              APP PEREGRINO
             </p>
           </div>
 

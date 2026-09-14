@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import MapClient from "./MapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { MapPinPlus, TriangleAlert } from "lucide-react";
+import { nomeRota } from "@/lib/constants";
 import type { PontoApoio, PontoRisco, RiscoInformado, Rota, PontoCheckin, PapPreCadastro } from "@/types/database";
 import type { PapPreCadastroMapa } from "@/components/MapView";
 
@@ -62,7 +63,7 @@ export default async function MapaPage() {
   ]);
 
   const rotasLinhas = ((rotas ?? []) as Rota[]).map((r) => ({
-    nome: r.nome,
+    nome: nomeRota(r),
     cor: COR_ROTA[r.slug] ?? r.cor,
     pontos: ((pontosCheckin ?? []) as PontoCheckin[])
       .filter((p) => p.rota_id === r.id)

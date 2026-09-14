@@ -13,7 +13,7 @@ import ThemeToggle from "./ThemeToggle";
 // não está logado. A navegação principal (Início/Mapa/Rotas/...) mora no
 // menu inferior (BottomNav), não aqui.
 export default function Navbar() {
-  const { loading, loggedIn, nomeCompleto, avatarUrl } = useAuthRole();
+  const { loading, loggedIn, isGerente, nomeCompleto, avatarUrl } = useAuthRole();
   const router = useRouter();
 
   async function handleLogout() {
@@ -42,9 +42,9 @@ export default function Navbar() {
           {loading ? null : loggedIn ? (
             <div className="flex items-center gap-2">
               <Link
-                href="/perfil"
+                href={isGerente ? "/gerente-pap" : "/perfil"}
                 className="flex items-center gap-2 rounded-full pr-1 hover:bg-neutral-100 dark:hover:bg-neutral-900"
-                title="Editar perfil"
+                title={isGerente ? "Meu PAP" : "Editar perfil"}
               >
                 {avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -59,7 +59,7 @@ export default function Navbar() {
                   </span>
                 )}
                 <span className="hidden max-w-[8rem] truncate text-sm font-medium text-neutral-700 sm:inline dark:text-neutral-200">
-                  {nomeCompleto ?? "Editar perfil"}
+                  {nomeCompleto ?? (isGerente ? "Meu PAP" : "Editar perfil")}
                 </span>
               </Link>
               <button

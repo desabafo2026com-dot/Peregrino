@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
-import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS, ROTA_FAIXA_KM } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS, ROTA_FAIXA_KM, nomeRota } from "@/lib/constants";
 import { LocateFixed, Upload } from "lucide-react";
 import type { PontoRisco, Rota, Br } from "@/types/database";
 
@@ -267,7 +267,7 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
               <option value="">Ambas as rotas</option>
               {rotas.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.nome}
+                  {nomeRota(r)}
                   {ROTA_FAIXA_KM[r.slug] ? ` (${ROTA_FAIXA_KM[r.slug]})` : ""}
                 </option>
               ))}

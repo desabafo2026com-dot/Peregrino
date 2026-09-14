@@ -51,7 +51,12 @@ export default async function Home() {
       desc: "Veja os PAP (Pontos de Apoio ao Peregrino) — água, alimentação, descanso e doações ao longo da rota.",
     },
     {
-      href: isGerente ? "/gerente-pap" : "/login?tipo=gerente_pap",
+      // Já logada (ex.: conta de peregrino) mas ainda não é gerente: vai
+      // direto para "virar gerente com esta mesma conta" (/gerente-pap/cadastro)
+      // em vez de pedir e-mail/senha de novo em /login — antes disso mandava
+      // sempre para /login, obrigando a pessoa já autenticada a passar de
+      // novo pela tela de e-mail/senha sem necessidade.
+      href: isGerente ? "/gerente-pap" : user ? "/gerente-pap/cadastro" : "/login?tipo=gerente_pap",
       icon: MapPinPlus,
       title: "PAP — vincular ou cadastrar",
       desc: isGerente

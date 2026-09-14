@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, nomeRota, kmPertenceARota } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
@@ -46,16 +46,22 @@ export default async function RotasPage({
   const rotas = (rotasData ?? []) as Rota[];
   const rotaAtual = rotas.find((r) => r.slug === rotaSlug) ?? rotas[0];
 
-  const { data: riscos } = rotaAtual
-    ? await supabase
-        .from("pontos_risco")
-        .select("*")
-        .or(`rota_id.eq.${rotaAtual.id},rota_id.is.null`)
-    : { data: [] as PontoRisco[] };
+  // Busca todos os pontos de risco (não só os da rota_id atual) para poder
+  // decidir a associação com a rota pelo km real (ver kmPertenceARota) —
+  // não só pela rota_id escolhida no cadastro, que pode estar errada ou em
+  // branco ("ambas as rotas").
+  const { data: todosRiscos } = await supabase.from("pontos_risco").select("*");
+  const riscos = rotaAtual
+    ? ((todosRiscos ?? []) as PontoRisco[]).filter((r) =>
+        r.km_referencia != null
+          ? kmPertenceARota(r.km_referencia, rotaAtual.slug)
+          : r.rota_id === null || r.rota_id === rotaAtual.id
+      )
+    : [];
 
   const { data: pontosCheckin } = await supabase.from("pontos_checkin").select("*").order("ordem");
   const rotasLinhas = rotas.map((r) => ({
-    nome: r.nome,
+    nome: nomeRota(r),
     cor: COR_ROTA[r.slug] ?? r.cor,
     pontos: ((pontosCheckin ?? []) as PontoCheckin[])
       .filter((p) => p.rota_id === r.id)
@@ -100,7 +106,7 @@ export default async function RotasPage({
                   : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
               }`}
             >
-              {r.nome} ({r.origem} → {r.destino})
+              {nomeRota(r)}
             </Link>
           ))}
         </div>
@@ -124,7 +130,7 @@ export default async function RotasPage({
 
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
-          <TriangleAlert size={20} /> Pontos de risco ao longo da Rota — {rotaAtual?.nome ?? ""}
+          <TriangleAlert size={20} /> Pontos de risco ao longo da Rota — {nomeRota(rotaAtual)}
         </h2>
         <div className="card overflow-x-auto">
           <table className="w-full min-w-[500px] text-sm">
