@@ -1548,3 +1548,40 @@ select * from (values
 where not exists (select 1 from public.paps_pre_cadastro limit 1);
 
 -- FIM DA MIGRATION 10
+-- =====================================================================
+-- MIGRATION 11 — Rodada 4: Planejar peregrinação (cidade de início e
+-- tamanho do grupo) e Informar Sinistro ou Suspeita (categorização e
+-- publicação automática por tempo)
+-- =====================================================================
+
+-- Peregrinações: cidade de início na Dutra (usada para restringir os
+-- check-ins mostrados ao trecho realmente percorrido) e tamanho do grupo.
+alter table public.peregrinacoes add column if not exists cidade_inicio text;
+alter table public.peregrinacoes add column if not exists tamanho_grupo int;
+
+-- Riscos informados: categoria do relato (sinistro/suspeita/chuva/outros) —
+-- define as opções de "tipo" no app e entra na regra de publicação abaixo
+-- (chuva publica na hora; as demais aguardam a administração por 30min).
+alter table public.riscos_informados add column if not exists categoria text not null default 'sinistro' check (categoria in ('sinistro', 'suspeita', 'chuva', 'outros'));
+
+-- Visibilidade pública por tempo, sem depender de nenhum job/cron:
+-- - "chuva" fica visível assim que enviada;
+-- - as demais categorias só ficam visíveis 30 minutos depois de enviadas,
+--   caso a administração não tenha revisado antes;
+-- - tudo que não foi confirmado pela administração some do público depois
+--   de 1 hora (continua visível para o autor e para a administração, pela
+--   política já existente "riscos_informados_select_own_ou_admin");
+-- - uma vez confirmado ("aprovado") pela administração, fica visível sem
+--   prazo de expiração e perde a marca de "não confirmado" no app.
+drop policy if exists "riscos_informados_select_publicos" on public.riscos_informados;
+create policy "riscos_informados_select_publicos" on public.riscos_informados for select
+  using (
+    status = 'aprovado'
+    or (
+      status = 'pendente'
+      and (categoria = 'chuva' or criado_em <= now() - interval '30 minutes')
+      and criado_em > now() - interval '1 hour'
+    )
+  );
+
+-- FIM DA MIGRATION 11

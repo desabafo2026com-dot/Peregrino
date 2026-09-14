@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import MapClient from "./MapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { MapPinPlus, TriangleAlert } from "lucide-react";
-import type { PontoApoio, PontoRisco } from "@/types/database";
+import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
 
 export default async function MapaPage() {
   const supabase = await createClient();
@@ -21,13 +21,16 @@ export default async function MapaPage() {
     isAdmin = !!perfil?.is_admin;
   }
 
-  const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] =
+  const [{ data: pontosApoio }, { data: pontosRisco }, { data: avisos }, { data: localizacoes }] =
     await Promise.all([
       supabase
         .from("pontos_apoio")
         .select("*")
         .eq("status_aprovacao", "aprovado"),
       supabase.from("pontos_risco").select("*"),
+      // RLS já filtra: só vêm avisos confirmados pela administração ou
+      // publicados automaticamente dentro da janela de tempo (ver migration 11).
+      supabase.from("riscos_informados").select("*").order("criado_em", { ascending: false }),
       isAdmin
         ? supabase.from("localizacoes_ativas").select("user_id, latitude, longitude")
         : Promise.resolve({ data: [] as { user_id: string; latitude: number; longitude: number }[] }),
@@ -40,9 +43,10 @@ export default async function MapaPage() {
         <div>
           <h1 className="text-2xl font-bold">Mapa de Apoio e Segurança</h1>
           <p className="text-sm text-neutral-500">
-            PAP — Pontos de Apoio ao Peregrino (tenda verde) e locais de risco
-            (bandeira vermelha ou amarela). Use as opções abaixo do mapa para
-            mostrar ou esconder cada camada.
+            PAP — Pontos de Apoio ao Peregrino (tenda verde), locais de risco
+            (bandeira vermelha ou amarela) e avisos recentes de peregrinos
+            (sinistro, suspeita ou chuva, em laranja). Use as opções abaixo do
+            mapa para mostrar ou esconder cada camada.
           </p>
         </div>
         {isAdmin && (
@@ -58,6 +62,7 @@ export default async function MapaPage() {
       <MapClient
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
         pontosRisco={(pontosRisco ?? []) as PontoRisco[]}
+        avisos={(avisos ?? []) as RiscoInformado[]}
         peregrinos={localizacoes ?? []}
       />
 

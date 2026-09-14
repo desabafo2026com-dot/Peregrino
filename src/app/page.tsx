@@ -11,6 +11,7 @@ export default async function Home() {
   } = await supabase.auth.getUser();
 
   let isGerente = false;
+  let temPeregrinacao = false;
   if (user) {
     const { data: gerente } = await supabase
       .from("gerentes_pap")
@@ -18,6 +19,16 @@ export default async function Home() {
       .eq("id", user.id)
       .maybeSingle();
     isGerente = !!gerente || user.user_metadata?.tipo_conta === "gerente_pap";
+
+    if (!isGerente) {
+      const { data: peregrinacaoAtual } = await supabase
+        .from("peregrinacoes")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("status", ["planejada", "em_andamento"])
+        .maybeSingle();
+      temPeregrinacao = !!peregrinacaoAtual;
+    }
   }
 
   const { data: stats } = (await supabase
@@ -117,7 +128,13 @@ export default async function Home() {
         className="flex items-center justify-center gap-2 rounded-2xl bg-amber-700 py-4 text-lg font-bold text-white shadow-sm hover:bg-amber-800"
       >
         <Footprints size={22} />
-        {!user ? "SOU PEREGRINO — ENTRAR" : isGerente ? "MEU PAP — GERENCIAR" : "MINHA PEREGRINAÇÃO"}
+        {!user
+          ? "SOU PEREGRINO — ENTRAR"
+          : isGerente
+            ? "MEU PAP — GERENCIAR"
+            : temPeregrinacao
+              ? "MINHA PEREGRINAÇÃO"
+              : "PLANEJAR PEREGRINAÇÃO"}
       </Link>
 
       <section className="grid gap-4 sm:grid-cols-2">

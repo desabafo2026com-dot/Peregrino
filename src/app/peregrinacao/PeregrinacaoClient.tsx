@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -17,10 +17,11 @@ import {
   Bike,
   RotateCcw,
   Trash2,
+  LocateFixed,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
-import InformarRisco from "@/components/InformarRisco";
+import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
 import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte, Motivo } from "@/types/database";
 
@@ -63,6 +64,7 @@ interface Props {
   rotas: Rota[];
   checkinsCount: number;
   pontosCheckin: PontoCheckin[];
+  todosPontosCheckin: PontoCheckin[];
   checkinsFeitosIds: string[];
 }
 
@@ -112,6 +114,7 @@ export default function PeregrinacaoClient({
   rotas,
   checkinsCount: checkinsCountInicial,
   pontosCheckin,
+  todosPontosCheckin,
   checkinsFeitosIds: checkinsFeitosIdsInicial,
 }: Props) {
   const router = useRouter();
@@ -126,9 +129,44 @@ export default function PeregrinacaoClient({
   const [meioTransporte, setMeioTransporte] = useState<MeioTransporte>("a_pe");
   const [meioTransporteOutro, setMeioTransporteOutro] = useState("");
   const [rotaId, setRotaId] = useState(rotas[0]?.id ?? "");
+  const [cidadeInicio, setCidadeInicio] = useState("");
+  const [detectandoCidade, setDetectandoCidade] = useState(false);
   const [emGrupo, setEmGrupo] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
+  const [tamanhoGrupo, setTamanhoGrupo] = useState("");
   const [jaFezTrajeto, setJaFezTrajeto] = useState(perfil.ja_fez_trajeto ?? false);
+
+  // Cidades da rota escolhida, na ordem em que a Dutra passa por elas —
+  // usadas para restringir os check-ins ao trecho que o peregrino de fato
+  // vai percorrer (de onde ele começa até Aparecida).
+  const cidadesDaRota = useMemo(
+    () =>
+      todosPontosCheckin
+        .filter((p) => p.rota_id === rotaId)
+        .sort((a, b) => a.ordem - b.ordem),
+    [todosPontosCheckin, rotaId]
+  );
+
+  async function detectarCidadeInicio() {
+    if (!navigator.geolocation || cidadesDaRota.length === 0) return;
+    setDetectandoCidade(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        let maisProxima = cidadesDaRota[0];
+        let menorDist = Infinity;
+        for (const p of cidadesDaRota) {
+          const d = distanciaKm(pos.coords.latitude, pos.coords.longitude, p.latitude, p.longitude);
+          if (d < menorDist) {
+            menorDist = d;
+            maisProxima = p;
+          }
+        }
+        setCidadeInicio(maisProxima.cidade);
+        setDetectandoCidade(false);
+      },
+      () => setDetectandoCidade(false)
+    );
+  }
   // Sempre em branco: o motivo é escolhido a cada nova peregrinação, não é
   // reaproveitado de um valor salvo anteriormente no perfil.
   const [motivo, setMotivo] = useState<Motivo | "">("");
@@ -190,8 +228,10 @@ export default function PeregrinacaoClient({
         meio_transporte: meioTransporte,
         meio_transporte_outro_desc: meioTransporte === "outros" ? meioTransporteOutro : null,
         rota_id: rotaId || null,
+        cidade_inicio: cidadeInicio || null,
         em_grupo: emGrupo,
         nome_grupo: emGrupo ? nomeGrupo || null : null,
+        tamanho_grupo: emGrupo && tamanhoGrupo ? Number(tamanhoGrupo) : null,
         compartilhar_localizacao: iniciarAgora,
       })
       .select()
@@ -206,8 +246,12 @@ export default function PeregrinacaoClient({
     const novaPeregrinacao = data as Peregrinacao;
 
     if (iniciarAgora && rotaId) {
-      // O início da peregrinação já conta como o primeiro check-in.
-      const primeiroPonto = pontosCheckin.find((p) => p.rota_id === rotaId && p.ordem === 1);
+      // O início da peregrinação já conta como o primeiro check-in — na
+      // cidade escolhida como início, ou na primeira cidade da rota caso
+      // nenhuma tenha sido escolhida.
+      const primeiroPonto = cidadeInicio
+        ? cidadesDaRota.find((p) => p.cidade === cidadeInicio)
+        : cidadesDaRota[0];
       if (primeiroPonto) {
         const pos = await obterPosicaoAtual();
         await supabase.from("checkins").insert({
@@ -247,9 +291,9 @@ export default function PeregrinacaoClient({
     const atualizada = data as Peregrinacao;
 
     if (atualizada.rota_id) {
-      const primeiroPonto = pontosCheckin.find(
-        (p) => p.rota_id === atualizada.rota_id && p.ordem === 1
-      );
+      // pontosCheckin já vem filtrado (do servidor) a partir da cidade de
+      // início escolhida — o primeiro da lista é o ponto de partida real.
+      const primeiroPonto = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem)[0];
       if (primeiroPonto && !checkinsFeitosIds.includes(primeiroPonto.id)) {
         const pos = await obterPosicaoAtual();
         const {
@@ -527,13 +571,53 @@ export default function PeregrinacaoClient({
           {rotas.length > 0 && (
             <div>
               <label className="label">Rota</label>
-              <select className="input" value={rotaId} onChange={(e) => setRotaId(e.target.value)}>
+              <select
+                className="input"
+                value={rotaId}
+                onChange={(e) => {
+                  setRotaId(e.target.value);
+                  setCidadeInicio("");
+                }}
+              >
                 {rotas.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.nome} ({r.origem} → {r.destino})
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+          {cidadesDaRota.length > 0 && (
+            <div>
+              <label className="label">Cidade de início na Dutra</label>
+              <div className="flex gap-2">
+                <select
+                  className="input flex-1"
+                  value={cidadeInicio}
+                  onChange={(e) => setCidadeInicio(e.target.value)}
+                >
+                  <option value="">Início da rota (padrão)</option>
+                  {cidadesDaRota.map((c) => (
+                    <option key={c.id} value={c.cidade}>
+                      {c.cidade}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={detectarCidadeInicio}
+                  disabled={detectandoCidade}
+                  title="Usar minha localização atual"
+                  className="btn-secondary shrink-0 px-3"
+                >
+                  <LocateFixed size={18} />
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-neutral-500">
+                Só é preciso preencher se você vai começar a caminhar de uma
+                cidade mais adiante na rota — os check-ins mostrados vão
+                começar a partir dela.
+              </p>
             </div>
           )}
           <div className="sm:col-span-2">
@@ -601,6 +685,19 @@ export default function PeregrinacaoClient({
             </label>
           </div>
           {emGrupo && (
+            <div>
+              <label className="label">Tamanho do grupo</label>
+              <input
+                type="number"
+                min={2}
+                className="input"
+                value={tamanhoGrupo}
+                onChange={(e) => setTamanhoGrupo(e.target.value)}
+                placeholder="Quantas pessoas"
+              />
+            </div>
+          )}
+          {emGrupo && (
             <div className="sm:col-span-2">
               <label className="label">Nome do grupo</label>
               <input
@@ -636,7 +733,10 @@ export default function PeregrinacaoClient({
           {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
           {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
           {rotaPlanejada ? ` — ${rotaPlanejada.nome} (${rotaPlanejada.origem} → ${rotaPlanejada.destino})` : ""}
-          {peregrinacao.em_grupo ? ` — em grupo${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}` : ""}
+          {peregrinacao.cidade_inicio ? ` — início em ${peregrinacao.cidade_inicio}` : ""}
+          {peregrinacao.em_grupo
+            ? ` — em grupo${peregrinacao.tamanho_grupo ? ` de ${peregrinacao.tamanho_grupo}` : ""}${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
+            : ""}
         </p>
         <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-300">
           Peregrinação planejada
@@ -670,8 +770,9 @@ export default function PeregrinacaoClient({
                 {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} className="inline" /> : <Footprints size={14} className="inline" />}{" "}
                 {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
                 {rotaAtiva ? ` — ${rotaAtiva.nome} (${rotaAtiva.origem} → ${rotaAtiva.destino})` : ""}
+                {peregrinacao.cidade_inicio ? ` — início em ${peregrinacao.cidade_inicio}` : ""}
                 {peregrinacao.em_grupo
-                  ? ` — em grupo${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
+                  ? ` — em grupo${peregrinacao.tamanho_grupo ? ` de ${peregrinacao.tamanho_grupo}` : ""}${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
                   : ""}
                 {". Iniciada em "}
                 {peregrinacao.data_inicio
@@ -712,13 +813,13 @@ export default function PeregrinacaoClient({
           </div>
         </div>
 
-        {/* Módulos 2 e 3, lado a lado — Informar risco e Fazer check-in. */}
+        {/* Módulos 2 e 3, lado a lado — Informar sinistro/suspeita e Fazer check-in. */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="card">
             <h2 className="mb-3 text-center text-base font-bold text-red-700">
-              Informe risco ou suspeita
+              Informe sinistro ou suspeita
             </h2>
-            <InformarRisco rotaId={peregrinacao.rota_id} />
+            <InformarSinistro rotaId={peregrinacao.rota_id} />
           </div>
 
           <div className="card">

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
 import TrajetoClient from "./TrajetoClient";
-import type { Peregrinacao, PontoCheckin, PontoRisco, Rota, TrechoSeguranca } from "@/types/database";
+import type { Peregrinacao, PontoCheckin, PontoRisco, RiscoInformado, Rota } from "@/types/database";
 
 export default async function TrajetoPage() {
   const supabase = await createClient();
@@ -24,19 +24,21 @@ export default async function TrajetoPage() {
     redirect("/peregrinacao");
   }
 
-  const [{ data: rota }, { data: pontosCheckin }, { data: trechos }, { data: riscos }, { data: feitos }] =
+  const [{ data: rota }, { data: pontosCheckinRota }, { data: riscos }, { data: avisos }, { data: feitos }] =
     await Promise.all([
       supabase.from("rotas").select("*").eq("id", peregrinacao.rota_id).maybeSingle(),
       supabase.from("pontos_checkin").select("*").eq("rota_id", peregrinacao.rota_id).order("ordem"),
       supabase
-        .from("trechos_seguranca")
-        .select("*")
-        .eq("rota_id", peregrinacao.rota_id)
-        .order("km_inicial"),
-      supabase
         .from("pontos_risco")
         .select("*")
         .or(`rota_id.eq.${peregrinacao.rota_id},rota_id.is.null`),
+      // RLS já filtra: só vêm avisos confirmados ou dentro da janela pública
+      // de tempo (ver migration 11).
+      supabase
+        .from("riscos_informados")
+        .select("*")
+        .or(`rota_id.eq.${peregrinacao.rota_id},rota_id.is.null`)
+        .order("criado_em", { ascending: false }),
       supabase
         .from("checkins")
         .select("ponto_checkin_id")
@@ -47,6 +49,15 @@ export default async function TrajetoPage() {
   const checkinsFeitosIds = (feitos ?? [])
     .map((f) => f.ponto_checkin_id as string | null)
     .filter((v): v is string => !!v);
+
+  // Só mostra check-ins entre a cidade de início escolhida (se houver) e o
+  // destino da rota — quem começa a caminhada mais adiante na Dutra (ex.:
+  // Taubaté) não precisa ver nem fazer check-in nas cidades anteriores.
+  const todosPontos = (pontosCheckinRota ?? []) as PontoCheckin[];
+  const ordemInicio = peregrinacao.cidade_inicio
+    ? (todosPontos.find((p) => p.cidade === peregrinacao.cidade_inicio)?.ordem ?? 1)
+    : 1;
+  const pontosCheckin = todosPontos.filter((p) => p.ordem >= ordemInicio);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -59,10 +70,10 @@ export default async function TrajetoPage() {
       </p>
       <TrajetoClient
         peregrinacao={peregrinacao as Peregrinacao}
-        pontosCheckin={(pontosCheckin ?? []) as PontoCheckin[]}
+        pontosCheckin={pontosCheckin}
         checkinsFeitosIdsIniciais={checkinsFeitosIds}
-        trechos={(trechos ?? []) as TrechoSeguranca[]}
         riscos={(riscos ?? []) as PontoRisco[]}
+        avisos={(avisos ?? []) as RiscoInformado[]}
         rota={rota as Rota | null}
       />
     </div>

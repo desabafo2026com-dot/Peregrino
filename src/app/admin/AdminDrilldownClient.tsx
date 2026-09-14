@@ -29,6 +29,7 @@ import {
   SENTIDO_PISTA_LABELS,
   SENTIDO_KM_ABREV,
   STATUS_RISCO_INFORMADO_LABELS,
+  CATEGORIA_SINISTRO_LABELS,
 } from "@/lib/constants";
 import type { StatusRiscoInformado } from "@/types/database";
 
@@ -84,6 +85,7 @@ export interface RiscoInformadoLinha {
   id: string;
   titulo: string;
   descricao: string | null;
+  categoria: string;
   tipo: string;
   nivelRisco: number;
   latitude: number;
@@ -461,7 +463,8 @@ export default function AdminDrilldownClient({
                         {r.titulo}
                       </p>
                       <p className="text-xs text-neutral-500">
-                        Informado por {r.nomeInformante} — {new Date(r.criadoEm).toLocaleString("pt-BR")}
+                        {CATEGORIA_SINISTRO_LABELS[r.categoria] ?? r.categoria} — {r.tipo}
+                        {" — "}Informado por {r.nomeInformante} — {new Date(r.criadoEm).toLocaleString("pt-BR")}
                         {r.rotaNome ? ` — ${r.rotaNome}` : ""}
                         {r.kmReferencia != null ? ` — km ${r.kmReferencia}` : ""}
                       </p>
@@ -491,7 +494,7 @@ export default function AdminDrilldownClient({
                               onClick={() => aprovarRisco(r)}
                               className="flex items-center gap-1 rounded-lg bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 hover:bg-green-200 dark:bg-green-950/40 dark:text-green-300"
                             >
-                              <Check size={14} /> Aprovar
+                              <Check size={14} /> Confirmar
                             </button>
                             <button
                               disabled={processandoId === r.id}

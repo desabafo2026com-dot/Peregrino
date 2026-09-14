@@ -153,11 +153,18 @@ export interface PontoRisco {
 
 export type StatusRiscoInformado = "pendente" | "aprovado" | "rejeitado";
 
+// Categoria do relato de sinistro/suspeita enviado pelo peregrino durante a
+// caminhada — define quais opções de "tipo" ficam disponíveis no formulário
+// e a regra de publicação automática (chuva publica na hora; as demais só
+// depois de 30min sem revisão da administração — ver migration 11).
+export type CategoriaSinistro = "sinistro" | "suspeita" | "chuva" | "outros";
+
 export interface RiscoInformado {
   id: string;
   user_id: string;
   titulo: string;
   descricao: string | null;
+  categoria: CategoriaSinistro;
   tipo: string;
   nivel_risco: number;
   latitude: number;
@@ -182,8 +189,10 @@ export interface Peregrinacao {
   meio_transporte: MeioTransporte;
   meio_transporte_outro_desc: string | null;
   rota_id: string | null;
+  cidade_inicio: string | null;
   em_grupo: boolean;
   nome_grupo: string | null;
+  tamanho_grupo: number | null;
   criado_em: string;
 }
 

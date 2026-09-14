@@ -89,6 +89,15 @@ export default async function PeregrinacaoPage() {
 
   const { data: rotas } = await supabase.from("rotas").select("*").order("ordem");
 
+  // Todos os pontos de check-in de todas as rotas — usados tanto para a
+  // lista "Cidade de início na Dutra" do formulário de planejamento quanto,
+  // já filtrados pela cidade de início escolhida, para a caminhada ativa.
+  const { data: todosPontosCheckinData } = await supabase
+    .from("pontos_checkin")
+    .select("*")
+    .order("ordem");
+  const todosPontosCheckin = (todosPontosCheckinData ?? []) as PontoCheckin[];
+
   let checkinsCount = 0;
   let pontosCheckin: PontoCheckin[] = [];
   let checkinsFeitosIds: string[] = [];
@@ -101,12 +110,11 @@ export default async function PeregrinacaoPage() {
     checkinsCount = count ?? 0;
 
     if (peregrinacao.rota_id) {
-      const { data: pc } = await supabase
-        .from("pontos_checkin")
-        .select("*")
-        .eq("rota_id", peregrinacao.rota_id)
-        .order("ordem");
-      pontosCheckin = (pc ?? []) as PontoCheckin[];
+      const pontosRota = todosPontosCheckin.filter((p) => p.rota_id === peregrinacao.rota_id);
+      const ordemInicio = peregrinacao.cidade_inicio
+        ? (pontosRota.find((p) => p.cidade === peregrinacao.cidade_inicio)?.ordem ?? 1)
+        : 1;
+      pontosCheckin = pontosRota.filter((p) => p.ordem >= ordemInicio);
     }
 
     const { data: feitos } = await supabase
@@ -122,10 +130,13 @@ export default async function PeregrinacaoPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href="/" />
-      <h1 className="mb-1 text-2xl font-bold">Minha peregrinação</h1>
+      <h1 className="mb-1 text-2xl font-bold">
+        {peregrinacao ? "Minha peregrinação" : "Planejar peregrinação"}
+      </h1>
       <p className="mb-6 text-sm text-neutral-500">
-        Inicie sua caminhada, compartilhe sua localização e faça check-in nos
-        pontos de apoio.
+        {peregrinacao
+          ? "Inicie sua caminhada, compartilhe sua localização e faça check-in nos pontos de apoio."
+          : "Escolha rota, dias previstos e cidade de início para planejar sua caminhada até Aparecida-SP."}
       </p>
       <PeregrinacaoClient
         perfil={perfil as Profile}
@@ -135,6 +146,7 @@ export default async function PeregrinacaoPage() {
         rotas={(rotas ?? []) as Rota[]}
         checkinsCount={checkinsCount}
         pontosCheckin={pontosCheckin}
+        todosPontosCheckin={todosPontosCheckin}
         checkinsFeitosIds={checkinsFeitosIds}
       />
     </div>

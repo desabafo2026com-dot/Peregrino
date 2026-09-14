@@ -108,6 +108,7 @@ export default async function AdminDashboardPage() {
       id: r.id,
       titulo: r.titulo,
       descricao: r.descricao,
+      categoria: r.categoria,
       tipo: r.tipo,
       nivelRisco: r.nivel_risco,
       latitude: r.latitude,

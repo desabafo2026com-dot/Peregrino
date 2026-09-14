@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
-import { CheckCircle2, Circle, TriangleAlert, ShieldAlert } from "lucide-react";
-import { LADO_RODOVIA_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
-import InformarRisco from "@/components/InformarRisco";
-import type { Peregrinacao, PontoCheckin, PontoRisco, Rota, TrechoSeguranca } from "@/types/database";
+import { CheckCircle2, Circle, TriangleAlert, Megaphone } from "lucide-react";
+import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
+import InformarSinistro from "@/components/InformarSinistro";
+import type { Peregrinacao, PontoCheckin, PontoRisco, RiscoInformado, Rota } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -21,9 +21,15 @@ interface Props {
   peregrinacao: Peregrinacao;
   pontosCheckin: PontoCheckin[];
   checkinsFeitosIdsIniciais: string[];
-  trechos: TrechoSeguranca[];
   riscos: PontoRisco[];
+  avisos: RiscoInformado[];
   rota: Rota | null;
+}
+
+function tempoDesde(iso: string) {
+  const minutos = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutos < 60) return `há ${minutos} min`;
+  return `há ${Math.round(minutos / 60)}h`;
 }
 
 function riscoColor(nivel: number) {
@@ -32,12 +38,18 @@ function riscoColor(nivel: number) {
   return "text-green-600";
 }
 
+function kmSentidoLabel(km: number | null, sentido: string | null) {
+  if (km == null) return "—";
+  const abrev = sentido ? SENTIDO_KM_ABREV[sentido] : null;
+  return `km ${km}${abrev ? ` ${abrev}` : ""}`;
+}
+
 export default function TrajetoClient({
   peregrinacao,
   pontosCheckin,
   checkinsFeitosIdsIniciais,
-  trechos,
   riscos,
+  avisos,
   rota,
 }: Props) {
   const supabase = createClient();
@@ -89,6 +101,14 @@ export default function TrajetoClient({
 
   const concluidos = pontosCheckin.filter((p) => checkinsFeitos.has(p.id)).length;
 
+  // Mesma ordem de leitura usada em /rotas: sentido Norte (km decrescente),
+  // sentido Sul (km crescente) — sem km cadastrado, fica por último.
+  const riscosOrdenados = [...riscos].sort((a, b) => {
+    if (a.km_referencia == null) return 1;
+    if (b.km_referencia == null) return -1;
+    return rota?.slug === "sul" ? a.km_referencia - b.km_referencia : b.km_referencia - a.km_referencia;
+  });
+
   const trajeto = pontosCheckin.map((p) => ({
     ordem: p.ordem,
     cidade: p.cidade,
@@ -99,7 +119,33 @@ export default function TrajetoClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <InformarRisco rotaId={peregrinacao.rota_id} />
+      <InformarSinistro rotaId={peregrinacao.rota_id} />
+
+      {avisos.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-orange-600">
+            <Megaphone size={20} /> Avisos recentes de peregrinos
+          </h2>
+          <div className="flex flex-col gap-2">
+            {avisos.map((a) => (
+              <div key={a.id} className="card border-orange-200 dark:border-orange-900">
+                <p className="flex items-center justify-between gap-2 font-semibold text-orange-700">
+                  <span>
+                    {CATEGORIA_SINISTRO_LABELS[a.categoria] ?? a.categoria} — {a.titulo}
+                  </span>
+                  <span className="whitespace-nowrap text-xs font-medium">
+                    {a.status === "aprovado" ? "Confirmado" : "Não confirmado"}
+                  </span>
+                </p>
+                {a.descricao && (
+                  <p className="text-sm text-neutral-600 dark:text-neutral-300">{a.descricao}</p>
+                )}
+                <p className="text-xs text-neutral-500">Informado {tempoDesde(a.criado_em)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {pontosCheckin.length > 0 && (
         <section>
@@ -186,53 +232,36 @@ export default function TrajetoClient({
         {erro && <p className="mt-2 text-sm text-red-600">{erro}</p>}
       </section>
 
-      {trechos.length > 0 && (
+      {riscosOrdenados.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
-            <ShieldAlert size={20} /> Lado da rodovia por trecho
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
+            <TriangleAlert size={20} /> Pontos de risco ao longo da rota
           </h2>
           <div className="card overflow-x-auto">
             <table className="w-full min-w-[480px] text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-neutral-500 dark:border-neutral-800">
-                  <th className="pb-2 pr-4">Km</th>
-                  <th className="pb-2 pr-4">Lado recomendado</th>
+                  <th className="pb-2 pr-4">Km / sentido</th>
+                  <th className="pb-2 pr-4">Local</th>
                   <th className="pb-2 pr-4">Risco</th>
-                  <th className="pb-2">Observação</th>
+                  <th className="pb-2">Observações</th>
                 </tr>
               </thead>
               <tbody>
-                {trechos.map((t) => (
-                  <tr key={t.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                {riscosOrdenados.map((r) => (
+                  <tr key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="py-2 pr-4 whitespace-nowrap">
-                      {t.km_inicial} – {t.km_final}
+                      {kmSentidoLabel(r.km_referencia, r.sentido)}
                     </td>
-                    <td className="py-2 pr-4 font-medium">{LADO_RODOVIA_LABELS[t.lado_recomendado]}</td>
-                    <td className={`py-2 pr-4 font-medium ${riscoColor(t.nivel_risco)}`}>
-                      {NIVEL_RISCO_LABELS[t.nivel_risco]}
+                    <td className="py-2 pr-4 font-medium">{r.titulo}</td>
+                    <td className={`py-2 pr-4 font-medium ${riscoColor(r.nivel_risco)}`}>
+                      {NIVEL_RISCO_LABELS[r.nivel_risco]}
                     </td>
-                    <td className="py-2 text-neutral-600 dark:text-neutral-300">{t.observacao}</td>
+                    <td className="py-2 text-neutral-600 dark:text-neutral-300">{r.descricao ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        </section>
-      )}
-
-      {riscos.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
-            <TriangleAlert size={20} /> Pontos de maior risco
-          </h2>
-          <div className="flex flex-col gap-2">
-            {riscos.map((r) => (
-              <div key={r.id} className="card">
-                <p className="font-semibold text-red-700">⚠ {r.titulo}</p>
-                {r.descricao && <p className="text-sm text-neutral-600 dark:text-neutral-300">{r.descricao}</p>}
-                <p className="text-xs text-neutral-500">Nível de risco: {r.nivel_risco}/5</p>
-              </div>
-            ))}
           </div>
         </section>
       )}

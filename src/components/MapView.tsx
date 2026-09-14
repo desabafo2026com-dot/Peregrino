@@ -4,8 +4,8 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { SENTIDO_KM_ABREV } from "@/lib/constants";
-import type { PontoApoio, PontoRisco } from "@/types/database";
+import { SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
+import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
 
 const OSM_STYLE: StyleSpecification = {
   version: 8,
@@ -40,6 +40,7 @@ export interface PontoTrajeto {
 interface Props {
   pontosApoio?: PontoApoio[];
   pontosRisco?: PontoRisco[];
+  avisos?: RiscoInformado[];
   peregrinos?: PeregrinoAtivo[];
   trajeto?: PontoTrajeto[];
   center?: [number, number];
@@ -77,6 +78,7 @@ function kmSentidoLabel(km: number | null | undefined, sentido: string | null | 
 export default function MapView({
   pontosApoio = [],
   pontosRisco = [],
+  avisos = [],
   peregrinos = [],
   trajeto = [],
   center = DEFAULT_CENTER,
@@ -201,6 +203,42 @@ export default function MapView({
       markersRef.current.push(marker);
     });
 
+    avisos.forEach((a) => {
+      // Avisos de peregrinos (sinistro/suspeita/chuva) — cor laranja para
+      // diferenciar dos pontos de risco curados pela administração
+      // (vermelho/amarelo). Confirmados pela administração ganham uma borda
+      // verde; os demais (publicados automaticamente) mostram "não
+      // confirmado" no popup.
+      const confirmado = a.status === "aprovado";
+      const el = document.createElement("div");
+      el.style.cssText = `width:26px;height:26px;border-radius:50%;background:#ea580c;border:2px solid ${
+        confirmado ? "#16a34a" : "white"
+      };box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center`;
+      el.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>
+          <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"/>
+          <path d="M8 6v8"/>
+        </svg>`;
+      const minutos = Math.max(0, Math.round((Date.now() - new Date(a.criado_em).getTime()) / 60000));
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([a.longitude, a.latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 20 }).setHTML(`
+            <div style="font-family:sans-serif;max-width:220px">
+              <span style="font-size:10px;letter-spacing:.05em;color:#ea580c;font-weight:700">${
+                CATEGORIA_SINISTRO_LABELS[a.categoria] ?? a.categoria
+              } — ${confirmado ? "CONFIRMADO" : "NÃO CONFIRMADO"}</span><br/>
+              <strong>${a.titulo}</strong><br/>
+              ${a.descricao ? `${a.descricao}<br/>` : ""}
+              Informado há ${minutos} min
+            </div>
+          `)
+        )
+        .addTo(map);
+      markersRef.current.push(marker);
+    });
+
     peregrinos.forEach((p) => {
       const el = document.createElement("div");
       el.style.cssText =
@@ -211,7 +249,7 @@ export default function MapView({
         .addTo(map);
       markersRef.current.push(marker);
     });
-  }, [pontosApoio, pontosRisco, peregrinos]);
+  }, [pontosApoio, pontosRisco, avisos, peregrinos]);
 
   // Trajeto — linha ligando os pontos de check-in da rota, destacando os
   // já concluídos (verde) dos pendentes (âmbar)

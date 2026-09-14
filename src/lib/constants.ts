@@ -151,18 +151,47 @@ export const LADO_RODOVIA_LABELS: Record<string, string> = {
   nao_recomendado: "Trecho não recomendado a pé",
 };
 
-export const TIPOS_RISCO: { value: string; label: string }[] = [
-  { value: "geral", label: "Geral" },
-  { value: "transito", label: "Trânsito / atropelamento" },
-  { value: "assalto", label: "Assalto / segurança" },
-  { value: "sem_acostamento", label: "Sem acostamento / marginal" },
-  { value: "animal", label: "Animais na pista" },
-  { value: "iluminacao", label: "Falta de iluminação" },
+export const CATEGORIAS_SINISTRO: { value: string; label: string }[] = [
+  { value: "sinistro", label: "Sinistro" },
+  { value: "suspeita", label: "Suspeita" },
+  { value: "chuva", label: "Chuva" },
+  { value: "outros", label: "Outros" },
 ];
+
+export const CATEGORIA_SINISTRO_LABELS: Record<string, string> = {
+  sinistro: "Sinistro",
+  suspeita: "Suspeita",
+  chuva: "Chuva",
+  outros: "Outros",
+};
+
+// Opções de "tipo" disponíveis dentro de cada categoria de relato — ao
+// trocar a categoria no formulário, a lista de tipos é trocada por esta.
+export const TIPOS_POR_CATEGORIA: Record<string, { value: string; label: string }[]> = {
+  sinistro: [
+    { value: "geral", label: "Geral" },
+    { value: "acidente", label: "Acidente" },
+    { value: "atropelamento", label: "Atropelamento" },
+    { value: "assalto", label: "Assalto" },
+    { value: "incendio", label: "Incêndio" },
+    { value: "animais_pista", label: "Animais na pista" },
+  ],
+  suspeita: [
+    { value: "assaltante", label: "Assaltante" },
+    { value: "atitude_suspeita", label: "Atitude suspeita" },
+    { value: "outros", label: "Outros" },
+  ],
+  chuva: [
+    { value: "fraca", label: "Fraca" },
+    { value: "forte", label: "Forte" },
+    { value: "com_raios", label: "Com raios" },
+  ],
+  outros: [{ value: "especificar", label: "Especificar" }],
+};
 
 export const STATUS_RISCO_INFORMADO_LABELS: Record<string, string> = {
   pendente: "Aguardando revisão",
-  aprovado: "Aprovado — publicado no mapa",
+  aprovado: "Confirmado pela administração",
   rejeitado: "Não aprovado",
 };
 

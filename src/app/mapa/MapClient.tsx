@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Tent, TriangleAlert } from "lucide-react";
-import type { PontoApoio, PontoRisco } from "@/types/database";
+import { Tent, TriangleAlert, Megaphone } from "lucide-react";
+import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -17,17 +17,21 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 interface Props {
   pontosApoio: PontoApoio[];
   pontosRisco: PontoRisco[];
+  avisos: RiscoInformado[];
   peregrinos: { user_id: string; latitude: number; longitude: number }[];
 }
 
 // PAP aparece marcado por padrão (é o que a maioria vem buscar); locais de
-// risco ficam opcionais, para não poluir o mapa de quem só quer achar apoio.
-export default function MapClient({ pontosApoio, pontosRisco, peregrinos }: Props) {
+// risco e avisos de peregrinos ficam opcionais, para não poluir o mapa de
+// quem só quer achar apoio.
+export default function MapClient({ pontosApoio, pontosRisco, avisos, peregrinos }: Props) {
   const [mostrarPap, setMostrarPap] = useState(true);
   const [mostrarRisco, setMostrarRisco] = useState(false);
+  const [mostrarAvisos, setMostrarAvisos] = useState(false);
 
   const pontosApoioVisiveis = useMemo(() => (mostrarPap ? pontosApoio : []), [mostrarPap, pontosApoio]);
   const pontosRiscoVisiveis = useMemo(() => (mostrarRisco ? pontosRisco : []), [mostrarRisco, pontosRisco]);
+  const avisosVisiveis = useMemo(() => (mostrarAvisos ? avisos : []), [mostrarAvisos, avisos]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -48,11 +52,20 @@ export default function MapClient({ pontosApoio, pontosRisco, peregrinos }: Prop
           />
           <TriangleAlert size={16} className="text-red-600" /> Locais de risco ({pontosRisco.length})
         </label>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={mostrarAvisos}
+            onChange={(e) => setMostrarAvisos(e.target.checked)}
+          />
+          <Megaphone size={16} className="text-orange-600" /> Avisos de peregrinos ({avisos.length})
+        </label>
       </div>
 
       <MapView
         pontosApoio={pontosApoioVisiveis}
         pontosRisco={pontosRiscoVisiveis}
+        avisos={avisosVisiveis}
         peregrinos={peregrinos}
         calorPeregrinos={peregrinos.length > 0}
         height="65vh"
