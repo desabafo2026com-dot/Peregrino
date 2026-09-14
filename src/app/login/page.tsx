@@ -6,15 +6,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { validarNomeCompleto } from "@/lib/validation";
 import VoltarButton from "@/components/VoltarButton";
-import { LogIn, Mail, KeyRound, Footprints, MapPinPlus, ArrowLeft } from "lucide-react";
+import { LogIn, Mail, Footprints, MapPinPlus, ArrowLeft } from "lucide-react";
 
-type Passo = "email" | "senha" | "tipo" | "cadastro" | "codigo";
+type Passo = "email" | "senha" | "tipo" | "cadastro" | "verifique";
 type TipoConta = "peregrino" | "gerente_pap";
 
 // Entrada única do app: o peregrino (ou gerente de PAP) digita o e-mail
 // primeiro. Se já existe conta, pedimos a senha; se não existe, começa o
-// cadastro (nome/telefone/senha) e confirmamos com um código de 6 dígitos
-// enviado por e-mail — sem precisar clicar em link, tudo dentro do app.
+// cadastro (nome/telefone/senha) e enviamos um e-mail de confirmação com
+// link — o Supabase, no plano gratuito sem SMTP próprio, não deixa
+// personalizar o template para mostrar um código em vez do link (ver
+// deploy-info.md), então por ora a confirmação continua sendo por link.
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,17 +34,14 @@ function LoginForm() {
   const [telefone, setTelefone] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [aceitaTermos, setAceitaTermos] = useState(false);
-  const [codigo, setCodigo] = useState("");
 
   const [erro, setErro] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function voltarParaEmail() {
     setPasso("email");
     setSenha("");
     setErro(null);
-    setAviso(null);
   }
 
   async function handleContinuarEmail(e: React.FormEvent) {
@@ -142,6 +141,7 @@ function LoginForm() {
           tipo_conta: tipoConta,
           aceita_termos: tipoConta === "peregrino" ? true : undefined,
         },
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });
     setLoading(false);
@@ -161,7 +161,7 @@ function LoginForm() {
       return;
     }
 
-    setPasso("codigo");
+    setPasso("verifique");
   }
 
   async function finalizarCadastro() {
@@ -184,42 +184,17 @@ function LoginForm() {
     router.refresh();
   }
 
-  async function handleConfirmarCodigo(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleReenviarEmail() {
     setErro(null);
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: codigo.trim(),
+    const { error } = await supabase.auth.resend({
       type: "signup",
+      email: email.trim(),
+      options: { emailRedirectTo: `${window.location.origin}/auth/confirm` },
     });
     setLoading(false);
-    if (error) {
-      setErro(
-        error.message.toLowerCase().includes("expired") ||
-          error.message.toLowerCase().includes("invalid")
-          ? "Código inválido ou expirado. Confira o número ou peça um novo código."
-          : error.message
-      );
-      return;
-    }
-    setLoading(true);
-    await finalizarCadastro();
-  }
-
-  async function handleReenviarCodigo() {
-    setErro(null);
-    setAviso(null);
-    setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.resend({ type: "signup", email: email.trim() });
-    setLoading(false);
-    if (error) {
-      setErro(error.message);
-      return;
-    }
-    setAviso("Enviamos um novo código para o seu e-mail.");
+    setErro(error ? error.message : null);
   }
 
   return (
@@ -237,7 +212,7 @@ function LoginForm() {
             (tipoConta === "gerente_pap"
               ? "Cadastro de Gerente de PAP — dados de acesso."
               : "Criar conta de peregrino — dados de acesso.")}
-          {passo === "codigo" && "Digite o código de 6 dígitos que enviamos para o seu e-mail."}
+          {passo === "verifique" && "Falta só confirmar seu e-mail."}
         </p>
 
         {avisoConfirmeEmail && passo === "email" && (
@@ -421,46 +396,29 @@ function LoginForm() {
           </form>
         )}
 
-        {passo === "codigo" && (
-          <form onSubmit={handleConfirmarCodigo} className="flex flex-col gap-4">
-            <p className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
-              <Mail size={16} className="shrink-0" /> Enviamos um código para{" "}
-              <strong>{email}</strong>.
-            </p>
-            <div>
-              <label className="label">Código de verificação</label>
-              <input
-                required
-                autoFocus
-                inputMode="numeric"
-                maxLength={6}
-                className="input text-center text-lg tracking-[0.5em]"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
-                placeholder="000000"
-              />
-            </div>
-
-            {erro && <MensagemErro texto={erro} />}
-            {aviso && (
-              <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
-                {aviso}
+        {passo === "verifique" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3 rounded-lg bg-green-50 px-3 py-3 text-sm text-green-800 dark:bg-green-950/40 dark:text-green-300">
+              <Mail size={18} className="mt-0.5 shrink-0" />
+              <p>
+                Enviamos um e-mail de confirmação para <strong>{email}</strong>. Abra sua caixa de
+                entrada (e o spam) e toque no link para ativar sua conta. Depois disso você já
+                pode entrar normalmente.
               </p>
-            )}
-
-            <button type="submit" disabled={loading} className="btn-primary">
-              <KeyRound size={18} className="mr-1 inline" />
-              {loading ? "Confirmando..." : "Confirmar"}
-            </button>
+            </div>
+            {erro && <MensagemErro texto={erro} />}
             <button
               type="button"
-              onClick={handleReenviarCodigo}
+              onClick={handleReenviarEmail}
               disabled={loading}
-              className="text-center text-sm font-medium text-amber-700"
+              className="btn-secondary"
             >
-              Reenviar código
+              {loading ? "Enviando..." : "Reenviar e-mail de confirmação"}
             </button>
-          </form>
+            <Link href="/login" className="text-center text-sm font-medium text-amber-700">
+              Voltar para o início
+            </Link>
+          </div>
         )}
       </div>
     </div>
