@@ -255,6 +255,23 @@ export interface CompraRomariaPlus {
   pago_em: string | null;
 }
 
+export type StatusMensagemContato = "novo" | "lida" | "respondida";
+
+// "Falar com o desenvolvedor" (Rodada 7) — canal simples dentro do app,
+// sem e-mail/SMS: o usuário escreve pelo perfil, a administração responde
+// pelo painel admin e a resposta volta para a mesma tela de quem enviou.
+export interface MensagemContato {
+  id: string;
+  user_id: string;
+  assunto: string | null;
+  mensagem: string;
+  status: StatusMensagemContato;
+  resposta_admin: string | null;
+  respondido_por: string | null;
+  respondido_em: string | null;
+  criado_em: string;
+}
+
 // Tipagem mínima para o cliente Supabase tipado (@supabase/ssr)
 // Mantida simples de propósito — pode ser substituída pelo gerador oficial
 // `supabase gen types typescript` quando o projeto estiver criado.

@@ -378,12 +378,12 @@ function LoginForm() {
                   onChange={(e) => setAceitaTermos(e.target.checked)}
                 />
                 <label htmlFor="termos" className="text-xs text-neutral-600 dark:text-neutral-300">
-                  Li e aceito os Termos de Uso. Ao aceitar, autorizo o
-                  compartilhamento da minha localização durante o trajeto, do
-                  início ao fim de cada peregrinação, exclusivamente para que a
-                  equipe de apoio possa avisar sobre condições adversas e me
-                  localizar em caso de emergência — outros peregrinos não veem
-                  minha localização.
+                  Li e aceito os Termos de Uso. Autorizo o compartilhamento da
+                  minha localização durante o trajeto, do início ao fim de
+                  cada peregrinação, para registro dos check-ins, registro do
+                  local de sinistros informados, para que a equipe de apoio
+                  possa avisar sobre condições adversas na rota e para
+                  localização em caso de emergência.
                 </label>
               </div>
             )}

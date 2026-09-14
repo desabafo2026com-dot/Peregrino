@@ -1660,3 +1660,40 @@ create policy "pap_fotos_delete_own" on storage.objects for delete to authentica
   using (bucket_id = 'pap-fotos' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- FIM DA MIGRATION 13
+-- =====================================================================
+-- MIGRATION 14 — Rodada 7: Perfil ("Falar com o desenvolvedor")
+-- =====================================================================
+
+-- Mensagens de peregrinos/gerentes de PAP para a administração — um canal
+-- simples dentro do próprio app, sem depender de e-mail/SMS: o usuário
+-- escreve pelo perfil, a administração lê e responde pelo painel admin, e a
+-- resposta aparece de volta para quem enviou na mesma tela.
+create table if not exists public.mensagens_contato (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  assunto text,
+  mensagem text not null,
+  status text not null default 'novo' check (status in ('novo', 'lida', 'respondida')),
+  resposta_admin text,
+  respondido_por uuid references auth.users(id) on delete set null,
+  respondido_em timestamptz,
+  criado_em timestamptz not null default now()
+);
+
+create index if not exists idx_mensagens_contato_user on public.mensagens_contato(user_id);
+
+alter table public.mensagens_contato enable row level security;
+
+drop policy if exists "mensagens_contato_insert_own" on public.mensagens_contato;
+create policy "mensagens_contato_insert_own" on public.mensagens_contato for insert to authenticated
+  with check (user_id = auth.uid());
+
+drop policy if exists "mensagens_contato_select_own_ou_admin" on public.mensagens_contato;
+create policy "mensagens_contato_select_own_ou_admin" on public.mensagens_contato for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "mensagens_contato_update_admin" on public.mensagens_contato;
+create policy "mensagens_contato_update_admin" on public.mensagens_contato for update to authenticated
+  using (public.is_admin());
+
+-- FIM DA MIGRATION 14

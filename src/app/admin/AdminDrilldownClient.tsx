@@ -27,6 +27,7 @@ import {
   Pencil,
   Save,
   AlertTriangle,
+  MessageCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -163,6 +164,7 @@ interface Props {
   papVinculados: PapLinha[];
   riscosCadastrados: RiscoLinha[];
   riscosInformados: RiscoInformadoLinha[];
+  mensagensNovas: number;
 }
 
 function Card({
@@ -206,6 +208,7 @@ export default function AdminDrilldownClient({
   papVinculados,
   riscosCadastrados,
   riscosInformados: riscosInformadosIniciais,
+  mensagensNovas,
 }: Props) {
   const router = useRouter();
   const [categoria, setCategoria] = useState<Categoria | null>(null);
@@ -362,6 +365,20 @@ export default function AdminDrilldownClient({
 
   return (
     <div className="flex flex-col gap-6">
+      {mensagensNovas > 0 && (
+        <Link
+          href="/admin/mensagens"
+          className="card flex items-center justify-between gap-3 border-amber-400 bg-amber-50 dark:bg-amber-950/30"
+        >
+          <span className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-500">
+            <MessageCircle size={18} />
+            {mensagensNovas} {mensagensNovas > 1 ? "novas mensagens" : "nova mensagem"} em
+            &quot;Falar com o desenvolvedor&quot;
+          </span>
+          <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Ver →</span>
+        </Link>
+      )}
+
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Peregrinos</h2>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

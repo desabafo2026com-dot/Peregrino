@@ -333,15 +333,16 @@ export default function ProfileForm({
           <ShieldCheck size={18} /> Compartilhamento de localização
         </h2>
         <p className="text-sm text-neutral-600 dark:text-neutral-300">
-          Ao aceitar os termos no cadastro, você já autorizou o
+          Ao aceitar os termos no cadastro, você declara que autoriza o
           compartilhamento da sua localização durante o trajeto, do início ao
-          fim de cada peregrinação. Ela{" "}
-          <strong>não é usada para que outros peregrinos vejam onde você
-          está</strong> — serve apenas para que a equipe de apoio possa avisar
-          sobre condições adversas na rota e para te localizar em caso de
-          emergência. O compartilhamento é ativado automaticamente quando você
-          inicia uma peregrinação, e você pode pausá-lo a qualquer momento na
-          página &quot;Minha peregrinação&quot;.
+          fim de cada peregrinação. Ela serve para{" "}
+          <strong>registro dos check-ins</strong>,{" "}
+          <strong>registro do local de sinistros informados</strong>, para
+          que a equipe de apoio possa avisar sobre condições adversas na rota
+          ou para localização em caso de emergência. O compartilhamento é
+          ativado automaticamente quando você inicia uma peregrinação, e você
+          pode pausá-lo a qualquer momento na página &quot;Minha
+          peregrinação&quot;.
         </p>
       </section>
 

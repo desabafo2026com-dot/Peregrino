@@ -11,6 +11,7 @@ import {
   Route,
   Users,
   UserCog,
+  MessageCircle,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -21,6 +22,7 @@ const ADMIN_LINKS = [
   { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
   { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
   { href: "/admin/rotas", label: "Rotas (Norte/Sul)", icon: Route },
+  { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
   { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
 ];
 

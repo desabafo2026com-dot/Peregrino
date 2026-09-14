@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/ProfileForm";
 import AlterarSenhaForm from "@/components/AlterarSenhaForm";
+import ContatoDesenvolvedorForm from "@/components/ContatoDesenvolvedorForm";
 import VoltarButton from "@/components/VoltarButton";
-import type { Profile } from "@/types/database";
+import type { Profile, MensagemContato } from "@/types/database";
 
 export default async function PerfilPage() {
   const supabase = await createClient();
@@ -32,6 +33,12 @@ export default async function PerfilPage() {
     .eq("id", user.id)
     .maybeSingle();
 
+  const { data: mensagens } = await supabase
+    .from("mensagens_contato")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("criado_em", { ascending: false });
+
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href="/" />
@@ -52,6 +59,12 @@ export default async function PerfilPage() {
       />
       <div className="mt-6">
         <AlterarSenhaForm />
+      </div>
+      <div className="mt-6">
+        <ContatoDesenvolvedorForm
+          userId={user.id}
+          mensagensIniciais={(mensagens ?? []) as MensagemContato[]}
+        />
       </div>
     </div>
   );

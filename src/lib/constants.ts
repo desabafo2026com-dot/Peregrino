@@ -212,6 +212,12 @@ export const STATUS_COMPRA_ROMARIA_PLUS_LABELS: Record<string, string> = {
   estornado: "Estornado",
 };
 
+export const STATUS_MENSAGEM_CONTATO_LABELS: Record<string, string> = {
+  novo: "Aguardando leitura",
+  lida: "Lida — aguardando resposta",
+  respondida: "Respondida",
+};
+
 export const EMERGENCIAS = [
   { numero: "190", nome: "Polícia Militar", descricao: "Ocorrências policiais / assaltos" },
   { numero: "191", nome: "PRF", descricao: "Polícia Rodoviária Federal — acidentes na rodovia" },
