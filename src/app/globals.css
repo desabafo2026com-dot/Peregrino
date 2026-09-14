@@ -5,8 +5,43 @@
    a preferência do sistema. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------
+   Paleta "rodovia": substitui a escala `amber` do Tailwind (usada em todo
+   o app para cor de marca — botões, títulos, destaques) por um tom de
+   terracota/tijolo, e adiciona uma escala nova `stripe` (amarelo/laranja
+   de faixa de pista), usada com moderação em destaques e indicadores.
+   Como isso é feito redefinindo os tokens de cor do Tailwind (@theme), TODO
+   uso existente de `amber-*`/`text-amber-700` etc. já no código herda a
+   nova cor automaticamente, sem precisar editar cada componente.
+   --------------------------------------------------------------------- */
+@theme {
+  --color-amber-50: #fcf1ee;
+  --color-amber-100: #f8e4dd;
+  --color-amber-200: #f1c9bb;
+  --color-amber-300: #e5a18a;
+  --color-amber-400: #d87b5a;
+  --color-amber-500: #ce5627;
+  --color-amber-600: #af491d;
+  --color-amber-700: #8f3f19;
+  --color-amber-800: #723618;
+  --color-amber-900: #5a2d16;
+  --color-amber-950: #331b0f;
+
+  --color-stripe-50: #fefaeb;
+  --color-stripe-100: #fdf0ce;
+  --color-stripe-200: #fae09e;
+  --color-stripe-300: #f7cb64;
+  --color-stripe-400: #f6b531;
+  --color-stripe-500: #f59f0a;
+  --color-stripe-600: #d8800e;
+  --color-stripe-700: #ae6113;
+  --color-stripe-800: #8f4914;
+  --color-stripe-900: #6d3a17;
+  --color-stripe-950: #3d200f;
+}
+
 :root {
-  --background: #fafaf9;
+  --background: #f4f3f1;
   --foreground: #1c1917;
 }
 
@@ -18,13 +53,27 @@
 }
 
 :root.dark {
-  --background: #0c0a09;
-  --foreground: #fafaf9;
+  --background: #121212;
+  --foreground: #f4f3f1;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Espaço seguro do iOS (notch / barra de gestos) — usado pelo cabeçalho
+   fixo, pelo menu inferior e pelo botão de emergência para não ficarem
+   sobrepostos pelos elementos de sistema do iPhone. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-top {
+  padding-top: var(--safe-top);
+}
+.safe-bottom {
+  padding-bottom: var(--safe-bottom);
 }
 
 .input {
@@ -37,12 +86,12 @@ body {
   outline: none;
 }
 .input:focus {
-  border-color: rgb(180 83 9);
-  box-shadow: 0 0 0 2px rgba(180, 83, 9, 0.15);
+  border-color: rgb(143 63 25);
+  box-shadow: 0 0 0 2px rgba(143, 63, 25, 0.15);
 }
 .dark .input {
-  background: rgb(23 23 23);
-  border-color: rgb(64 64 64);
+  background: rgb(30 30 30);
+  border-color: rgb(70 70 70);
   color: white;
 }
 
@@ -58,7 +107,7 @@ body {
 }
 
 .btn-primary {
-  background: rgb(146 64 14);
+  background: rgb(143 63 25);
   color: white;
   font-weight: 600;
   border-radius: 0.75rem;
@@ -66,7 +115,7 @@ body {
   transition: background 0.15s;
 }
 .btn-primary:hover {
-  background: rgb(120 53 15);
+  background: rgb(114 54 24);
 }
 .btn-primary:disabled {
   opacity: 0.6;
@@ -79,16 +128,20 @@ body {
   border-radius: 0.75rem;
   padding: 0.65rem 1.25rem;
 }
+.dark .btn-secondary {
+  border-color: rgb(80 80 80);
+  color: rgb(245 245 244);
+}
 
 .card {
   border-radius: 1rem;
-  border: 1px solid rgb(231 229 228);
+  border: 1px solid rgb(228 226 223);
   background: white;
   padding: 1.25rem;
 }
 .dark .card {
-  background: rgb(23 23 23);
-  border-color: rgb(64 64 64);
+  background: rgb(28 28 28);
+  border-color: rgb(66 66 66);
 }
 
 /* Impressão do certificado: ao imprimir, some com o resto da página e

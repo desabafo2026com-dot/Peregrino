@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { MapPin, MapPinPlus, Route, ShieldCheck, Users, Footprints, CheckCircle2, Award } from "lucide-react";
 
@@ -61,12 +62,21 @@ export default async function Home() {
 
   return (
     <div className="flex flex-col gap-8">
-      <section className="rounded-2xl bg-gradient-to-br from-amber-800 to-amber-900 p-8 text-white">
-        <h1 className="mb-2 text-3xl font-bold">Boa caminhada, peregrino! 🥾</h1>
-        <p className="max-w-xl text-amber-100">
-          Informações de apoio, rotas seguras e emergência para quem caminha
-          pela Rodovia Presidente Dutra até Aparecida-SP.
-        </p>
+      <section className="flex items-center gap-5 rounded-2xl bg-gradient-to-br from-amber-800 to-amber-900 p-6 text-white sm:p-8">
+        <Image
+          src="/icons/logo-emblema.png"
+          alt="Emblema do Peregrino"
+          width={96}
+          height={96}
+          className="h-16 w-16 shrink-0 rounded-2xl shadow-lg ring-2 ring-white/30 sm:h-28 sm:w-28"
+        />
+        <div>
+          <h1 className="mb-2 text-2xl font-bold sm:text-3xl">Boa caminhada, peregrino!</h1>
+          <p className="max-w-xl text-amber-100">
+            Informações de apoio, rotas seguras e emergência para quem caminha
+            pela Rodovia Presidente Dutra até Aparecida-SP.
+          </p>
+        </div>
       </section>
 
       {stats && (

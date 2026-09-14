@@ -15,7 +15,7 @@ export default function EmergencyButton() {
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl dark:bg-neutral-900"
+            className="safe-bottom w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl dark:bg-neutral-900"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -61,9 +61,10 @@ export default function EmergencyButton() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Botão de emergência"
-        className="fixed bottom-5 right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-red-600 text-white shadow-lg ring-4 ring-red-600/20 active:scale-95"
+        style={{ bottom: "calc(5.5rem + var(--safe-bottom))" }}
+        className="fixed right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-lg ring-4 ring-red-600/20 active:scale-95"
       >
-        <TriangleAlert size={28} />
+        <TriangleAlert size={26} />
       </button>
     </>
   );
