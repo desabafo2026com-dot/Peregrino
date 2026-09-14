@@ -78,9 +78,12 @@ export const MEIO_TRANSPORTE_LABELS: Record<string, string> = {
 
 export const DIAS_PREVISTOS_OPTIONS: number[] = Array.from({ length: 15 }, (_, i) => i + 1);
 
+// Sentido da pista (mão da rodovia) — Norte e Sul de verdade, diferente do
+// nome da rota (que é o par cidade-origem/Aparecida). O valor salvo no
+// banco continua sendo "sp"/"rj" por compatibilidade, só o rótulo mudou.
 export const SENTIDO_PISTA_OPTIONS: { value: string; label: string }[] = [
-  { value: "sp", label: "Sentido São Paulo" },
-  { value: "rj", label: "Sentido Rio de Janeiro" },
+  { value: "sp", label: "Sentido Norte" },
+  { value: "rj", label: "Sentido Sul" },
 ];
 
 export const BR_OPTIONS: { value: string; label: string }[] = [
@@ -94,15 +97,24 @@ export const BR_LABELS: Record<string, string> = {
 };
 
 export const SENTIDO_PISTA_LABELS: Record<string, string> = {
-  sp: "Sentido São Paulo",
-  rj: "Sentido Rio de Janeiro",
+  sp: "Sentido Norte",
+  rj: "Sentido Sul",
 };
 
 // Abreviação usada junto ao km de referência (ex.: "km 111 N"), seguindo a
-// sinalização da rodovia: pista sentido São Paulo = Norte, sentido Rio = Sul.
+// sinalização da rodovia: pista sentido Norte (sp) e sentido Sul (rj).
 export const SENTIDO_KM_ABREV: Record<string, string> = {
   sp: "N",
   rj: "S",
+};
+
+// Faixa real de km da rodovia coberta por cada rota (informada pelo
+// usuário), mostrada como referência nos formulários que pedem a rota —
+// não é usada para calcular nada automaticamente, só para ajudar a
+// escolher a rota certa a partir do km real do local.
+export const ROTA_FAIXA_KM: Record<string, string> = {
+  norte: "km 231 a 71",
+  sul: "km 70 a 0",
 };
 
 // Municípios cortados pela Rodovia Presidente Dutra (BR-116) entre São

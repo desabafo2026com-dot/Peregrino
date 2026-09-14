@@ -62,7 +62,7 @@ export default async function Home() {
       href: "/rotas",
       icon: Route,
       title: "Rotas de peregrinação",
-      desc: "Rota Norte (São Paulo) ou Sul (Rio de Janeiro) até Aparecida: qual lado da rodovia seguir e pontos de maior risco.",
+      desc: "São Paulo - Aparecida ou Rio de Janeiro - Aparecida: dicas de segurança e pontos de maior risco em cada rota.",
     },
   ];
 

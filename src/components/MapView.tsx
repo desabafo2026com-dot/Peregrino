@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
+import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
 import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
 
 const OSM_STYLE: StyleSpecification = {
@@ -46,6 +46,22 @@ export interface RotaLinha {
   pontos: { lat: number; lng: number; ordem: number }[];
 }
 
+// PAP que ainda não foi vinculado por nenhum gerente — mostrado no mapa com
+// a localização aproximada (cidade) só como referência, já que o
+// pré-cadastro não tem coordenadas exatas. Some da lista assim que um
+// gerente vincula (ver reivindicado_por), dando lugar ao PAP real (com
+// aprovação e localização exata) quando publicado.
+export interface PapPreCadastroMapa {
+  id: string;
+  nome: string;
+  cidade: string;
+  br: string;
+  km: number | null;
+  sentido_pista: string | null;
+  lat: number;
+  lng: number;
+}
+
 interface Props {
   pontosApoio?: PontoApoio[];
   pontosRisco?: PontoRisco[];
@@ -53,6 +69,7 @@ interface Props {
   peregrinos?: PeregrinoAtivo[];
   trajeto?: PontoTrajeto[];
   rotasLinhas?: RotaLinha[];
+  papsPreCadastro?: PapPreCadastroMapa[];
   center?: [number, number];
   zoom?: number;
   height?: string;
@@ -92,6 +109,7 @@ export default function MapView({
   peregrinos = [],
   trajeto = [],
   rotasLinhas = [],
+  papsPreCadastro = [],
   center = DEFAULT_CENTER,
   zoom = 9,
   height = "500px",
@@ -163,7 +181,7 @@ export default function MapView({
             <div style="font-family:sans-serif;max-width:220px">
               <span style="font-size:10px;letter-spacing:.05em;color:#16a34a;font-weight:700">PAP</span><br/>
               <strong>${p.nome}</strong><br/>
-              ${p.cidade ? `${p.cidade}${p.sentido_pista ? ` — sentido ${p.sentido_pista === "sp" ? "São Paulo" : "Rio de Janeiro"}` : ""}<br/>` : ""}
+              ${p.cidade ? `${p.cidade}${p.sentido_pista ? ` — sentido ${p.sentido_pista === "sp" ? "Norte" : "Sul"}` : ""}<br/>` : ""}
               ${p.responsavel ? `Responsável: ${p.responsavel}<br/>` : ""}
               ${p.telefone && p.exibir_telefone !== false ? `Tel: ${p.telefone}<br/>` : ""}
               ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
@@ -261,7 +279,39 @@ export default function MapView({
         .addTo(map);
       markersRef.current.push(marker);
     });
-  }, [pontosApoio, pontosRisco, avisos, peregrinos]);
+
+    papsPreCadastro.forEach((p) => {
+      // Tenda cinza/tracejada (em vez do verde sólido do PAP confirmado) —
+      // deixa claro que é uma localização aproximada (pela cidade), ainda
+      // sem gerente vinculado.
+      const el = document.createElement("div");
+      el.style.cssText =
+        "width:28px;height:28px;border-radius:50%;background:#a3a3a3;border:2px dashed white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;opacity:.85";
+      el.innerHTML = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 21 14 3"/>
+          <path d="M20.5 21 10 3"/>
+          <path d="M15.5 21 12 15l-3.5 6"/>
+          <path d="M2 21h20"/>
+        </svg>`;
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([p.lng, p.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 20 }).setHTML(`
+            <div style="font-family:sans-serif;max-width:220px">
+              <span style="font-size:10px;letter-spacing:.05em;color:#737373;font-weight:700">PAP AGUARDANDO VÍNCULO</span><br/>
+              <strong>${p.nome}</strong><br/>
+              ${p.cidade}${p.km != null ? ` — km ${p.km}` : ""}${
+                p.sentido_pista ? ` (${SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista})` : ""
+              }<br/>
+              <span style="color:#737373">Localização aproximada (pela cidade) — ainda sem gerente vinculado. Assim que um gerente vincular e a administração aprovar, este ponto passa a ser um PAP com localização exata.</span>
+            </div>
+          `)
+        )
+        .addTo(map);
+      markersRef.current.push(marker);
+    });
+  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro]);
 
   // Trajeto — linha ligando os pontos de check-in da rota, destacando os
   // já concluídos (verde) dos pendentes (âmbar)

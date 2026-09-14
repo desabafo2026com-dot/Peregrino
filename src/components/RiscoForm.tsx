@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
-import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS, ROTA_FAIXA_KM } from "@/lib/constants";
 import { LocateFixed, Upload } from "lucide-react";
 import type { PontoRisco, Rota, Br } from "@/types/database";
 
@@ -267,10 +267,15 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
               <option value="">Ambas as rotas</option>
               {rotas.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.nome} ({r.origem} → {r.destino})
+                  {r.nome}
+                  {ROTA_FAIXA_KM[r.slug] ? ` (${ROTA_FAIXA_KM[r.slug]})` : ""}
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-neutral-500">
+              A faixa de km entre parênteses ajuda a escolher a rota certa a
+              partir do km real do local.
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className="label">Ponto de referência (opcional)</label>

@@ -93,25 +93,49 @@ function gerarCodigoCertificado() {
 }
 
 // Contador de tempo total decorrido desde o início da peregrinação —
-// atualiza a cada minuto para mostrar dias/horas/minutos de caminhada em
-// andamento (item pedido pelo usuário: mostrar o tempo total, não só a
-// data/hora de início).
+// atualiza a cada meio minuto para mostrar dias/horas/minutos de caminhada
+// em andamento, em destaque (maior e com hora:minuto sempre visíveis,
+// mesmo quando zerados) — item pedido pelo usuário.
 function ContadorTempoTotal({ dataInicio }: { dataInicio: string | null }) {
   const [agora, setAgora] = useState(() => new Date());
 
   useEffect(() => {
-    const id = setInterval(() => setAgora(new Date()), 60000);
+    const id = setInterval(() => setAgora(new Date()), 30000);
     return () => clearInterval(id);
   }, []);
 
   if (!dataInicio) return null;
-  const texto = formatarDuracao(dataInicio, agora);
-  if (!texto) return null;
+  const duracao = intervalToDuration({ start: new Date(dataInicio), end: agora });
+  const dias = duracao.days ?? 0;
+  const horas = duracao.hours ?? 0;
+  const minutos = duracao.minutes ?? 0;
 
   return (
-    <p className="mt-1 flex items-center justify-center gap-1.5 text-center text-sm font-bold text-green-800 dark:text-green-400">
-      <Radio size={14} /> Tempo total de caminhada: {texto}
-    </p>
+    <div className="mx-auto my-2 flex w-full max-w-[260px] flex-col items-center rounded-2xl bg-green-600 px-6 py-4 text-white shadow-sm dark:bg-green-700">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-green-100 uppercase">
+        <Radio size={13} /> Tempo de caminhada
+      </p>
+      <div className="mt-1 flex items-end gap-4">
+        {dias > 0 && (
+          <div className="flex flex-col items-center">
+            <span className="text-4xl leading-none font-black tabular-nums">{dias}</span>
+            <span className="mt-0.5 text-[10px] font-semibold tracking-wide text-green-100 uppercase">
+              {dias === 1 ? "dia" : "dias"}
+            </span>
+          </div>
+        )}
+        <div className="flex flex-col items-center">
+          <span className="text-4xl leading-none font-black tabular-nums">
+            {String(horas).padStart(2, "0")}
+            <span className="text-green-200">:</span>
+            {String(minutos).padStart(2, "0")}
+          </span>
+          <span className="mt-0.5 text-[10px] font-semibold tracking-wide text-green-100 uppercase">
+            horas : minutos
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -803,12 +827,12 @@ export default function PeregrinacaoClient({
             origem, check-ins intermediários (destacados ao serem feitos) e
             destino (Aparecida) + controle de compartilhamento de localização. */}
         <div className="card border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
+          <p className="flex items-center justify-center gap-2 text-center font-bold text-green-800 dark:text-green-400">
+            <Radio size={18} /> Peregrinação em andamento
+          </p>
+          <ContadorTempoTotal dataInicio={peregrinacao.data_inicio} />
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
-              <p className="flex items-center justify-center gap-2 text-center font-bold text-green-800 dark:text-green-400">
-                <Radio size={18} /> Peregrinação em andamento
-              </p>
-              <ContadorTempoTotal dataInicio={peregrinacao.data_inicio} />
               <p className="mt-1 text-justify text-sm text-neutral-600 dark:text-neutral-300">
                 {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} className="inline" /> : <Footprints size={14} className="inline" />}{" "}
                 {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
