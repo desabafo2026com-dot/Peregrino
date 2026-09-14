@@ -82,7 +82,18 @@ export default function EquipeAdminClient({ equipeInicial }: { equipeInicial: Pr
 
     setLoading(false);
     if (insertError) {
-      setErro(insertError.message);
+      // O Supabase, por proteção contra enumeração de e-mails, responde ao
+      // signUp de um e-mail já cadastrado como se fosse sucesso (sem erro),
+      // mas sem criar de fato uma nova linha em auth.users — o insert do
+      // perfil então falha aqui com violação de chave estrangeira. Nesse
+      // caso, a causa real é sempre "e-mail já cadastrado".
+      if (insertError.code === "23503" || insertError.message.includes("profiles_id_fkey")) {
+        setErro(
+          "Este e-mail já está cadastrado no sistema (como peregrino, gerente de PAP ou outra conta) — não é possível criar uma nova conta de equipe com um e-mail já em uso. Use outro e-mail."
+        );
+      } else {
+        setErro(insertError.message);
+      }
       return;
     }
 
