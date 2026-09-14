@@ -69,7 +69,7 @@ export default function InstalarPage() {
 
   return (
     <div className="mx-auto max-w-lg">
-      <VoltarButton href="/rotas" />
+      <VoltarButton href="/" />
       <h1 className="mb-1 text-xl font-bold">Compartilhar e instalar o app</h1>
       <p className="mb-6 text-sm text-neutral-500">
         O Peregrino funciona direto do navegador — instalando, ele ganha um

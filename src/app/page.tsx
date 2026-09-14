@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { MapPin, MapPinPlus, Route, ShieldCheck, Users, Footprints, CheckCircle2, Award } from "lucide-react";
+import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -31,7 +32,7 @@ export default async function Home() {
     } | null;
   };
 
-  const cards = [
+  const cardsAntesCompartilhar = [
     {
       href: "/mapa",
       icon: MapPin,
@@ -52,6 +53,9 @@ export default async function Home() {
       title: "Rotas de peregrinação",
       desc: "Rota Norte (São Paulo) ou Sul (Rio de Janeiro) até Aparecida: qual lado da rodovia seguir e pontos de maior risco.",
     },
+  ];
+
+  const cardsDepoisCompartilhar = [
     {
       href: "/verificar",
       icon: ShieldCheck,
@@ -117,7 +121,15 @@ export default async function Home() {
       </Link>
 
       <section className="grid gap-4 sm:grid-cols-2">
-        {cards.map((c) => (
+        {cardsAntesCompartilhar.map((c) => (
+          <Link key={c.href} href={c.href} className="card transition hover:border-amber-300">
+            <c.icon className="mb-3 text-amber-700" size={26} />
+            <h2 className="mb-1 font-bold">{c.title}</h2>
+            <p className="text-sm text-neutral-500">{c.desc}</p>
+          </Link>
+        ))}
+        <CompartilharInstalarCard />
+        {cardsDepoisCompartilhar.map((c) => (
           <Link key={c.href} href={c.href} className="card transition hover:border-amber-300">
             <c.icon className="mb-3 text-amber-700" size={26} />
             <h2 className="mb-1 font-bold">{c.title}</h2>
