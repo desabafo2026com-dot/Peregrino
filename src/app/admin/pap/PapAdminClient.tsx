@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Clock, CheckCircle2, XCircle, MapPinned } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, MapPinned, QrCode, Link2 } from "lucide-react";
 import { STATUS_PAP_LABELS } from "@/lib/constants";
 import type { PontoApoio } from "@/types/database";
 
@@ -44,26 +45,47 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
           <p className="text-xs text-neutral-500">
             {p.km_referencia != null ? `km ${p.km_referencia} — ` : ""}
             {p.gerente_id ? "cadastrado por gerente de PAP" : "cadastrado pela administração"}
+            {p.pre_cadastro_id ? " — vinculado da lista pública" : ""}
           </p>
+          {p.ponto_referencia && (
+            <p className="text-xs text-neutral-500">Referência: {p.ponto_referencia}</p>
+          )}
           <p className={`flex items-center gap-1 text-xs font-medium ${STATUS_COLOR[p.status_aprovacao]}`}>
             <Icon size={14} /> {STATUS_PAP_LABELS[p.status_aprovacao]}
           </p>
         </div>
-        {p.status_aprovacao === "pendente" && (
-          <div className="flex gap-2">
-            <button onClick={() => atualizarStatus(p.id, "aprovado")} className="btn-primary text-xs">
-              Aprovar
+        <div className="flex flex-wrap items-center gap-2">
+          {p.status_aprovacao === "pendente" && (
+            <>
+              <button onClick={() => atualizarStatus(p.id, "aprovado")} className="btn-primary text-xs">
+                Aprovar
+              </button>
+              <button onClick={() => atualizarStatus(p.id, "rejeitado")} className="btn-secondary text-xs">
+                Rejeitar
+              </button>
+            </>
+          )}
+          {p.status_aprovacao === "rejeitado" && (
+            <button onClick={() => atualizarStatus(p.id, "aprovado")} className="btn-secondary text-xs">
+              Aprovar mesmo assim
             </button>
-            <button onClick={() => atualizarStatus(p.id, "rejeitado")} className="btn-secondary text-xs">
-              Rejeitar
-            </button>
-          </div>
-        )}
-        {p.status_aprovacao === "rejeitado" && (
-          <button onClick={() => atualizarStatus(p.id, "aprovado")} className="btn-secondary text-xs">
-            Aprovar mesmo assim
-          </button>
-        )}
+          )}
+          {p.status_aprovacao === "aprovado" && (
+            <Link
+              href={`/pap/${p.id}`}
+              target="_blank"
+              className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              <Link2 size={14} /> Ver página pública
+            </Link>
+          )}
+          <Link
+            href={`/admin/pap/${p.id}/qrcode`}
+            className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            <QrCode size={14} /> QR code
+          </Link>
+        </div>
       </div>
     );
   }

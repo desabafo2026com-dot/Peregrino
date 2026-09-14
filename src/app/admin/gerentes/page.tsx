@@ -5,10 +5,20 @@ import type { GerentePap } from "@/types/database";
 
 export default async function AdminGerentesPage() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("gerentes_pap")
-    .select("*")
-    .order("criado_em", { ascending: false });
+  const [{ data }, { data: paps }] = await Promise.all([
+    supabase.from("gerentes_pap").select("*").order("criado_em", { ascending: false }),
+    supabase.from("pontos_apoio").select("nome, gerente_id").not("gerente_id", "is", null),
+  ]);
+
+  // Nomes dos PAP de cada gerente — usados na busca unificada (por nome do
+  // gerente, telefone/organização ou nome do PAP que ele cadastrou).
+  const papsPorGerente = new Map<string, string[]>();
+  (paps ?? []).forEach((p) => {
+    const gerenteId = p.gerente_id as string;
+    const lista = papsPorGerente.get(gerenteId) ?? [];
+    lista.push(p.nome as string);
+    papsPorGerente.set(gerenteId, lista);
+  });
 
   return (
     <div>
@@ -18,7 +28,10 @@ export default async function AdminGerentesPage() {
         Aprove ou rejeite cadastros de gerentes de PAP. Só gerentes aprovados
         conseguem cadastrar pontos de apoio.
       </p>
-      <GerentesAdminClient gerentesIniciais={(data ?? []) as GerentePap[]} />
+      <GerentesAdminClient
+        gerentesIniciais={(data ?? []) as GerentePap[]}
+        papsPorGerente={Object.fromEntries(papsPorGerente)}
+      />
     </div>
   );
 }

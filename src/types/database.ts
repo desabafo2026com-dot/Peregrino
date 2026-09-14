@@ -108,6 +108,8 @@ export interface PontoApoio {
   datas_funcionamento: string[];
   br: Br;
   pre_cadastro_id: string | null;
+  ponto_referencia: string | null;
+  foto_url: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -147,6 +149,7 @@ export interface PontoRisco {
   br: Br;
   tipo: string;
   nivel_risco: number;
+  ponto_referencia: string | null;
   rota_id: string | null;
   criado_em: string;
 }

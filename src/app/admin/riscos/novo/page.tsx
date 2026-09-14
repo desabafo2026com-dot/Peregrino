@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
 import { LocateFixed } from "lucide-react";
-import type { Rota } from "@/types/database";
+import type { Rota, Br } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -35,8 +35,10 @@ export default function NovoRiscoPage() {
   const [descricao, setDescricao] = useState("");
   const [tipo, setTipo] = useState("geral");
   const [nivelRisco, setNivelRisco] = useState("3");
+  const [br, setBr] = useState<string>("116");
   const [kmReferencia, setKmReferencia] = useState("");
   const [sentido, setSentido] = useState("");
+  const [pontoReferencia, setPontoReferencia] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,8 +77,10 @@ export default function NovoRiscoPage() {
       descricao: descricao || null,
       latitude: coords.lat,
       longitude: coords.lng,
+      br: br as Br,
       km_referencia: kmReferencia ? Number(kmReferencia) : null,
       sentido: sentido || null,
+      ponto_referencia: pontoReferencia || null,
       tipo,
       nivel_risco: Number(nivelRisco),
       rota_id: rotaId || null,
@@ -155,6 +159,16 @@ export default function NovoRiscoPage() {
               </select>
             </div>
             <div>
+              <label className="label">Rodovia</label>
+              <select className="input" value={br} onChange={(e) => setBr(e.target.value)}>
+                {BR_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="label">Km de referência</label>
               <input
                 type="number"
@@ -185,6 +199,15 @@ export default function NovoRiscoPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Ponto de referência (opcional)</label>
+              <input
+                className="input"
+                placeholder="Ex: próximo ao trevo de acesso, em frente à borracharia..."
+                value={pontoReferencia}
+                onChange={(e) => setPontoReferencia(e.target.value)}
+              />
             </div>
             <div className="sm:col-span-2">
               <label className="label">Descrição</label>

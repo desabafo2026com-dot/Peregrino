@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   SERVICOS_PONTO_APOIO,
@@ -8,7 +8,8 @@ import {
   CIDADES_DUTRA_SP_QUELUZ,
   BR_OPTIONS,
 } from "@/lib/constants";
-import { LocateFixed } from "lucide-react";
+import { LocateFixed, Upload } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import CalendarioDatas from "@/components/CalendarioDatas";
 import type { PontoApoio, SentidoPista, Br, PapPreCadastro } from "@/types/database";
 
@@ -40,6 +41,8 @@ export interface PapFormDados {
   contato_doacao: string | null;
   observacoes: string | null;
   pre_cadastro_id: string | null;
+  ponto_referencia: string | null;
+  foto_url: string | null;
 }
 
 function formatarPeriodo(is24h: boolean, abertura: string, fechamento: string) {
@@ -93,11 +96,47 @@ export default function PapForm({
   const [doacaoNecessidade, setDoacaoNecessidade] = useState(pontoInicial?.doacao_necessidade ?? "");
   const [contatoDoacao, setContatoDoacao] = useState(pontoInicial?.contato_doacao ?? "");
   const [observacoes, setObservacoes] = useState(pontoInicial?.observacoes ?? "");
+  const [pontoReferencia, setPontoReferencia] = useState(pontoInicial?.ponto_referencia ?? "");
+  const [fotoUrl, setFotoUrl] = useState(pontoInicial?.foto_url ?? "");
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     pontoInicial ? { lat: pontoInicial.latitude, lng: pontoInicial.longitude } : null
   );
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function handleUploadFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      setErro("A foto deve ter no máximo 4MB.");
+      return;
+    }
+    setEnviandoFoto(true);
+    setErro(null);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setEnviandoFoto(false);
+      setErro("Sua sessão expirou. Faça login novamente.");
+      return;
+    }
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${user.id}/${pontoInicial?.id ?? "novo"}-${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from("pap-fotos")
+      .upload(path, file, { upsert: true });
+    setEnviandoFoto(false);
+    if (uploadError) {
+      setErro("Não foi possível enviar a foto: " + uploadError.message);
+      return;
+    }
+    const { data } = supabase.storage.from("pap-fotos").getPublicUrl(path);
+    setFotoUrl(data.publicUrl);
+  }
 
   function toggleServico(v: string) {
     setServicos((prev) => (prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v]));
@@ -144,6 +183,8 @@ export default function PapForm({
       contato_doacao: contatoDoacao || null,
       observacoes: observacoes || null,
       pre_cadastro_id: pontoInicial?.pre_cadastro_id ?? preCadastro?.id ?? null,
+      ponto_referencia: pontoReferencia || null,
+      foto_url: fotoUrl || null,
     });
     setLoading(false);
     if (error) setErro(error);
@@ -189,6 +230,35 @@ export default function PapForm({
             )}
           </p>
         )}
+        <div className="mb-4 flex flex-wrap items-center gap-4">
+          <div className="h-20 w-20 overflow-hidden rounded-xl border-2 border-amber-200 bg-neutral-100 dark:border-amber-900 dark:bg-neutral-800">
+            {fotoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={fotoUrl} alt="Foto do PAP" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-center text-[10px] text-neutral-400">
+                Sem foto
+              </div>
+            )}
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={enviandoFoto}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Upload size={16} /> {enviandoFoto ? "Enviando..." : "Enviar foto do PAP"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleUploadFoto}
+            />
+          </div>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="label">Nome do local</label>
@@ -252,6 +322,15 @@ export default function PapForm({
               className="input"
               value={kmReferencia}
               onChange={(e) => setKmReferencia(e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Ponto de referência (opcional)</label>
+            <input
+              className="input"
+              placeholder="Ex: em frente ao posto Shell, ao lado da igreja..."
+              value={pontoReferencia}
+              onChange={(e) => setPontoReferencia(e.target.value)}
             />
           </div>
           <div className="sm:col-span-2">

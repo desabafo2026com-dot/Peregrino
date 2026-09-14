@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { intervalToDuration, formatDuration } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -10,9 +10,12 @@ import {
   Radio,
   Flag as FlagIcon,
   CalendarPlus,
+  CalendarDays,
+  CalendarClock,
   Award,
   CalendarCheck,
   MapPinned,
+  Link2,
   Sun,
   Clock,
   TriangleAlert,
@@ -21,6 +24,9 @@ import {
   X,
   Check,
   Ban,
+  Pencil,
+  Save,
+  AlertTriangle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -30,6 +36,9 @@ import {
   SENTIDO_KM_ABREV,
   STATUS_RISCO_INFORMADO_LABELS,
   CATEGORIA_SINISTRO_LABELS,
+  CATEGORIAS_SINISTRO,
+  TIPOS_POR_CATEGORIA,
+  NIVEL_RISCO_LABELS,
 } from "@/lib/constants";
 import type { StatusRiscoInformado } from "@/types/database";
 
@@ -50,9 +59,11 @@ export interface PeregrinacaoLinha {
   id: string;
   nome: string;
   local: string;
+  status: "planejada" | "em_andamento" | "concluida" | "cancelada";
   rotaNome: string | null;
   meioTransporte: string | null;
   meioTransporteOutroDesc?: string | null;
+  dataInicioPrevista: string | null;
   dataInicio: string | null;
   dataFim: string | null;
   checkinsCount: number;
@@ -68,6 +79,7 @@ export interface PapLinha {
   statusAprovacao: string;
   abertoAgora: boolean;
   gerenteNome: string | null;
+  vinculadoPreCadastro: boolean;
   criadoEm: string;
 }
 
@@ -112,6 +124,20 @@ function meioLabel(meio: string | null, outroDesc?: string | null) {
   return MEIO_TRANSPORTE_LABELS[meio] ?? meio;
 }
 
+// Mesma regra de visibilidade pública calculada na política de RLS da
+// migration 11 (ver riscos_informados_select_publicos): "chuva" fica
+// pública assim que enviada, as demais só depois de 30min sem revisão —
+// e tudo que não foi confirmado some do público depois de 1h. Um relato
+// "pendente" que já está nessa janela é visto pelos peregrinos sem que a
+// administração tenha feito nada ainda — por isso merece destaque próprio.
+function publicadoSemRevisao(r: RiscoInformadoLinha, agora: number) {
+  if (r.status !== "pendente") return false;
+  const idadeMin = (agora - new Date(r.criadoEm).getTime()) / 60000;
+  if (idadeMin >= 60) return false;
+  if (r.categoria === "chuva") return true;
+  return idadeMin >= 30;
+}
+
 const PAGE_SIZE = 50;
 
 type Categoria =
@@ -119,17 +145,22 @@ type Categoria =
   | { tipo: "peregrinacao"; titulo: string; dados: PeregrinacaoLinha[] }
   | { tipo: "pap"; titulo: string; dados: PapLinha[] }
   | { tipo: "risco"; titulo: string; dados: RiscoLinha[] }
-  | { tipo: "riscoInformado"; titulo: string; dados: RiscoInformadoLinha[] };
+  // "filtro" em vez de uma lista fixa: assim a lista aberta no modal
+  // reflete confirmações/edições feitas sem precisar fechar e reabrir.
+  | { tipo: "riscoInformado"; titulo: string; filtro: "todos" | "semRevisao" };
 
 interface Props {
   peregrinosCadastrados: PeregrinoLinha[];
   peregrinosAtivos: PeregrinoLinha[];
   peregrinacoesIniciadasHoje: PeregrinacaoLinha[];
+  peregrinacoesPlanejadas: PeregrinacaoLinha[];
+  peregrinacoesPlanejadasHoje: PeregrinacaoLinha[];
   peregrinacoesConcluidasHoje: PeregrinacaoLinha[];
   peregrinacoesConcluidasTotal: PeregrinacaoLinha[];
   papCadastrados: PapLinha[];
   papAtivos: PapLinha[];
   papPendentes: PapLinha[];
+  papVinculados: PapLinha[];
   riscosCadastrados: RiscoLinha[];
   riscosInformados: RiscoInformadoLinha[];
 }
@@ -165,11 +196,14 @@ export default function AdminDrilldownClient({
   peregrinosCadastrados,
   peregrinosAtivos,
   peregrinacoesIniciadasHoje,
+  peregrinacoesPlanejadas,
+  peregrinacoesPlanejadasHoje,
   peregrinacoesConcluidasHoje,
   peregrinacoesConcluidasTotal,
   papCadastrados,
   papAtivos,
   papPendentes,
+  papVinculados,
   riscosCadastrados,
   riscosInformados: riscosInformadosIniciais,
 }: Props) {
@@ -179,8 +213,28 @@ export default function AdminDrilldownClient({
   const [pagina, setPagina] = useState(1);
   const [riscosInformados, setRiscosInformados] = useState(riscosInformadosIniciais);
   const [processandoId, setProcessandoId] = useState<string | null>(null);
+  const [edicao, setEdicao] = useState<{
+    id: string;
+    titulo: string;
+    descricao: string;
+    categoria: string;
+    tipo: string;
+    nivelRisco: string;
+  } | null>(null);
+  const [agora, setAgora] = useState(() => Date.now());
+
+  // Atualiza a cada minuto para que "publicado sem revisão" reflita a
+  // janela de tempo mesmo se o admin deixar a página aberta.
+  useEffect(() => {
+    const timer = setInterval(() => setAgora(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const pendentesCount = riscosInformados.filter((r) => r.status === "pendente").length;
+  const publicadosSemRevisao = useMemo(
+    () => riscosInformados.filter((r) => publicadoSemRevisao(r, agora)),
+    [riscosInformados, agora]
+  );
 
   function abrir(cat: Categoria) {
     setCategoria(cat);
@@ -192,16 +246,24 @@ export default function AdminDrilldownClient({
     setCategoria(null);
   }
 
+  const dadosBase = useMemo(() => {
+    if (!categoria) return [];
+    if (categoria.tipo === "riscoInformado") {
+      return categoria.filtro === "semRevisao" ? publicadosSemRevisao : riscosInformados;
+    }
+    return categoria.dados;
+  }, [categoria, riscosInformados, publicadosSemRevisao]);
+
   const dadosFiltrados = useMemo(() => {
     if (!categoria) return [];
     const termo = busca.trim().toLowerCase();
-    if (!termo) return categoria.dados;
-    return (categoria.dados as unknown as Array<Record<string, unknown>>).filter((d) => {
+    if (!termo) return dadosBase;
+    return (dadosBase as unknown as Array<Record<string, unknown>>).filter((d) => {
       const nome = (d.nome as string) ?? (d.titulo as string) ?? "";
       const local = (d.local as string) ?? (d.cidade as string) ?? "";
       return nome.toLowerCase().includes(termo) || local.toLowerCase().includes(termo);
     });
-  }, [categoria, busca]);
+  }, [categoria, busca, dadosBase]);
 
   const totalPaginas = Math.max(1, Math.ceil(dadosFiltrados.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -248,6 +310,56 @@ export default function AdminDrilldownClient({
     router.refresh();
   }
 
+  function iniciarEdicao(r: RiscoInformadoLinha) {
+    setEdicao({
+      id: r.id,
+      titulo: r.titulo,
+      descricao: r.descricao ?? "",
+      categoria: r.categoria,
+      tipo: r.tipo,
+      nivelRisco: String(r.nivelRisco),
+    });
+  }
+
+  function cancelarEdicao() {
+    setEdicao(null);
+  }
+
+  async function salvarEdicao() {
+    if (!edicao) return;
+    setProcessandoId(edicao.id);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("riscos_informados")
+      .update({
+        titulo: edicao.titulo,
+        descricao: edicao.descricao || null,
+        categoria: edicao.categoria,
+        tipo: edicao.tipo,
+        nivel_risco: Number(edicao.nivelRisco),
+      })
+      .eq("id", edicao.id);
+    if (!error) {
+      setRiscosInformados((prev) =>
+        prev.map((x) =>
+          x.id === edicao.id
+            ? {
+                ...x,
+                titulo: edicao.titulo,
+                descricao: edicao.descricao || null,
+                categoria: edicao.categoria,
+                tipo: edicao.tipo,
+                nivelRisco: Number(edicao.nivelRisco),
+              }
+            : x
+        )
+      );
+      setEdicao(null);
+    }
+    setProcessandoId(null);
+    router.refresh();
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <section>
@@ -270,7 +382,23 @@ export default function AdminDrilldownClient({
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Peregrinações</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <Card
+            icon={CalendarDays}
+            label="Planejadas"
+            value={peregrinacoesPlanejadas.length}
+            onClick={() =>
+              abrir({ tipo: "peregrinacao", titulo: "Peregrinações planejadas", dados: peregrinacoesPlanejadas })
+            }
+          />
+          <Card
+            icon={CalendarClock}
+            label="Planejadas hoje"
+            value={peregrinacoesPlanejadasHoje.length}
+            onClick={() =>
+              abrir({ tipo: "peregrinacao", titulo: "Peregrinações planejadas para hoje", dados: peregrinacoesPlanejadasHoje })
+            }
+          />
           <Card
             icon={CalendarPlus}
             label="Iniciadas hoje"
@@ -300,7 +428,7 @@ export default function AdminDrilldownClient({
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">PAP</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <Card
             icon={MapPinned}
             label="Cadastrados"
@@ -319,6 +447,14 @@ export default function AdminDrilldownClient({
             value={papPendentes.length}
             onClick={() => abrir({ tipo: "pap", titulo: "PAP pendentes de aprovação", dados: papPendentes })}
           />
+          <Card
+            icon={Link2}
+            label="Vinculados"
+            value={papVinculados.length}
+            onClick={() =>
+              abrir({ tipo: "pap", titulo: "PAP vinculados da lista pública pré-cadastrada", dados: papVinculados })
+            }
+          />
         </div>
       </section>
 
@@ -333,14 +469,32 @@ export default function AdminDrilldownClient({
           />
           <Card
             icon={Megaphone}
-            label="Informados"
+            label="Aguardando revisão"
             value={pendentesCount}
             destaque={pendentesCount > 0}
             onClick={() =>
-              abrir({ tipo: "riscoInformado", titulo: "Riscos informados por peregrinos", dados: riscosInformados })
+              abrir({ tipo: "riscoInformado", titulo: "Riscos informados por peregrinos", filtro: "todos" })
+            }
+          />
+          <Card
+            icon={AlertTriangle}
+            label="Publicados sem revisão"
+            value={publicadosSemRevisao.length}
+            destaque={publicadosSemRevisao.length > 0}
+            onClick={() =>
+              abrir({
+                tipo: "riscoInformado",
+                titulo: "Já visíveis a outros peregrinos, sem revisão da administração",
+                filtro: "semRevisao",
+              })
             }
           />
         </div>
+        <p className="mt-2 text-xs text-neutral-500">
+          &quot;Publicados sem revisão&quot; já aparecem no mapa e no trajeto para os
+          demais peregrinos (chuva na hora; os demais, depois de 30 minutos) mesmo
+          sem confirmação — vale priorizar a revisão desses.
+        </p>
         <Link href="/admin/riscos/novo" className="btn-secondary mt-3 inline-block w-fit text-sm">
           Cadastrar local de risco
         </Link>
@@ -406,13 +560,22 @@ export default function AdminDrilldownClient({
                         {p.rotaNome ? ` — ${p.rotaNome}` : ""}
                         {p.meioTransporte ? ` — ${meioLabel(p.meioTransporte, p.meioTransporteOutroDesc)}` : ""}
                       </p>
-                      <p className="text-xs text-neutral-500">
-                        Início: {p.dataInicio ? new Date(p.dataInicio).toLocaleString("pt-BR") : "-"}
-                        {" — "}Fim: {p.dataFim ? new Date(p.dataFim).toLocaleString("pt-BR") : "-"}
-                        {" — "}
-                        {p.checkinsCount} check-in(s)
-                        {p.temCertificado ? " — com certificado" : ""}
-                      </p>
+                      {p.status === "planejada" ? (
+                        <p className="text-xs text-neutral-500">
+                          Data prevista de início:{" "}
+                          {p.dataInicioPrevista
+                            ? new Date(p.dataInicioPrevista).toLocaleDateString("pt-BR")
+                            : "não informada"}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-neutral-500">
+                          Início: {p.dataInicio ? new Date(p.dataInicio).toLocaleString("pt-BR") : "-"}
+                          {" — "}Fim: {p.dataFim ? new Date(p.dataFim).toLocaleString("pt-BR") : "-"}
+                          {" — "}
+                          {p.checkinsCount} check-in(s)
+                          {p.temCertificado ? " — com certificado" : ""}
+                        </p>
+                      )}
                     </div>
                   ))}
 
@@ -456,58 +619,160 @@ export default function AdminDrilldownClient({
                   ))}
 
                 {categoria.tipo === "riscoInformado" &&
-                  (dadosPagina as RiscoInformadoLinha[]).map((r) => (
-                    <div key={r.id} className="card">
-                      <p className="flex items-center gap-2 font-semibold">
-                        <Megaphone size={16} className="text-amber-700" />
-                        {r.titulo}
-                      </p>
-                      <p className="text-xs text-neutral-500">
-                        {CATEGORIA_SINISTRO_LABELS[r.categoria] ?? r.categoria} — {r.tipo}
-                        {" — "}Informado por {r.nomeInformante} — {new Date(r.criadoEm).toLocaleString("pt-BR")}
-                        {r.rotaNome ? ` — ${r.rotaNome}` : ""}
-                        {r.kmReferencia != null ? ` — km ${r.kmReferencia}` : ""}
-                      </p>
-                      {r.descricao && <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">{r.descricao}</p>}
-                      {r.latitude != null && r.longitude != null && (
-                        <p className="mt-1 text-xs text-neutral-500">
-                          Localização: {r.latitude.toFixed(5)}, {r.longitude.toFixed(5)}
-                          {" — "}
-                          <a
-                            href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-semibold text-amber-700 hover:underline"
-                          >
-                            ver no mapa
-                          </a>
+                  (dadosPagina as RiscoInformadoLinha[]).map((r) =>
+                    edicao?.id === r.id ? (
+                      <div key={r.id} className="card border-amber-300 dark:border-amber-800">
+                        <p className="mb-3 text-sm font-semibold text-amber-800 dark:text-amber-500">
+                          Editando relato
                         </p>
-                      )}
-                      <p className="mt-1 flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-neutral-500">
-                          {STATUS_RISCO_INFORMADO_LABELS[r.status] ?? r.status}
-                        </span>
-                        {r.status === "pendente" && (
-                          <span className="flex gap-2">
-                            <button
-                              disabled={processandoId === r.id}
-                              onClick={() => aprovarRisco(r)}
-                              className="flex items-center gap-1 rounded-lg bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 hover:bg-green-200 dark:bg-green-950/40 dark:text-green-300"
+                        <div className="flex flex-col gap-3">
+                          <div>
+                            <label className="label">Título</label>
+                            <input
+                              className="input"
+                              value={edicao.titulo}
+                              onChange={(e) => setEdicao({ ...edicao, titulo: e.target.value })}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="label">Categoria</label>
+                              <select
+                                className="input"
+                                value={edicao.categoria}
+                                onChange={(e) => {
+                                  const novaCategoria = e.target.value;
+                                  setEdicao({
+                                    ...edicao,
+                                    categoria: novaCategoria,
+                                    tipo: TIPOS_POR_CATEGORIA[novaCategoria]?.[0]?.value ?? edicao.tipo,
+                                  });
+                                }}
+                              >
+                                {CATEGORIAS_SINISTRO.map((c) => (
+                                  <option key={c.value} value={c.value}>
+                                    {c.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="label">Tipo</label>
+                              <select
+                                className="input"
+                                value={edicao.tipo}
+                                onChange={(e) => setEdicao({ ...edicao, tipo: e.target.value })}
+                              >
+                                {(TIPOS_POR_CATEGORIA[edicao.categoria] ?? []).map((t) => (
+                                  <option key={t.value} value={t.value}>
+                                    {t.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="label">Nível de risco</label>
+                            <select
+                              className="input"
+                              value={edicao.nivelRisco}
+                              onChange={(e) => setEdicao({ ...edicao, nivelRisco: e.target.value })}
                             >
-                              <Check size={14} /> Confirmar
+                              {Object.entries(NIVEL_RISCO_LABELS).map(([v, label]) => (
+                                <option key={v} value={v}>
+                                  {v} — {label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="label">Descrição</label>
+                            <textarea
+                              className="input"
+                              rows={2}
+                              value={edicao.descricao}
+                              onChange={(e) => setEdicao({ ...edicao, descricao: e.target.value })}
+                            />
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button onClick={cancelarEdicao} className="btn-secondary text-xs">
+                              Cancelar
                             </button>
                             <button
                               disabled={processandoId === r.id}
-                              onClick={() => rejeitarRisco(r.id)}
-                              className="flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-950/40 dark:text-red-400"
+                              onClick={salvarEdicao}
+                              className="flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
                             >
-                              <Ban size={14} /> Rejeitar
+                              <Save size={14} /> Salvar
                             </button>
-                          </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={r.id} className="card">
+                        <p className="flex items-center gap-2 font-semibold">
+                          <Megaphone size={16} className="text-amber-700" />
+                          {r.titulo}
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {CATEGORIA_SINISTRO_LABELS[r.categoria] ?? r.categoria} — {r.tipo}
+                          {" — "}Informado por {r.nomeInformante} — {new Date(r.criadoEm).toLocaleString("pt-BR")}
+                          {r.rotaNome ? ` — ${r.rotaNome}` : ""}
+                          {r.kmReferencia != null ? ` — km ${r.kmReferencia}` : ""}
+                        </p>
+                        {r.descricao && <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">{r.descricao}</p>}
+                        {r.latitude != null && r.longitude != null && (
+                          <p className="mt-1 text-xs text-neutral-500">
+                            Localização: {r.latitude.toFixed(5)}, {r.longitude.toFixed(5)}
+                            {" — "}
+                            <a
+                              href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-semibold text-amber-700 hover:underline"
+                            >
+                              ver no mapa
+                            </a>
+                          </p>
                         )}
-                      </p>
-                    </div>
-                  ))}
+                        <p className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                          <span className="flex flex-wrap items-center gap-2 text-xs font-medium text-neutral-500">
+                            {STATUS_RISCO_INFORMADO_LABELS[r.status] ?? r.status}
+                            {publicadoSemRevisao(r, agora) && (
+                              <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300">
+                                <AlertTriangle size={12} /> publicado sem revisão
+                              </span>
+                            )}
+                          </span>
+                          {r.status === "pendente" && (
+                            <span className="flex gap-2">
+                              <button
+                                disabled={processandoId === r.id}
+                                onClick={() => aprovarRisco(r)}
+                                className="flex items-center gap-1 rounded-lg bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 hover:bg-green-200 dark:bg-green-950/40 dark:text-green-300"
+                              >
+                                <Check size={14} /> Confirmar
+                              </button>
+                              <button
+                                disabled={processandoId === r.id}
+                                onClick={() => iniciarEdicao(r)}
+                                className="flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                              >
+                                <Pencil size={14} /> Editar
+                              </button>
+                              <button
+                                disabled={processandoId === r.id}
+                                onClick={() => rejeitarRisco(r.id)}
+                                className="flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-950/40 dark:text-red-400"
+                              >
+                                <Ban size={14} /> Rejeitar
+                              </button>
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )
+                  )}
 
                 {dadosPagina.length === 0 && (
                   <p className="text-sm text-neutral-400">Nenhum registro encontrado.</p>

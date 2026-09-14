@@ -50,12 +50,15 @@ export default async function AdminDashboardPage() {
   let peregrinosCadastrados: PeregrinoLinha[] = [];
   let peregrinosAtivos: PeregrinoLinha[] = [];
   let peregrinacoesIniciadasHoje: PeregrinacaoLinha[] = [];
+  let peregrinacoesPlanejadas: PeregrinacaoLinha[] = [];
+  let peregrinacoesPlanejadasHoje: PeregrinacaoLinha[] = [];
   let peregrinacoesTerminadasHoje: PeregrinacaoLinha[] = [];
   let peregrinacoesConcluidasHoje: PeregrinacaoLinha[] = [];
   let peregrinacoesConcluidasTotal: PeregrinacaoLinha[] = [];
   let papCadastrados: PapLinha[] = [];
   let papAtivos: PapLinha[] = [];
   let papPendentes: PapLinha[] = [];
+  let papVinculados: PapLinha[] = [];
   let riscosCadastrados: RiscoLinha[] = [];
   let riscosInformados: RiscoInformadoLinha[] = [];
 
@@ -188,9 +191,11 @@ export default async function AdminDashboardPage() {
         id: p.id,
         nome: perfilPeregrino?.nome_completo ?? "—",
         local,
+        status: p.status,
         rotaNome: p.rota_id ? nomeDaRota.get(p.rota_id) ?? null : null,
         meioTransporte: (p.meio_transporte as MeioTransporte) ?? null,
         meioTransporteOutroDesc: p.meio_transporte_outro_desc,
+        dataInicioPrevista: p.data_inicio_prevista,
         dataInicio: p.data_inicio,
         dataFim: p.data_fim,
         checkinsCount: contagemCheckins.get(p.id) ?? 0,
@@ -200,6 +205,8 @@ export default async function AdminDashboardPage() {
 
     const todasLinhasPeregrinacao = peregrinacoes.map(linhaDaPeregrinacao);
     peregrinacoesIniciadasHoje = todasLinhasPeregrinacao.filter((p) => ehHoje(p.dataInicio));
+    peregrinacoesPlanejadas = todasLinhasPeregrinacao.filter((p) => p.status === "planejada");
+    peregrinacoesPlanejadasHoje = peregrinacoesPlanejadas.filter((p) => ehHoje(p.dataInicioPrevista));
     peregrinacoesTerminadasHoje = todasLinhasPeregrinacao.filter(
       (p) => p.dataFim && ehHoje(p.dataFim)
     );
@@ -216,6 +223,7 @@ export default async function AdminDashboardPage() {
         statusAprovacao: p.status_aprovacao,
         abertoAgora: p.aberto_agora,
         gerenteNome: p.gerente_id ? nomeDoGerente.get(p.gerente_id) ?? null : null,
+        vinculadoPreCadastro: p.pre_cadastro_id != null,
         criadoEm: p.criado_em,
       })
     );
@@ -223,6 +231,7 @@ export default async function AdminDashboardPage() {
     papCadastrados = papRows;
     papAtivos = papRows.filter((p) => p.abertoAgora && p.statusAprovacao === "aprovado");
     papPendentes = papRows.filter((p) => p.statusAprovacao === "pendente");
+    papVinculados = papRows.filter((p) => p.vinculadoPreCadastro);
   }
 
   return (
@@ -234,11 +243,14 @@ export default async function AdminDashboardPage() {
           peregrinosCadastrados={peregrinosCadastrados}
           peregrinosAtivos={peregrinosAtivos}
           peregrinacoesIniciadasHoje={peregrinacoesIniciadasHoje}
+          peregrinacoesPlanejadas={peregrinacoesPlanejadas}
+          peregrinacoesPlanejadasHoje={peregrinacoesPlanejadasHoje}
           peregrinacoesConcluidasHoje={peregrinacoesConcluidasHoje}
           peregrinacoesConcluidasTotal={peregrinacoesConcluidasTotal}
           papCadastrados={papCadastrados}
           papAtivos={papAtivos}
           papPendentes={papPendentes}
+          papVinculados={papVinculados}
           riscosCadastrados={riscosCadastrados}
           riscosInformados={riscosInformados}
         />

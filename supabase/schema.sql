@@ -1621,3 +1621,42 @@ create policy "compras_romaria_plus_select_own" on public.compras_romaria_plus f
   using (user_id = auth.uid());
 
 -- FIM DA MIGRATION 12
+-- =====================================================================
+-- MIGRATION 13 — Rodada 6: Painel admin (PAP com foto e ponto de
+-- referência, locais de risco com ponto de referência, QR code por PAP)
+-- =====================================================================
+
+-- PAP: foto do local (bucket de storage abaixo) e ponto de referência em
+-- texto livre (ex.: "em frente ao posto Shell"), preenchidos no cadastro
+-- pelo gerente de PAP ou pela administração.
+alter table public.pontos_apoio add column if not exists foto_url text;
+alter table public.pontos_apoio add column if not exists ponto_referencia text;
+
+-- Locais de risco (cadastro permanente da administração): mesmo campo de
+-- ponto de referência, para ajudar o peregrino a identificar o trecho.
+alter table public.pontos_risco add column if not exists ponto_referencia text;
+
+-- ---------------------------------------------------------------------
+-- STORAGE — bucket público para fotos de PAP
+-- ---------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('pap-fotos', 'pap-fotos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "pap_fotos_select_all" on storage.objects;
+create policy "pap_fotos_select_all" on storage.objects for select
+  using (bucket_id = 'pap-fotos');
+
+drop policy if exists "pap_fotos_insert_own" on storage.objects;
+create policy "pap_fotos_insert_own" on storage.objects for insert to authenticated
+  with check (bucket_id = 'pap-fotos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "pap_fotos_update_own" on storage.objects;
+create policy "pap_fotos_update_own" on storage.objects for update to authenticated
+  using (bucket_id = 'pap-fotos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "pap_fotos_delete_own" on storage.objects;
+create policy "pap_fotos_delete_own" on storage.objects for delete to authenticated
+  using (bucket_id = 'pap-fotos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- FIM DA MIGRATION 13
