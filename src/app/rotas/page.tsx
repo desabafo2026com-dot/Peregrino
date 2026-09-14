@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { LADO_RODOVIA_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert, Share2 } from "lucide-react";
-import type { PontoRisco, Rota, TrechoSeguranca } from "@/types/database";
+import type { PontoRisco, Rota } from "@/types/database";
 
 const DICAS_GERAIS = [
   "Caminhe sempre de frente para o tráfego quando não houver marginal ou acostamento largo.",
@@ -23,6 +23,12 @@ function riscoColor(nivel: number) {
   return "text-green-600";
 }
 
+function kmSentidoLabel(km: number | null, sentido: string | null) {
+  if (km == null) return "—";
+  const abrev = sentido ? SENTIDO_KM_ABREV[sentido] : null;
+  return `km ${km}${abrev ? ` ${abrev}` : ""}`;
+}
+
 export default async function RotasPage({
   searchParams,
 }: {
@@ -34,21 +40,24 @@ export default async function RotasPage({
   const rotas = (rotasData ?? []) as Rota[];
   const rotaAtual = rotas.find((r) => r.slug === rotaSlug) ?? rotas[0];
 
-  const [{ data: trechos }, { data: riscos }] = await Promise.all([
-    rotaAtual
-      ? supabase
-          .from("trechos_seguranca")
-          .select("*")
-          .eq("rota_id", rotaAtual.id)
-          .order("km_inicial")
-      : Promise.resolve({ data: [] }),
-    rotaAtual
-      ? supabase
-          .from("pontos_risco")
-          .select("*")
-          .or(`rota_id.eq.${rotaAtual.id},rota_id.is.null`)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const { data: riscos } = rotaAtual
+    ? await supabase
+        .from("pontos_risco")
+        .select("*")
+        .or(`rota_id.eq.${rotaAtual.id},rota_id.is.null`)
+    : { data: [] as PontoRisco[] };
+
+  // Ordem de leitura ao longo do trajeto: no Sentido Norte (São Paulo →
+  // Aparecida) o km da rodovia diminui conforme se avança; no Sentido Sul
+  // (Queluz/Rio → Aparecida) o km aumenta. Sem km cadastrado, fica por
+  // último.
+  const riscosOrdenados = [...((riscos ?? []) as PontoRisco[])].sort((a, b) => {
+    if (a.km_referencia == null) return 1;
+    if (b.km_referencia == null) return -1;
+    return rotaAtual?.slug === "sul"
+      ? a.km_referencia - b.km_referencia
+      : b.km_referencia - a.km_referencia;
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -58,9 +67,9 @@ export default async function RotasPage({
         <p className="text-sm text-neutral-500">
           Duas rotas até a Basílica de Aparecida: Norte (saindo de São Paulo,
           a mais procurada) e Sul (para quem vem do Rio de Janeiro, saindo de
-          Queluz-SP). Veja qual lado da rodovia seguir em cada trecho e onde
-          ficam os pontos de maior risco. Sempre siga também as orientações
-          da PRF no local.
+          Queluz-SP). Veja dicas de segurança e onde ficam os pontos de maior
+          risco em cada uma. Sempre siga também as orientações da PRF no
+          local.
         </p>
       </div>
 
@@ -99,53 +108,56 @@ export default async function RotasPage({
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">
-          Lado da rodovia por trecho — {rotaAtual?.nome ?? ""}
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
+          <TriangleAlert size={20} /> Pontos de risco ao longo da Rota — {rotaAtual?.nome ?? ""}
         </h2>
         <div className="card overflow-x-auto">
           <table className="w-full min-w-[500px] text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-neutral-500 dark:border-neutral-800">
-                <th className="pb-2 pr-4">Km</th>
-                <th className="pb-2 pr-4">Lado recomendado</th>
+                <th className="pb-2 pr-4">Km / sentido</th>
+                <th className="pb-2 pr-4">Local</th>
                 <th className="pb-2 pr-4">Risco</th>
-                <th className="pb-2">Observação</th>
+                <th className="pb-2">Observações</th>
               </tr>
             </thead>
             <tbody>
-              {(trechos as TrechoSeguranca[] | null)?.map((t) => (
-                <tr key={t.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+              {riscosOrdenados.map((r) => (
+                <tr key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="py-2 pr-4 whitespace-nowrap">
-                    {t.km_inicial} – {t.km_final}
+                    {kmSentidoLabel(r.km_referencia, r.sentido)}
                   </td>
-                  <td className="py-2 pr-4 font-medium">
-                    {LADO_RODOVIA_LABELS[t.lado_recomendado]}
-                  </td>
-                  <td className={`py-2 pr-4 font-medium ${riscoColor(t.nivel_risco)}`}>
-                    {NIVEL_RISCO_LABELS[t.nivel_risco]}
+                  <td className="py-2 pr-4 font-medium">{r.titulo}</td>
+                  <td className={`py-2 pr-4 font-medium ${riscoColor(r.nivel_risco)}`}>
+                    {NIVEL_RISCO_LABELS[r.nivel_risco]}
                   </td>
                   <td className="py-2 text-neutral-600 dark:text-neutral-300">
-                    {t.observacao}
+                    {r.descricao ?? "—"}
                   </td>
                 </tr>
               ))}
-              {!trechos?.length && (
+              {riscosOrdenados.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-4 text-center text-neutral-400">
-                    Nenhum trecho cadastrado ainda nesta rota.
+                    Nenhum ponto de risco cadastrado ainda nesta rota.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-xs text-neutral-400">
+          Lista baseada em relatos e cadastros da administração — pode não
+          cobrir todos os riscos reais da via. Sempre observe as condições do
+          local e siga as orientações da PRF.
+        </p>
       </section>
 
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
-          <TriangleAlert size={20} /> Pontos de maior risco
+          <TriangleAlert size={20} /> Mapa dos pontos de risco
         </h2>
-        <RiscoMapClient pontosRisco={(riscos ?? []) as PontoRisco[]} />
+        <RiscoMapClient pontosRisco={riscosOrdenados} />
       </section>
 
       <Link

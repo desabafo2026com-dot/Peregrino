@@ -130,15 +130,24 @@ export default function MapView({
     markersRef.current = [];
 
     pontosApoio.forEach((p) => {
+      // PAP marcado com uma barraca (tenda) verde — mais fácil de
+      // reconhecer de relance no mapa do que o antigo losango marrom.
       const el = document.createElement("div");
       el.style.cssText =
-        "width:28px;height:28px;border-radius:50% 50% 50% 0;background:#92400e;border:2px solid white;transform:rotate(-45deg);box-shadow:0 1px 3px rgba(0,0,0,.4)";
-      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        "width:30px;height:30px;border-radius:50%;background:#16a34a;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center";
+      el.innerHTML = `
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 21 14 3"/>
+          <path d="M20.5 21 10 3"/>
+          <path d="M15.5 21 12 15l-3.5 6"/>
+          <path d="M2 21h20"/>
+        </svg>`;
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([p.longitude, p.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px">
-              <span style="font-size:10px;letter-spacing:.05em;color:#92400e;font-weight:700">PAP</span><br/>
+              <span style="font-size:10px;letter-spacing:.05em;color:#16a34a;font-weight:700">PAP</span><br/>
               <strong>${p.nome}</strong><br/>
               ${p.cidade ? `${p.cidade}${p.sentido_pista ? ` — sentido ${p.sentido_pista === "sp" ? "São Paulo" : "Rio de Janeiro"}` : ""}<br/>` : ""}
               ${p.responsavel ? `Responsável: ${p.responsavel}<br/>` : ""}
