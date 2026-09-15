@@ -244,10 +244,14 @@ export interface Certificado {
 export type StatusCompraRomariaPlus = "pendente" | "pago" | "cancelado" | "estornado";
 
 // Compra do produto pago "Romaria Plus" (arte personalizada para
-// compartilhar), vinculada a um certificado já emitido. Todo insert/update
-// é feito pelo servidor (rotas /api/mercadopago/...) com a service role —
-// nunca diretamente pelo cliente, já que preço e status de pagamento não
-// podem depender de nada que o navegador envie.
+// compartilhar), vinculada a um certificado já emitido. O caminho normal de
+// insert/update é o servidor (rotas /api/mercadopago/...) com a service
+// role, já que preço e status de pagamento não podem depender de nada que o
+// navegador envie. Duas exceções, ambas via função SECURITY DEFINER (nunca
+// insert/update direto do cliente): resgatar_cupom_romaria_plus (Rodada 16,
+// cupom digitado pelo peregrino) e admin_liberar_romaria_plus_teste (Rodada
+// 16, acesso de teste do próprio admin) — as duas criam a compra já como
+// "pago", com valor_centavos = 0.
 export interface CompraRomariaPlus {
   id: string;
   certificado_id: string;
@@ -266,6 +270,20 @@ export interface CompraRomariaPlus {
   // permite à administração ver, baixar ou substituir (Rodada 15).
   foto_url: string | null;
   modelo: "classico" | "destaque" | null;
+}
+
+// Cupom de código para liberar a Romaria Plus gratuitamente (Rodada 16) —
+// gerado em lote pelo admin (quantidade pré-definida) para distribuir a
+// peregrinos, e resgatado por um deles digitando o código na página do
+// certificado (RPC resgatar_cupom_romaria_plus).
+export interface CupomRomariaPlus {
+  id: string;
+  codigo: string;
+  criado_por: string | null;
+  usado_por: string | null;
+  compra_id: string | null;
+  criado_em: string;
+  usado_em: string | null;
 }
 
 // Doação livre ("Ajude o desenvolvedor", Rodada 13) — sem login, valor
