@@ -32,15 +32,29 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
   const [erroCupom, setErroCupom] = useState<string | null>(null);
   const [liberandoAdmin, setLiberandoAdmin] = useState(false);
 
-  const pendente = compra?.status === "pendente";
+  // Ignora um status "pendente" travado (ex.: a pessoa desistiu do
+  // pagamento no Mercado Pago e voltou, ou fechou a aba) depois de ~1
+  // minuto tentando confirmar sem sucesso — sem isso, a tela ficava presa
+  // em "Confirmando pagamento..." para sempre, sem voltar para a opção de
+  // comprar de novo (bug relatado na Rodada 18).
+  const [ignorarPendente, setIgnorarPendente] = useState(false);
+  const pendente = compra?.status === "pendente" && !ignorarPendente;
 
   // Enquanto o pagamento estiver pendente (ex.: acabou de voltar do
   // Mercado Pago), consulta o status a cada poucos segundos — a confirmação
   // real só chega quando o webhook (do lado do servidor) processa o
-  // pagamento, então aqui só ficamos de olho no que já está gravado.
+  // pagamento, então aqui só ficamos de olho no que já está gravado. Depois
+  // de ~20 tentativas (~1 minuto), desiste de esperar e volta sozinho para
+  // a tela de compra.
   useEffect(() => {
     if (!pendente || !compra) return;
-    if (tentativas >= 15) return;
+    // O setState de desistência acontece dentro do próprio setTimeout (não
+    // direto no corpo do efeito) para não disparar um re-render em cascata
+    // síncrono durante a fase de efeitos.
+    if (tentativas >= 20) {
+      const timer = setTimeout(() => setIgnorarPendente(true), 0);
+      return () => clearTimeout(timer);
+    }
     const supabase = createClient();
     const timer = setTimeout(async () => {
       const { data } = await supabase
@@ -147,16 +161,17 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
   return (
     <div className="card text-center">
       <Sparkles className="mx-auto mb-2 text-amber-700" size={24} />
-      <h3 className="mb-1 font-bold text-amber-800 dark:text-amber-500">Romaria Plus</h3>
+      <h3 className="mb-1 font-bold text-amber-800 dark:text-amber-500">Certificado Plus + arte de 5 fotos</h3>
       <p className="mb-3 text-sm text-neutral-500">
         Dá direito a um <strong>Certificado Plus</strong> (a versão com a
-        arte de pergaminho) e à edição de uma foto sua numa arte
-        personalizada, com os dados reais desta peregrinação — pronta para
-        compartilhar nas redes.
+        arte de pergaminho) e à edição de até <strong>5 fotos suas</strong>{" "}
+        em artes personalizadas, com os dados reais desta peregrinação —
+        prontas para baixar ou compartilhar nas redes, uma de cada vez, no
+        seu tempo.
       </p>
       {erro && <p className="mb-2 text-sm text-red-600">{erro}</p>}
       <button onClick={comprar} disabled={loading} className="btn-primary">
-        {loading ? "Abrindo pagamento..." : `Comprar por ${VALOR_LABEL}`}
+        {loading ? "Abrindo pagamento..." : `Adquirir Certificado Plus + arte de 5 fotos — ${VALOR_LABEL}`}
       </button>
 
       {cupomAberto ? (

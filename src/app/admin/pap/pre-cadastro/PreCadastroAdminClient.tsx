@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, MapPinned, MapPin, CheckCircle2 } from "lucide-react";
+import { Search, MapPinned, MapPin, CheckCircle2, CalendarDays } from "lucide-react";
 import { SENTIDO_PISTA_LABELS } from "@/lib/constants";
 import type { PapPreCadastro } from "@/types/database";
 
@@ -55,13 +55,26 @@ export default function PreCadastroAdminClient({ itensIniciais }: { itensIniciai
                     <CheckCircle2 size={12} /> Posição exata marcada
                   </p>
                 )}
+                <p className="text-xs text-neutral-500">
+                  {item.datas_funcionamento?.length
+                    ? `${item.datas_funcionamento.length} data(s) marcada(s) no calendário`
+                    : "Sem calendário marcado ainda"}
+                </p>
               </div>
-              <Link
-                href={`/admin/pap/pre-cadastro/${item.id}/posicao`}
-                className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              >
-                <MapPin size={14} /> {posicionado ? "Reposicionar" : "Marcar posição"}
-              </Link>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Link
+                  href={`/admin/pap/pre-cadastro/${item.id}/datas`}
+                  className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                >
+                  <CalendarDays size={14} /> Datas
+                </Link>
+                <Link
+                  href={`/admin/pap/pre-cadastro/${item.id}/posicao`}
+                  className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                >
+                  <MapPin size={14} /> {posicionado ? "Reposicionar" : "Marcar posição"}
+                </Link>
+              </div>
             </div>
           );
         })}

@@ -56,6 +56,7 @@ function distanciaKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 interface PeregrinacaoConcluida extends Peregrinacao {
   temCertificado: boolean;
   certificadoId: string | null;
+  plusPago: boolean;
 }
 
 interface Props {
@@ -979,10 +980,15 @@ export default function PeregrinacaoClient({
                         certificado emitido. */}
                     {p.certificadoId && (
                       <a
-                        href={`/certificado#romaria-plus-${p.certificadoId}`}
+                        href={
+                          p.plusPago
+                            ? `/certificado/plus/${p.certificadoId}`
+                            : `/certificado#romaria-plus-${p.certificadoId}`
+                        }
                         className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-700 hover:underline dark:text-amber-500"
                       >
-                        <Sparkles size={12} /> Certificado Plus →
+                        <Sparkles size={12} />
+                        {p.plusPago ? "Minhas fotos da Romaria Plus →" : "Adquirir Certificado Plus + arte de 5 fotos →"}
                       </a>
                     )}
                   </div>

@@ -92,29 +92,31 @@ export default async function Home() {
       </section>
 
       {stats && (
-        // flex-1 (em vez de largura fixa) faz os 4 cards crescerem juntos
-        // para preencher a linha toda, sem sobrar vão nas laterais — mesma
-        // lógica aplicada aos cards do painel admin.
-        <section className="flex flex-wrap gap-3 text-center">
-          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
+        // Grid de 2 colunas (4 no celular maior/tablet+) em vez do
+        // flex-wrap anterior — com 4 cards, o flex-wrap deixava o último
+        // sozinho numa segunda linha e esticado (flex-1) em várias larguras
+        // de tela intermediárias, ficando desalinhado com os de cima. Um
+        // grid de colunas fixas sempre fecha as linhas por igual.
+        <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+          <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Users size={20} /> {stats.peregrinos_ativos}
             </p>
             <p className="text-xs text-neutral-500">peregrinos ativos</p>
           </div>
-          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
+          <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <CheckCircle2 size={20} /> {stats.checkins_total}
             </p>
             <p className="text-xs text-neutral-500">check-ins realizados</p>
           </div>
-          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
+          <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <MapPin size={20} /> {stats.pontos_apoio_ativos}
             </p>
             <p className="text-xs text-neutral-500">PAP ativos</p>
           </div>
-          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
+          <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Award size={20} /> {stats.peregrinacoes_concluidas}
             </p>

@@ -234,6 +234,7 @@ export default async function MapaPage() {
       sentido_pista: p.sentido_pista,
       lat: posicaoFinal.lat,
       lng: posicaoFinal.lng,
+      datas_funcionamento: p.datas_funcionamento,
     });
   }
 

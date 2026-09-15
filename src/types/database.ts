@@ -128,6 +128,11 @@ export interface PapPreCadastro {
   // preenchida, substitui a aproximação por cidade usada em /mapa.
   latitude: number | null;
   longitude: number | null;
+  // Calendário estruturado (Rodada 18) — mesmo uso de
+  // PontoApoio.datas_funcionamento: só conta como ativo (mapa/contador da
+  // home) nas datas marcadas aqui. Populado a partir de
+  // data_funcionamento_texto; a administração pode revisar pelo calendário.
+  datas_funcionamento: string[];
   criado_em: string;
 }
 
@@ -281,10 +286,31 @@ export interface CompraRomariaPlus {
   // permite à administração ver, baixar ou substituir (Rodada 15). "painel"
   // e "moldura" são os dois modelos novos da Rodada 17.
   foto_url: string | null;
+  // A partir da Rodada 18, a foto/modelo/ajuste de cada arte fica em
+  // romaria_plus_fotos (até 5 por compra) — estes três campos continuam
+  // aqui só para compras antigas que ainda não foram migradas na tela
+  // (a migration 24 já copia o que existir para a foto de índice 1).
   modelo: "classico" | "destaque" | "painel" | "moldura" | null;
   // Posição/tamanho customizados do texto, só relevante para "classico" e
   // "painel" (Rodada 17) — null usa a posição padrão do modelo.
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
+}
+
+// Uma das até 5 artes/fotos que um peregrino com Romaria Plus pode criar
+// para o mesmo certificado (Rodada 18) — cada uma com seu próprio modelo,
+// ajuste de posição e contadores de download/compartilhamento.
+export interface RomariaPlusFoto {
+  id: string;
+  compra_id: string;
+  user_id: string;
+  indice: number;
+  foto_url: string;
+  modelo: "classico" | "destaque" | "painel" | "moldura";
+  ajuste_overlay: AjusteOverlayRomariaPlus | null;
+  contador_downloads: number;
+  contador_compartilhamentos: number;
+  criado_em: string;
+  atualizado_em: string;
 }
 
 // Cupom de código para liberar a Romaria Plus gratuitamente (Rodada 16) —

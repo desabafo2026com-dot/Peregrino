@@ -73,17 +73,33 @@ export default async function PeregrinacaoPage() {
     .eq("user_id", user.id);
 
   // Mapa peregrinacao_id -> certificado_id — usado tanto para "Ver
-  // certificado" quanto para o link "Certificado Plus →" (Rodada 16, movido
+  // certificado" quanto para o link do Certificado Plus (Rodada 16, movido
   // para esta lista) de cada peregrinação concluída.
   const certificadoIdPorPeregrinacao = new Map<string, string>();
   (certificadosData ?? []).forEach((c) => {
     certificadoIdPorPeregrinacao.set(c.peregrinacao_id as string, c.id as string);
   });
 
+  // Quais desses certificados já têm a Romaria Plus paga (Rodada 18) — o
+  // link muda de "adquirir" para "ver minhas fotos" quando já paga, em vez
+  // de mandar de novo para a tela de compra.
+  const idsCertificados = Array.from(certificadoIdPorPeregrinacao.values());
+  const { data: comprasPagas } = idsCertificados.length
+    ? await supabase
+        .from("compras_romaria_plus")
+        .select("certificado_id")
+        .eq("status", "pago")
+        .in("certificado_id", idsCertificados)
+    : { data: [] as { certificado_id: string }[] | null };
+  const certificadosComPlusPago = new Set((comprasPagas ?? []).map((c) => c.certificado_id as string));
+
   const peregrinacoesConcluidas = (concluidasData ?? []).map((p) => ({
     ...(p as Peregrinacao),
     temCertificado: certificadoIdPorPeregrinacao.has(p.id as string),
     certificadoId: certificadoIdPorPeregrinacao.get(p.id as string) ?? null,
+    plusPago: certificadoIdPorPeregrinacao.has(p.id as string)
+      ? certificadosComPlusPago.has(certificadoIdPorPeregrinacao.get(p.id as string) as string)
+      : false,
   }));
 
   // PAPs ativos hoje (para o módulo de mapa em "Minha peregrinação") — só

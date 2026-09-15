@@ -5,10 +5,14 @@ import { usePathname } from "next/navigation";
 import { Home, MapPin, Route, Footprints, ShieldCheck, MapPinPlus } from "lucide-react";
 import { useAuthRole } from "./AuthRoleProvider";
 
+// Ordem alterada na Rodada 18 (a pedido do usuário): "Mapa" à esquerda e
+// "Minha peregrinação" ao centro — com o item "Adm" (só para
+// administradores) a lista fica com 5 posições, e "Minha peregrinação" cai
+// exatamente no meio. Os dois ganham destaque de cor permanente.
 const LINKS_PEREGRINO = [
   { href: "/", label: "Início", icon: Home },
+  { href: "/mapa", label: "Mapa", icon: MapPin, destaque: true },
   { href: "/peregrinacao", label: "Minha peregrinação", icon: Footprints, destaque: true },
-  { href: "/mapa", label: "Mapa", icon: MapPin },
   { href: "/rotas", label: "Rotas", icon: Route },
 ];
 

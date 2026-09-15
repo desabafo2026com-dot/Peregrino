@@ -13,17 +13,31 @@ export default async function AdminRomariaPlusPage() {
     .eq("status", "pago")
     .order("pago_em", { ascending: false });
 
+  const compras = (data ?? []) as CompraComCertificado[];
+
+  // Só a contagem de fotos por compra (romaria_plus_fotos_select_admin,
+  // migration 24) — a pedido do usuário, a administração não vê a imagem
+  // de ninguém, só o registro de quantas fotos cada um já criou.
+  const idsCompras = compras.map((c) => c.id);
+  const { data: fotos } = idsCompras.length
+    ? await supabase.from("romaria_plus_fotos").select("compra_id").in("compra_id", idsCompras)
+    : { data: [] as { compra_id: string }[] | null };
+  const contagemPorCompra = new Map<string, number>();
+  (fotos ?? []).forEach((f) => {
+    contagemPorCompra.set(f.compra_id as string, (contagemPorCompra.get(f.compra_id as string) ?? 0) + 1);
+  });
+
   return (
     <div>
       <VoltarButton href="/admin" />
-      <h2 className="mb-1 text-xl font-bold">Romaria Plus — fotos compradas</h2>
+      <h2 className="mb-1 text-xl font-bold">Romaria Plus — compras</h2>
       <p className="mb-6 text-sm text-neutral-500">
-        Compras já pagas, com a foto e o modelo escolhidos pelo peregrino para
-        a arte da Romaria Plus (cada compra vale só para o ano da própria
-        peregrinação). É possível baixar a foto original ou substituí-la —
-        por exemplo, se for inadequada ou de baixa qualidade.
+        Registro de quem adquiriu o Certificado Plus + arte de 5 fotos: data da compra e quantas
+        fotos cada um já criou. Por privacidade, a administração não tem acesso às fotos em si.
       </p>
-      <RomariaPlusAdminClient comprasIniciais={(data ?? []) as CompraComCertificado[]} />
+      <RomariaPlusAdminClient
+        comprasIniciais={compras.map((c) => ({ ...c, quantidadeFotos: contagemPorCompra.get(c.id) ?? 0 }))}
+      />
     </div>
   );
 }

@@ -113,7 +113,12 @@ export default function DoacaoCard() {
       <h3 className="mb-1 font-bold text-amber-800 dark:text-amber-500">
         Ajude o desenvolvedor a manter e melhorar o app
       </h3>
-      <p className="mb-4 text-sm text-neutral-500">
+      {/* text-align inline (não só a classe do pai) porque uma regra global
+          "p { text-align: justify }" (globals.css, fora de qualquer @layer)
+          sempre vence uma classe utilitária do Tailwind como text-center,
+          não importa a especificidade — mesmo bug encontrado e corrigido
+          nos títulos da Romaria Plus na Rodada 17. */}
+      <p className="mb-4 text-sm text-neutral-500" style={{ textAlign: "center" }}>
         Este app é mantido de forma independente. Se ele ajudou na sua caminhada, considere
         contribuir com qualquer valor.
       </p>
@@ -133,10 +138,15 @@ export default function DoacaoCard() {
           </button>
         ))}
       </div>
-      <div className="mx-auto mb-3 flex max-w-xs items-center gap-2">
-        <span className="text-sm font-medium text-neutral-500">R$</span>
+      {/* R$ embutido no próprio campo (em vez de um span solto ao lado) e
+          largura reduzida — antes o input ocupava a largura toda do
+          container só para digitar um número curto. */}
+      <div className="mx-auto mb-3 flex w-fit items-center overflow-hidden rounded-lg border border-neutral-300 dark:border-neutral-700">
+        <span className="border-r border-neutral-300 bg-neutral-50 px-2.5 py-2 text-sm font-medium text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900">
+          R$
+        </span>
         <input
-          className="input text-center"
+          className="w-24 bg-transparent px-2.5 py-2 text-center text-sm outline-none"
           inputMode="decimal"
           placeholder="Outro valor"
           value={valor}

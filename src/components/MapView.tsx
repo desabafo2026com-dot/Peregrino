@@ -61,6 +61,10 @@ export interface PapPreCadastroMapa {
   sentido_pista: string | null;
   lat: number;
   lng: number;
+  // Calendário de datas ativas (Rodada 18) — mesmo tratamento já dado aos
+  // PAP já vinculados (ver ativoHoje abaixo): sem data marcada, ou fora do
+  // período marcado, o popup avisa que está fora do funcionamento hoje.
+  datas_funcionamento?: string[];
 }
 
 interface Props {
@@ -318,6 +322,11 @@ export default function MapView({
                 p.sentido_pista ? ` (${SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista})` : ""
               }<br/>
               <span style="color:#737373">Localização estimada pelo km da rodovia — ainda sem gerente vinculado. Assim que um gerente vincular e a administração aprovar, este ponto passa a ser um PAP com localização exata.</span>
+              ${
+                !ativoHoje(p.datas_funcionamento)
+                  ? `<br/><span style="color:#dc2626;font-weight:600">Fora do período de funcionamento hoje</span>`
+                  : `<br/><span style="color:#16a34a;font-weight:600">Ativo hoje</span>`
+              }
               ${
                 permitirArrastarPapPreCadastro
                   ? `<br/><span style="color:#92400e;font-weight:600">Arraste o marcador para ajustar a posição exata.</span>`

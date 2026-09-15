@@ -18,14 +18,14 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
 
-// Fonte própria para o título — auto-hospedada (pacote @fontsource, sem
-// depender do Google Fonts em tempo de execução nem de build) em vez da
-// fonte serifada genérica do sistema usada até a Rodada 16, para dar ao
-// título "Romaria para Aparecida" uma aparência mais elegante/editorial,
-// como pedido pelo usuário na Rodada 17.
-import "@fontsource/playfair-display/700.css";
-import "@fontsource/playfair-display/800.css";
-import "@fontsource/playfair-display/700-italic.css";
+// Fonte própria para o título — auto-hospedada como arquivos estáticos em
+// /public/fonts (ver src/styles/fonte-titulo-romaria.css) em vez da fonte
+// serifada genérica do sistema usada até a Rodada 16, para dar ao título
+// "Romaria para Aparecida" uma aparência mais elegante/editorial, como
+// pedido pelo usuário na Rodada 17. Trocado do pacote npm @fontsource para
+// arquivos estáticos na Rodada 18 depois que o deploy quebrou por falta do
+// pacote (o upload manual de arquivos não instala dependências novas).
+import "@/styles/fonte-titulo-romaria.css";
 
 const FONTE_TITULO = '"Playfair Display", serif';
 
@@ -185,24 +185,36 @@ function PainelAjustavel({
 
 interface Props {
   certificado: Certificado;
-  // Presentes só quando a compra já está paga (ver certificado/page.tsx) —
-  // usados para persistir a foto/modelo escolhidos no servidor (Rodada 15:
-  // antes só existiam na memória do navegador, então a administração não
-  // tinha como ver/baixar/editar nada).
+  // Presentes só quando a compra já está paga (ver
+  // certificado/plus/[certificadoId]/page.tsx) — usados para persistir a
+  // foto/modelo escolhidos no servidor (Rodada 15: antes só existiam na
+  // memória do navegador). A partir da Rodada 18 cada compra pode ter até 5
+  // fotos independentes (uma arte por foto) — `indice` (1 a 5) identifica
+  // qual delas este componente está editando; `onSalvo` avisa o componente
+  // pai (a galeria) sempre que uma foto/modelo/ajuste é salvo com sucesso,
+  // para atualizar a lista de slots preenchidos.
   compraId: string;
   userId: string;
+  indice: number;
   fotoUrlInicial?: string | null;
   modeloInicial?: Modelo | null;
   ajusteInicial?: AjusteOverlayRomariaPlus | null;
+  contadorDownloadsInicial?: number;
+  contadorCompartilhamentosInicial?: number;
+  onSalvo?: (dados: { indice: number; foto_url: string; modelo: Modelo; ajuste_overlay: AjusteOverlayRomariaPlus | null }) => void;
 }
 
 export default function RomariaPlusView({
   certificado: c,
   compraId,
   userId,
+  indice,
   fotoUrlInicial = null,
   modeloInicial = null,
   ajusteInicial = null,
+  contadorDownloadsInicial = 0,
+  contadorCompartilhamentosInicial = 0,
+  onSalvo,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -223,6 +235,8 @@ export default function RomariaPlusView({
   const [gerando, setGerando] = useState<"baixar" | "compartilhar" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [avisoSalvar, setAvisoSalvar] = useState<string | null>(null);
+  const [contadorDownloads, setContadorDownloads] = useState(contadorDownloadsInicial);
+  const [contadorCompartilhamentos, setContadorCompartilhamentos] = useState(contadorCompartilhamentosInicial);
 
   const infoModelo = MODELOS.find((m) => m.id === modelo) ?? MODELOS[0];
 
@@ -244,8 +258,9 @@ export default function RomariaPlusView({
 
   // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo e o
   // ajuste de posição/tamanho escolhidos, via a função segura
-  // "salvar_foto_romaria_plus" (só funciona para a própria compra, já paga
-  // — ver migration 21/23).
+  // "salvar_foto_romaria_plus_slot" (só funciona para a própria compra, já
+  // paga, e sempre para o slot/índice desta foto especificamente — Rodada
+  // 18: até 5 fotos independentes por compra, em vez de uma só).
   async function persistirFoto(modeloParaSalvar: Modelo, ajusteParaSalvar: AjusteOverlayRomariaPlus | null) {
     setAvisoSalvar(null);
     try {
@@ -253,23 +268,39 @@ export default function RomariaPlusView({
       let url = fotoRemotaRef.current;
       const arquivo = arquivoPendenteRef.current;
       if (arquivo) {
-        url = await enviarFotoParaStorage(`${userId}/${compraId}.jpg`, arquivo);
+        url = await enviarFotoParaStorage(`${userId}/${compraId}/${indice}.jpg`, arquivo);
         fotoRemotaRef.current = url;
         arquivoPendenteRef.current = null;
       }
       if (!url) return;
-      const { error: erroRpc } = await supabase.rpc("salvar_foto_romaria_plus", {
+      const { error: erroRpc } = await supabase.rpc("salvar_foto_romaria_plus_slot", {
         p_compra_id: compraId,
+        p_indice: indice,
         p_foto_url: url,
         p_modelo: modeloParaSalvar,
         p_ajuste_overlay: ajusteParaSalvar,
       });
       if (erroRpc) throw erroRpc;
+      onSalvo?.({ indice, foto_url: url, modelo: modeloParaSalvar, ajuste_overlay: ajusteParaSalvar });
     } catch {
       setAvisoSalvar(
         "Não foi possível salvar a foto no servidor agora — ainda dá para baixar/compartilhar normalmente, mas pode ser preciso escolher a foto de novo depois."
       );
     }
+  }
+
+  // Contador de download/compartilhamento desta foto específica — chamado
+  // só depois de a arte já ter sido gerada com sucesso; falha aqui não
+  // interrompe o download/compartilhamento em si (só não conta a estatística).
+  function registrarEvento(evento: "download" | "compartilhamento") {
+    if (evento === "download") setContadorDownloads((n) => n + 1);
+    else setContadorCompartilhamentos((n) => n + 1);
+    const supabase = createClient();
+    void supabase.rpc("registrar_evento_foto_romaria_plus", {
+      p_compra_id: compraId,
+      p_indice: indice,
+      p_evento: evento,
+    });
   }
 
   // Salva a posição/tamanho só depois de a pessoa parar de mexer por um
@@ -339,9 +370,10 @@ export default function RomariaPlusView({
       const dataUrl = await gerarPng();
       if (!dataUrl) return;
       const link = document.createElement("a");
-      link.download = `romaria-plus-${c.codigo}.png`;
+      link.download = `romaria-plus-${c.codigo}-${indice}.png`;
       link.href = dataUrl;
       link.click();
+      registrarEvento("download");
     } catch {
       setErro("Não foi possível gerar a arte agora. Tente novamente.");
     } finally {
@@ -357,7 +389,7 @@ export default function RomariaPlusView({
       const dataUrl = await gerarPng();
       if (!dataUrl) return;
       const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], `romaria-plus-${c.codigo}.png`, { type: "image/png" });
+      const file = new File([blob], `romaria-plus-${c.codigo}-${indice}.png`, { type: "image/png" });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
           files: [file],
@@ -370,6 +402,7 @@ export default function RomariaPlusView({
         link.href = dataUrl;
         link.click();
       }
+      registrarEvento("compartilhamento");
     } catch {
       // Cancelado pelo usuário ou sem suporte — sem problema.
     } finally {
@@ -731,6 +764,13 @@ export default function RomariaPlusView({
                 <RefreshCw size={16} /> Trocar foto
               </button>
             </div>
+            {(contadorDownloads > 0 || contadorCompartilhamentos > 0) && (
+              <p className="text-xs text-neutral-400">
+                {contadorDownloads > 0 && `Baixada ${contadorDownloads}x`}
+                {contadorDownloads > 0 && contadorCompartilhamentos > 0 && " · "}
+                {contadorCompartilhamentos > 0 && `Compartilhada ${contadorCompartilhamentos}x`}
+              </p>
+            )}
             <p className="flex items-center gap-1 text-xs text-neutral-400">
               <Sparkle size={12} className="shrink-0" /> Dica: o modelo &quot;Moldura dourada&quot; nunca cobre a
               foto — o texto sempre fica numa área própria.

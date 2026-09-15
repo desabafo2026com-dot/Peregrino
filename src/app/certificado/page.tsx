@@ -1,8 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
-import CertificadoView from "@/components/CertificadoView";
-import RomariaPlusView from "@/components/RomariaPlusView";
 import RomariaPlusCompra from "@/components/RomariaPlusCompra";
 import VoltarButton from "@/components/VoltarButton";
 import type { Certificado, CompraRomariaPlus } from "@/types/database";
@@ -82,17 +82,15 @@ export default async function CertificadoPage() {
             <div id={`romaria-plus-${c.id}`} className="mt-2 flex scroll-mt-6 flex-col gap-4 border-t border-dashed border-amber-200 pt-6 dark:border-amber-900">
               <h2 className="text-center text-lg font-bold text-amber-800 dark:text-amber-500">Certificado Plus</h2>
               {pago && compra ? (
-                <>
-                  <CertificadoView certificado={c} />
-                  <RomariaPlusView
-                    certificado={c}
-                    compraId={compra.id}
-                    userId={user.id}
-                    fotoUrlInicial={compra.foto_url}
-                    modeloInicial={compra.modelo}
-                    ajusteInicial={compra.ajuste_overlay}
-                  />
-                </>
+                // A partir da Rodada 18 a arte de pergaminho e o editor das
+                // até 5 fotos ficam numa página própria, separada deste
+                // certificado grátis (antes vinham embutidos aqui mesmo).
+                <Link
+                  href={`/certificado/plus/${c.id}`}
+                  className="card flex items-center justify-center gap-2 text-center font-semibold text-amber-800 transition hover:border-amber-300 dark:text-amber-500"
+                >
+                  <Sparkles size={18} /> Minhas fotos da Romaria Plus →
+                </Link>
               ) : (
                 <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} isAdmin={isAdmin} />
               )}
