@@ -258,6 +258,14 @@ export interface CompraRomariaPlus {
   mp_payment_id: string | null;
   criado_em: string;
   pago_em: string | null;
+  // Ano de conclusão da peregrinação do certificado vinculado — trava a
+  // edição da foto a este ano específico (Rodada 15).
+  ano: number | null;
+  // Foto/modelo escolhidos pelo peregrino, agora persistidos (bucket
+  // romaria-plus-fotos) em vez de existirem só na memória do navegador —
+  // permite à administração ver, baixar ou substituir (Rodada 15).
+  foto_url: string | null;
+  modelo: "classico" | "destaque" | null;
 }
 
 // Doação livre ("Ajude o desenvolvedor", Rodada 13) — sem login, valor
