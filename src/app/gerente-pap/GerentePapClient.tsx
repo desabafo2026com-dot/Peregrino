@@ -8,6 +8,7 @@ import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon, Pencil } f
 import { STATUS_PAP_LABELS } from "@/lib/constants";
 import PapForm, { type PapFormDados } from "@/components/PapForm";
 import PapPreCadastroBusca from "@/components/PapPreCadastroBusca";
+import PapQrCode from "@/components/PapQrCode";
 import type { GerentePap, PontoApoio, PapPreCadastro } from "@/types/database";
 
 const STATUS_PAP_COLOR: Record<string, string> = {
@@ -27,6 +28,10 @@ export default function GerentePapClient({
   const router = useRouter();
   const [pontos, setPontos] = useState(pontosIniciais);
   const [preCadastro, setPreCadastro] = useState<PapPreCadastro | null | undefined>(undefined);
+  // Depois de cadastrar (ou vincular) o primeiro PAP, mostramos uma tela de
+  // sucesso com o QR code para imprimir antes de ir para a lista normal —
+  // "vinculado" só quando os dados vieram da base pública (preCadastro).
+  const [sucesso, setSucesso] = useState<{ ponto: PontoApoio; vinculado: boolean } | null>(null);
 
   async function cadastrarPrimeiroPap(dados: PapFormDados) {
     if (dados.pre_cadastro_id) {
@@ -54,9 +59,15 @@ export default function GerentePapClient({
       .select()
       .single();
     if (error) return { error: error.message };
-    setPontos((prev) => [data as PontoApoio, ...prev]);
-    router.refresh();
+    setSucesso({ ponto: data as PontoApoio, vinculado: !!dados.pre_cadastro_id });
     return {};
+  }
+
+  function concluirSucesso() {
+    if (!sucesso) return;
+    setPontos((prev) => [sucesso.ponto, ...prev]);
+    setSucesso(null);
+    router.refresh();
   }
 
   async function excluir(id: string) {
@@ -93,6 +104,30 @@ export default function GerentePapClient({
     );
   }
 
+  if (sucesso) {
+    const origem = typeof window !== "undefined" ? window.location.origin : "";
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="card flex flex-col items-center gap-2 border-green-200 bg-green-50 text-center dark:border-green-900 dark:bg-green-950/30">
+          <CheckCircle2 className="text-green-600" size={32} />
+          <h2 className="text-lg font-bold text-green-800 dark:text-green-400">
+            {sucesso.vinculado ? "PAP vinculado com sucesso!" : "PAP cadastrado com sucesso!"}
+          </h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-300">
+            Ele fica pendente até um administrador aprovar a divulgação no mapa. Enquanto isso,
+            você já pode imprimir o cartaz com QR code abaixo e deixar pronto no local — assim que
+            a divulgação for aprovada, o código passa a mostrar as informações do seu PAP para
+            qualquer peregrino que escanear.
+          </p>
+        </div>
+        <PapQrCode ponto={sucesso.ponto} url={`${origem}/pap/${sucesso.ponto.id}`} />
+        <button onClick={concluirSucesso} className="btn-primary">
+          Continuar
+        </button>
+      </div>
+    );
+  }
+
   if (pontos.length === 0) {
     if (preCadastro === undefined) {
       return (
@@ -117,7 +152,7 @@ export default function GerentePapClient({
           <button
             type="button"
             onClick={() => setPreCadastro(undefined)}
-            className="mb-4 text-xs font-medium text-amber-700"
+            className="mb-4 text-xs font-medium text-amber-700 dark:text-amber-500"
           >
             ← Escolher outro da lista pública
           </button>

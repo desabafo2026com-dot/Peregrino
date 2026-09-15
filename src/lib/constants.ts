@@ -166,6 +166,11 @@ export const CIDADES_DUTRA_SP_QUELUZ: string[] = [
   "Cachoeira Paulista",
   "Canas",
   "Queluz",
+  // Guararema e Silveiras entraram no trajeto de referência na Migration 18
+  // (pontos_checkin) — precisam estar aqui também para o gerente conseguir
+  // selecionar a cidade certa ao vincular um PAP pré-cadastrado nelas.
+  "Guararema",
+  "Silveiras",
 ];
 
 export const DIAS_SEMANA_OPTIONS: { value: string; label: string; abrev: string }[] = [

@@ -178,7 +178,7 @@ export default function MapView({
         .setLngLat([p.longitude, p.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
-            <div style="font-family:sans-serif;max-width:220px">
+            <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               <span style="font-size:10px;letter-spacing:.05em;color:#16a34a;font-weight:700">PAP</span><br/>
               <strong>${p.nome}</strong><br/>
               ${p.cidade ? `${p.cidade}${p.sentido_pista ? ` — sentido ${p.sentido_pista === "sp" ? "Norte" : "Sul"}` : ""}<br/>` : ""}
@@ -221,7 +221,7 @@ export default function MapView({
         .setLngLat([r.longitude, r.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
-            <div style="font-family:sans-serif;max-width:220px">
+            <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               <strong style="color:${cor}">🚩 ${r.titulo}</strong><br/>
               ${kmSentidoLabel(r.km_referencia, r.sentido) ? `${kmSentidoLabel(r.km_referencia, r.sentido)}<br/>` : ""}
               ${r.descricao ?? ""}<br/>
@@ -255,7 +255,7 @@ export default function MapView({
         .setLngLat([a.longitude, a.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
-            <div style="font-family:sans-serif;max-width:220px">
+            <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               <span style="font-size:10px;letter-spacing:.05em;color:#ea580c;font-weight:700">${
                 CATEGORIA_SINISTRO_LABELS[a.categoria] ?? a.categoria
               } — ${confirmado ? "CONFIRMADO" : "NÃO CONFIRMADO"}</span><br/>
@@ -275,7 +275,11 @@ export default function MapView({
         "width:16px;height:16px;border-radius:50%;background:#2563eb;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4)";
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([p.longitude, p.latitude])
-        .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML("Peregrino em caminhada"))
+        .setPopup(
+          new maplibregl.Popup({ offset: 12 }).setHTML(
+            '<span style="color:#1f1f1f">Peregrino em caminhada</span>'
+          )
+        )
         .addTo(map);
       markersRef.current.push(marker);
     });
@@ -298,7 +302,7 @@ export default function MapView({
         .setLngLat([p.lng, p.lat])
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
-            <div style="font-family:sans-serif;max-width:220px">
+            <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               <span style="font-size:10px;letter-spacing:.05em;color:#737373;font-weight:700">PAP AGUARDANDO VÍNCULO</span><br/>
               <strong>${p.nome}</strong><br/>
               ${p.cidade}${p.km != null ? ` — km ${p.km}` : ""}${

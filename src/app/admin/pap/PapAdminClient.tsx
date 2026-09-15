@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Clock, CheckCircle2, XCircle, MapPinned, QrCode, Link2 } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, MapPinned, QrCode, Link2, Move } from "lucide-react";
 import { STATUS_PAP_LABELS } from "@/lib/constants";
 import type { PontoApoio } from "@/types/database";
 
@@ -84,6 +84,12 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
             className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
             <QrCode size={14} /> QR code
+          </Link>
+          <Link
+            href={`/admin/pap/${p.id}/posicao`}
+            className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            <Move size={14} /> Reposicionar
           </Link>
         </div>
       </div>

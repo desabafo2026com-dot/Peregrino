@@ -95,7 +95,7 @@ export default function PapPreCadastroBusca({
                   {item.sentido_pista && ` (${SENTIDO_PISTA_LABELS[item.sentido_pista]})`}
                 </span>
               </span>
-              <span className="shrink-0 text-xs font-semibold text-amber-700">Usar este</span>
+              <span className="shrink-0 text-xs font-semibold text-amber-700 dark:text-amber-500">Usar este</span>
             </button>
           ))}
         </div>

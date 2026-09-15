@@ -149,7 +149,7 @@ export default async function MapaPage() {
         <p className="mt-2 text-sm text-neutral-500">
           Novos PAP são cadastrados por gerentes de PAP aprovados ou pela
           equipe administrativa.{" "}
-          <Link href="/gerente-pap/cadastro" className="font-semibold text-amber-700">
+          <Link href="/gerente-pap/cadastro" className="font-semibold text-amber-700 dark:text-amber-500">
             Quer cadastrar o seu?
           </Link>
         </p>
