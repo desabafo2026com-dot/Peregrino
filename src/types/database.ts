@@ -243,6 +243,17 @@ export interface Certificado {
 
 export type StatusCompraRomariaPlus = "pendente" | "pago" | "cancelado" | "estornado";
 
+// Posição/tamanho do painel de texto sobre a foto, nos modelos que sobrepõem
+// texto à imagem ("classico"/"painel") — arrastado e redimensionado pelo
+// próprio peregrino (Rodada 17), para evitar cobrir rostos/pessoas na foto.
+// x/y são o centro do painel, em % da largura/altura da arte; escala é a
+// porcentagem do tamanho original (100 = tamanho padrão do modelo).
+export interface AjusteOverlayRomariaPlus {
+  x: number;
+  y: number;
+  escala: number;
+}
+
 // Compra do produto pago "Romaria Plus" (arte personalizada para
 // compartilhar), vinculada a um certificado já emitido. O caminho normal de
 // insert/update é o servidor (rotas /api/mercadopago/...) com a service
@@ -267,9 +278,13 @@ export interface CompraRomariaPlus {
   ano: number | null;
   // Foto/modelo escolhidos pelo peregrino, agora persistidos (bucket
   // romaria-plus-fotos) em vez de existirem só na memória do navegador —
-  // permite à administração ver, baixar ou substituir (Rodada 15).
+  // permite à administração ver, baixar ou substituir (Rodada 15). "painel"
+  // e "moldura" são os dois modelos novos da Rodada 17.
   foto_url: string | null;
-  modelo: "classico" | "destaque" | null;
+  modelo: "classico" | "destaque" | "painel" | "moldura" | null;
+  // Posição/tamanho customizados do texto, só relevante para "classico" e
+  // "painel" (Rodada 17) — null usa a posição padrão do modelo.
+  ajuste_overlay: AjusteOverlayRomariaPlus | null;
 }
 
 // Cupom de código para liberar a Romaria Plus gratuitamente (Rodada 16) —
