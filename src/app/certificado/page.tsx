@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
 import CertificadoView from "@/components/CertificadoView";
@@ -35,6 +34,13 @@ export default async function CertificadoPage() {
 
   const certificadosLista = certificados as Certificado[];
 
+  const { data: perfil } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isAdmin = !!perfil?.is_admin;
+
   // Última compra de Romaria Plus conhecida por certificado (se houver
   // mais de uma tentativa, a mais recente é a que importa).
   const { data: compras } = await supabase
@@ -62,15 +68,12 @@ export default async function CertificadoPage() {
         const pago = compra?.status === "pago";
         return (
           <div key={c.id} className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-bold text-amber-800 dark:text-amber-500">Certificado</h2>
-              <a
-                href={`#romaria-plus-${c.id}`}
-                className="flex items-center gap-1 text-sm font-semibold text-amber-700 hover:underline dark:text-amber-500"
-              >
-                <Sparkles size={14} /> Certificado Plus →
-              </a>
-            </div>
+            {/* O link "Certificado Plus →" que ficava aqui, ao lado deste
+                título, foi movido (Rodada 16) para o lado direito de cada
+                peregrinação concluída, na lista de "Minha peregrinação" —
+                não fazia sentido ficar dentro desta página, que já mostra o
+                certificado grátis logo abaixo. */}
+            <h2 className="text-lg font-bold text-amber-800 dark:text-amber-500">Certificado</h2>
             {/* Grátis, sempre disponível para quem concluiu a peregrinação —
                 sem a arte de pergaminho, que agora é exclusiva de quem compra
                 a Romaria Plus (ver "Certificado Plus" abaixo). */}
@@ -90,7 +93,7 @@ export default async function CertificadoPage() {
                   />
                 </>
               ) : (
-                <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} />
+                <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} isAdmin={isAdmin} />
               )}
             </div>
           </div>
