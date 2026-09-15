@@ -92,8 +92,10 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial }: Prop
       <Sparkles className="mx-auto mb-2 text-amber-700" size={24} />
       <h3 className="mb-1 font-bold text-amber-800 dark:text-amber-500">Romaria Plus</h3>
       <p className="mb-3 text-sm text-neutral-500">
-        Uma arte personalizada com os dados reais da sua peregrinação,
-        pronta para compartilhar nas redes.
+        Dá direito a um <strong>Certificado Plus</strong> (a versão com a
+        arte de pergaminho) e à edição de uma foto sua numa arte
+        personalizada, com os dados reais desta peregrinação — pronta para
+        compartilhar nas redes.
       </p>
       {erro && <p className="mb-2 text-sm text-red-600">{erro}</p>}
       <button onClick={comprar} disabled={loading} className="btn-primary">

@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { HeartHandshake, CheckCircle2 } from "lucide-react";
+import { HeartHandshake, CheckCircle2, X } from "lucide-react";
 import { DOACAO_VALOR_MINIMO_CENTAVOS, DOACAO_VALOR_MAXIMO_CENTAVOS } from "@/lib/constants";
 
-const SUGESTOES_REAIS = [10, 20, 50];
+const SUGESTOES_REAIS = [5, 10, 20];
 
 function paraCentavos(valorTexto: string): number | null {
   const normalizado = valorTexto.replace(/\./g, "").replace(",", ".").trim();
@@ -27,6 +27,10 @@ export default function DoacaoCard() {
   // Estado inicial já lido direto da URL (em vez de setState num efeito, que
   // causaria uma renderização em cascata) — o efeito abaixo só limpa a URL.
   const [retorno] = useState(() => params.get("doacao") === "retorno");
+  // Discreto por padrão (só ícone + frase) — o formulário completo (valores
+  // sugeridos, campo livre, botão) só aparece depois de um toque, para não
+  // competir visualmente com o resto da home.
+  const [aberto, setAberto] = useState(false);
 
   useEffect(() => {
     if (params.get("doacao") === "retorno") {
@@ -82,8 +86,29 @@ export default function DoacaoCard() {
     );
   }
 
+  if (!aberto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        className="card flex w-full items-center justify-center gap-2 text-sm font-semibold text-amber-800 transition hover:border-amber-300 dark:text-amber-500"
+      >
+        <HeartHandshake size={18} />
+        Ajude o desenvolvedor a manter e melhorar o app
+      </button>
+    );
+  }
+
   return (
-    <div className="card text-center">
+    <div className="card relative text-center">
+      <button
+        type="button"
+        onClick={() => setAberto(false)}
+        aria-label="Fechar"
+        className="absolute right-3 top-3 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+      >
+        <X size={18} />
+      </button>
       <HeartHandshake className="mx-auto mb-2 text-amber-700" size={26} />
       <h3 className="mb-1 font-bold text-amber-800 dark:text-amber-500">
         Ajude o desenvolvedor a manter e melhorar o app

@@ -13,6 +13,7 @@ import {
   Clock,
   CalendarDays,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import type { Certificado } from "@/types/database";
 
 // Formato vertical (9:16) — o mesmo formato do Instagram Stories e do
@@ -65,21 +66,61 @@ const MODELOS: { id: Modelo; nome: string }[] = [
   { id: "destaque", nome: "Foto em destaque" },
 ];
 
-export default function RomariaPlusView({ certificado: c }: { certificado: Certificado }) {
+// Fora do componente de propósito: o lint de pureza de hooks trata qualquer
+// função declarada dentro do componente como parte da renderização, mesmo
+// quando só roda depois de um clique — e reclama de `Date.now()` (usado
+// aqui só para evitar cache do navegador numa URL que é sempre a mesma
+// para a mesma compra, já que o upload usa upsert).
+async function enviarFotoParaStorage(caminho: string, arquivo: File) {
+  const supabase = createClient();
+  const { error: erroUpload } = await supabase.storage
+    .from("romaria-plus-fotos")
+    .upload(caminho, arquivo, { upsert: true, contentType: arquivo.type || "image/jpeg" });
+  if (erroUpload) throw erroUpload;
+  const { data } = supabase.storage.from("romaria-plus-fotos").getPublicUrl(caminho);
+  return `${data.publicUrl}?v=${Date.now()}`;
+}
+
+interface Props {
+  certificado: Certificado;
+  // Presentes só quando a compra já está paga (ver certificado/page.tsx) —
+  // usados para persistir a foto/modelo escolhidos no servidor (Rodada 15:
+  // antes só existiam na memória do navegador, então a administração não
+  // tinha como ver/baixar/editar nada).
+  compraId: string;
+  userId: string;
+  fotoUrlInicial?: string | null;
+  modeloInicial?: Modelo | null;
+}
+
+export default function RomariaPlusView({
+  certificado: c,
+  compraId,
+  userId,
+  fotoUrlInicial = null,
+  modeloInicial = null,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galeriaRef = useRef<HTMLInputElement>(null);
+  // Arquivo ainda não enviado ao servidor (enquanto o upload não termina) —
+  // e a última URL já persistida (bucket romaria-plus-fotos), para não
+  // reenviar a mesma foto de novo só porque o modelo mudou.
+  const arquivoPendenteRef = useRef<File | null>(null);
+  const fotoRemotaRef = useRef<string | null>(fotoUrlInicial);
 
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
-  const [modelo, setModelo] = useState<Modelo>("classico");
+  const [fotoUrl, setFotoUrl] = useState<string | null>(fotoUrlInicial);
+  const [modelo, setModelo] = useState<Modelo>(modeloInicial ?? "classico");
   const [gerando, setGerando] = useState<"baixar" | "compartilhar" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoSalvar, setAvisoSalvar] = useState<string | null>(null);
 
   // Libera o object URL da foto ao trocar ou sair da tela, para não vazar
-  // memória — cada foto escolhida cria um URL novo.
+  // memória — só quando é mesmo um blob local (uma foto já persistida no
+  // servidor é um link https normal, não deve ser revogado).
   useEffect(() => {
     return () => {
-      if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+      if (fotoUrl?.startsWith("blob:")) URL.revokeObjectURL(fotoUrl);
     };
   }, [fotoUrl]);
 
@@ -89,20 +130,55 @@ export default function RomariaPlusView({ certificado: c }: { certificado: Certi
   const periodo = formatarPeriodo(c.data_inicio, c.data_fim);
   const tempo = formatarTempoCompacto(c.data_inicio, c.data_fim) ?? c.duracao_texto;
 
+  // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo
+  // escolhido, via a função seguraparte "salvar_foto_romaria_plus" (só
+  // funciona para a própria compra, já paga — ver migration 21).
+  async function persistirFoto(modeloParaSalvar: Modelo) {
+    setAvisoSalvar(null);
+    try {
+      const supabase = createClient();
+      let url = fotoRemotaRef.current;
+      const arquivo = arquivoPendenteRef.current;
+      if (arquivo) {
+        url = await enviarFotoParaStorage(`${userId}/${compraId}.jpg`, arquivo);
+        fotoRemotaRef.current = url;
+        arquivoPendenteRef.current = null;
+      }
+      if (!url) return;
+      const { error: erroRpc } = await supabase.rpc("salvar_foto_romaria_plus", {
+        p_compra_id: compraId,
+        p_foto_url: url,
+        p_modelo: modeloParaSalvar,
+      });
+      if (erroRpc) throw erroRpc;
+    } catch {
+      setAvisoSalvar(
+        "Não foi possível salvar a foto no servidor agora — ainda dá para baixar/compartilhar normalmente, mas pode ser preciso escolher a foto de novo depois."
+      );
+    }
+  }
+
+  function escolherModelo(m: Modelo) {
+    setModelo(m);
+    if (fotoUrl) void persistirFoto(m);
+  }
+
   function selecionarFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
     e.target.value = "";
     if (!arquivo) return;
     setErro(null);
+    arquivoPendenteRef.current = arquivo;
     setFotoUrl((anterior) => {
-      if (anterior) URL.revokeObjectURL(anterior);
+      if (anterior?.startsWith("blob:")) URL.revokeObjectURL(anterior);
       return URL.createObjectURL(arquivo);
     });
+    void persistirFoto(modelo);
   }
 
   function trocarFoto() {
     setFotoUrl((anterior) => {
-      if (anterior) URL.revokeObjectURL(anterior);
+      if (anterior?.startsWith("blob:")) URL.revokeObjectURL(anterior);
       return null;
     });
   }
@@ -207,7 +283,7 @@ export default function RomariaPlusView({ certificado: c }: { certificado: Certi
               <button
                 key={m.id}
                 type="button"
-                onClick={() => setModelo(m.id)}
+                onClick={() => escolherModelo(m.id)}
                 className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
                   modelo === m.id
                     ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
@@ -351,6 +427,7 @@ export default function RomariaPlusView({ certificado: c }: { certificado: Certi
               </button>
             </div>
             {erro && <p className="text-xs text-red-600">{erro}</p>}
+            {avisoSalvar && <p className="max-w-xs text-center text-xs text-amber-700 dark:text-amber-500">{avisoSalvar}</p>}
           </div>
         </>
       )}

@@ -5,6 +5,7 @@ import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
 import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
 
 const OSM_STYLE: StyleSpecification = {
@@ -78,6 +79,12 @@ interface Props {
   markerPreview?: { lat: number; lng: number } | null;
   calorPeregrinos?: boolean;
   minhaPosicao?: { lat: number; lng: number } | null;
+  // Só true para administradores logados: deixa os marcadores de PAP
+  // pré-cadastro (tenda cinza tracejada) arrastáveis direto no mapa
+  // público, salvando a posição exata assim que soltos — sem precisar
+  // abrir a tela separada de reposicionar (RLS já restringe esse update a
+  // admin, ver paps_pre_cadastro_update_admin).
+  permitirArrastarPapPreCadastro?: boolean;
 }
 
 function servicosLabel(servicos: string[]) {
@@ -118,6 +125,7 @@ export default function MapView({
   markerPreview = null,
   calorPeregrinos = false,
   minhaPosicao = null,
+  permitirArrastarPapPreCadastro = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -222,6 +230,7 @@ export default function MapView({
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
+              ${r.foto_url ? `<img src="${r.foto_url}" alt="Foto do local de risco" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
               <strong style="color:${cor}">🚩 ${r.titulo}</strong><br/>
               ${kmSentidoLabel(r.km_referencia, r.sentido) ? `${kmSentidoLabel(r.km_referencia, r.sentido)}<br/>` : ""}
               ${r.descricao ?? ""}<br/>
@@ -298,7 +307,7 @@ export default function MapView({
           <path d="M15.5 21 12 15l-3.5 6"/>
           <path d="M2 21h20"/>
         </svg>`;
-      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+      const marker = new maplibregl.Marker({ element: el, anchor: "center", draggable: permitirArrastarPapPreCadastro })
         .setLngLat([p.lng, p.lat])
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
@@ -308,14 +317,37 @@ export default function MapView({
               ${p.cidade}${p.km != null ? ` — km ${p.km}` : ""}${
                 p.sentido_pista ? ` (${SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista})` : ""
               }<br/>
-              <span style="color:#737373">Localização aproximada (pela cidade) — ainda sem gerente vinculado. Assim que um gerente vincular e a administração aprovar, este ponto passa a ser um PAP com localização exata.</span>
+              <span style="color:#737373">Localização estimada pelo km da rodovia — ainda sem gerente vinculado. Assim que um gerente vincular e a administração aprovar, este ponto passa a ser um PAP com localização exata.</span>
+              ${
+                permitirArrastarPapPreCadastro
+                  ? `<br/><span style="color:#92400e;font-weight:600">Arraste o marcador para ajustar a posição exata.</span>`
+                  : ""
+              }
             </div>
           `)
         )
         .addTo(map);
+
+      if (permitirArrastarPapPreCadastro) {
+        marker.on("dragend", () => {
+          const { lat, lng } = marker.getLngLat();
+          const supabase = createClient();
+          supabase
+            .from("paps_pre_cadastro")
+            .update({ latitude: lat, longitude: lng })
+            .eq("id", p.id)
+            .then(({ error }) => {
+              if (error) {
+                console.error("Não foi possível salvar a nova posição do PAP pré-cadastro:", error);
+                marker.setLngLat([p.lng, p.lat]);
+              }
+            });
+        });
+      }
+
       markersRef.current.push(marker);
     });
-  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro]);
+  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, permitirArrastarPapPreCadastro]);
 
   // Trajeto — linha ligando os pontos de check-in da rota, destacando os
   // já concluídos (verde) dos pendentes (âmbar)
