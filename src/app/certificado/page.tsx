@@ -90,6 +90,7 @@ export default async function CertificadoPage() {
                     userId={user.id}
                     fotoUrlInicial={compra.foto_url}
                     modeloInicial={compra.modelo}
+                    ajusteInicial={compra.ajuste_overlay}
                   />
                 </>
               ) : (
