@@ -84,7 +84,7 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
               className="rounded-lg"
             />
             <p className="font-semibold tracking-[0.15em] text-amber-800" style={{ fontSize: "3cqw" }}>
-              APP PEREGRINO
+              APP O PEREGRINO
             </p>
           </div>
 
@@ -108,7 +108,7 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
 
           <p className="text-neutral-500" style={{ fontSize: "2.6cqw" }}>
             Aponte a câmera do celular para ver informações deste ponto de
-            apoio no app Peregrino
+            apoio no app O Peregrino
           </p>
         </div>
       </div>

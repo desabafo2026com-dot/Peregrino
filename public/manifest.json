@@ -1,6 +1,6 @@
 {
-  "name": "Peregrino - Rodovia Dutra até Aparecida",
-  "short_name": "Peregrino",
+  "name": "O Peregrino - Rodovia Dutra até Aparecida",
+  "short_name": "O Peregrino",
   "description": "Apoio para peregrinos: pontos de apoio, rotas seguras, localização e emergência.",
   "start_url": "/",
   "display": "standalone",

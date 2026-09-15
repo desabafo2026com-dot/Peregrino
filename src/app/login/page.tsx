@@ -217,7 +217,7 @@ function LoginForm() {
         <p className="mb-5 text-sm text-neutral-500">
           {passo === "email" && "Digite seu e-mail para entrar ou criar sua conta."}
           {passo === "senha" && "Este e-mail já tem conta. Informe sua senha."}
-          {passo === "tipo" && "Este e-mail ainda não tem conta. Como você vai usar o Peregrino?"}
+          {passo === "tipo" && "Este e-mail ainda não tem conta. Como você vai usar o app?"}
           {passo === "cadastro" &&
             (tipoConta === "gerente_pap"
               ? "Cadastro de Gerente de PAP — dados de acesso."

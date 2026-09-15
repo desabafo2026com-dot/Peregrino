@@ -259,6 +259,12 @@ export const STATUS_COMPRA_ROMARIA_PLUS_LABELS: Record<string, string> = {
   estornado: "Estornado",
 };
 
+// Doação livre ("Ajude o desenvolvedor") — sem login, valor digitado pela
+// própria pessoa. Limites só para evitar erro de digitação (ex.: R$
+// 100000,00 sem querer) — nada impede uma doação maior por fora.
+export const DOACAO_VALOR_MINIMO_CENTAVOS = 200;
+export const DOACAO_VALOR_MAXIMO_CENTAVOS = 500000;
+
 export const STATUS_MENSAGEM_CONTATO_LABELS: Record<string, string> = {
   novo: "Aguardando leitura",
   lida: "Lida — aguardando resposta",

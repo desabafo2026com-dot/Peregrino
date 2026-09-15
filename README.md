@@ -1,4 +1,4 @@
-# Peregrino 🥾
+# O Peregrino 🥾
 
 App de apoio para peregrinos que caminham pela Rodovia Presidente Dutra até
 Aparecida-SP: cadastro de peregrinos, pontos de apoio no mapa, rotas

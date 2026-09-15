@@ -62,6 +62,17 @@ body {
   color: var(--foreground);
 }
 
+/* Parágrafos justificados (pedido do usuário, Rodada 13): só tem efeito
+   visual em texto com mais de uma linha (a última linha de um bloco
+   justificado sempre fica alinhada à esquerda, então textos curtos de uma
+   linha só — rótulos, status, avisos curtos — não mudam nada). Escopo em
+   <p> propositalmente estreito: não afeta cabeçalhos, botões, badges nem
+   células de tabela. */
+p {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
 /* Espaço seguro do iOS (notch / barra de gestos) — usado pelo cabeçalho
    fixo, pelo menu inferior e pelo botão de emergência para não ficarem
    sobrepostos pelos elementos de sistema do iPhone. */

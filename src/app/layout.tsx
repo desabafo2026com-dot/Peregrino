@@ -7,7 +7,7 @@ import LocationSharingManager from "@/components/LocationSharingManager";
 import { AuthRoleProvider } from "@/components/AuthRoleProvider";
 
 export const metadata: Metadata = {
-  title: "Peregrino — Rodovia Dutra até Aparecida",
+  title: "O Peregrino — Rodovia Dutra até Aparecida",
   description:
     "App de apoio para peregrinos que caminham pela Rodovia Presidente Dutra até Aparecida-SP: pontos de apoio, rotas seguras, localização e emergência.",
   manifest: "/manifest.json",

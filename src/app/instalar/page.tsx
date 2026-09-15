@@ -45,7 +45,7 @@ export default function InstalarPage() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Peregrino",
+          title: "O Peregrino",
           text: "App de apoio para quem caminha pela Rodovia Dutra até Aparecida-SP",
           url,
         });
@@ -101,7 +101,7 @@ export default function InstalarPage() {
             <li>
               Escolha <strong>&quot;Adicionar à Tela de Início&quot;</strong>.
             </li>
-            <li>Confirme tocando em &quot;Adicionar&quot;. Pronto — o ícone do Peregrino aparece na sua tela.</li>
+            <li>Confirme tocando em &quot;Adicionar&quot;. Pronto — o ícone do app O Peregrino aparece na sua tela.</li>
           </ol>
         )}
 
@@ -139,7 +139,7 @@ export default function InstalarPage() {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={qrDataUrl}
-            alt="QR code para abrir o Peregrino"
+            alt="QR code para abrir o app O Peregrino"
             className="rounded-xl border border-neutral-200 dark:border-neutral-800"
             width={220}
             height={220}

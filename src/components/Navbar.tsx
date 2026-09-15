@@ -29,12 +29,12 @@ export default function Navbar() {
         <Link href="/" className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-500">
           <Image
             src="/icons/icon-192.png"
-            alt="Símbolo do Peregrino"
+            alt="Símbolo do app O Peregrino"
             width={30}
             height={30}
             className="rounded-lg"
           />
-          <span className="hidden sm:inline">Peregrino</span>
+          <span className="hidden sm:inline">O Peregrino</span>
         </Link>
 
         <div className="flex items-center gap-2">

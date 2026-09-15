@@ -30,7 +30,7 @@ export default function CompartilharInstalarCard() {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={qrDataUrl}
-          alt="QR code para abrir o Peregrino"
+          alt="QR code para abrir o app O Peregrino"
           width={72}
           height={72}
           className="shrink-0 rounded-lg border border-neutral-200 dark:border-neutral-800"

@@ -3,6 +3,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
+import DoacaoCard from "@/components/DoacaoCard";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -76,7 +77,7 @@ export default async function Home() {
       <section className="flex items-center gap-5 rounded-2xl bg-gradient-to-br from-amber-800 to-amber-900 p-6 text-white sm:p-8">
         <Image
           src="/icons/logo-emblema.png"
-          alt="Emblema do Peregrino"
+          alt="Emblema do app O Peregrino"
           width={96}
           height={96}
           className="h-16 w-16 shrink-0 rounded-2xl shadow-lg ring-2 ring-white/30 sm:h-28 sm:w-28"
@@ -148,6 +149,8 @@ export default async function Home() {
         Em caso de emergência, use o botão vermelho no canto da tela para
         ligar direto para PM, PRF, Bombeiros ou SAMU.
       </p>
+
+      <DoacaoCard />
     </div>
   );
 }

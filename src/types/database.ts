@@ -124,6 +124,10 @@ export interface PapPreCadastro {
   data_funcionamento_texto: string | null;
   reivindicado_por: string | null;
   reivindicado_em: string | null;
+  // Posição exata marcada pela administração no mapa (Rodada 13) — quando
+  // preenchida, substitui a aproximação por cidade usada em /mapa.
+  latitude: number | null;
+  longitude: number | null;
   criado_em: string;
 }
 
@@ -250,6 +254,21 @@ export interface CompraRomariaPlus {
   user_id: string;
   valor_centavos: number;
   status: StatusCompraRomariaPlus;
+  mp_preference_id: string | null;
+  mp_payment_id: string | null;
+  criado_em: string;
+  pago_em: string | null;
+}
+
+// Doação livre ("Ajude o desenvolvedor", Rodada 13) — sem login, valor
+// digitado pela própria pessoa. Mesma regra de segurança da Romaria Plus:
+// todo insert/update é feito pelo servidor (rotas /api/mercadopago/...)
+// com a service role, nunca diretamente pelo cliente.
+export interface Doacao {
+  id: string;
+  valor_centavos: number;
+  status: StatusCompraRomariaPlus;
+  nome_doador: string | null;
   mp_preference_id: string | null;
   mp_payment_id: string | null;
   criado_em: string;

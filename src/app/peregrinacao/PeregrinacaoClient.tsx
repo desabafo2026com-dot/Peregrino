@@ -784,7 +784,7 @@ export default function PeregrinacaoClient({
           seguida, quando você realmente for começar.
         </p>
         {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap justify-center gap-3">
           <button disabled={loading} onClick={criarPeregrinacao} className="btn-primary">
             {loading ? "Salvando..." : "Salvar plano"}
           </button>

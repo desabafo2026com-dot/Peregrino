@@ -59,9 +59,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <ShieldAlert className="mx-auto mb-4 text-amber-700" size={40} />
         <h1 className="mb-2 text-xl font-bold">Área restrita</h1>
         <p className="mb-4 text-sm text-neutral-500">
-          Esta área é reservada aos administradores e agentes do Peregrino.
+          Esta área é reservada aos administradores e agentes do app O Peregrino.
           Se você ajuda a manter pontos de apoio ou informações de segurança
-          na rota e deveria ter acesso, fale com a equipe do Peregrino.
+          na rota e deveria ter acesso, fale com a equipe do app O Peregrino.
         </p>
         <Link href="/" className="btn-secondary inline-block">
           Voltar ao início

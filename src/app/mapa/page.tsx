@@ -84,13 +84,19 @@ export default async function MapaPage() {
   }
   const papsPreCadastro: PapPreCadastroMapa[] = [];
   for (const p of (papsPreCadastroData ?? []) as PapPreCadastro[]) {
-    if (!p.cidade) continue;
-    const coord = cidadeParaCoord.get(normalizarCidade(p.cidade));
+    // Posição marcada manualmente pela administração (Rodada 13) tem
+    // prioridade sobre a aproximação por cidade.
+    const coord =
+      p.latitude != null && p.longitude != null
+        ? { lat: p.latitude, lng: p.longitude }
+        : p.cidade
+          ? cidadeParaCoord.get(normalizarCidade(p.cidade))
+          : undefined;
     if (!coord) continue;
     papsPreCadastro.push({
       id: p.id,
       nome: p.nome,
-      cidade: p.cidade,
+      cidade: p.cidade ?? "",
       br: p.br,
       km: p.km,
       sentido_pista: p.sentido_pista,
