@@ -2260,3 +2260,333 @@ $$;
 grant execute on function public.salvar_foto_romaria_plus(uuid, text, text, jsonb) to authenticated;
 
 -- FIM DA MIGRATION 23
+
+-- =====================================================================
+-- MIGRATION 24 — Rodada 18: correção de bug (fonte auto-hospedada, ver
+-- código-fonte), calendário de datas para PAP pré-cadastrados, e Romaria
+-- Plus com até 5 fotos (uma arte por foto, com contador de download e de
+-- compartilhamento cada uma)
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Calendário de datas ativas para PAP pré-cadastrados (mesmo mecanismo já
+-- usado em pontos_apoio.datas_funcionamento desde a Migration 18) — antes
+-- só existia o texto livre da fonte original (data_funcionamento_texto),
+-- sem estrutura, então esses pontos nunca contavam como "ativos" em lugar
+-- nenhum. As datas abaixo foram geradas automaticamente a partir do texto
+-- livre de cada um (ano 2026 — próxima romaria de outubro), interpretando
+-- "Sem informação de data" como o mês de outubro inteiro, a pedido do
+-- usuário. A administração pode revisar/ajustar cada uma pelo calendário
+-- na tela de pré-cadastros.
+-- ---------------------------------------------------------------------
+alter table public.paps_pre_cadastro add column if not exists datas_funcionamento date[] not null default '{}';
+comment on column public.paps_pre_cadastro.datas_funcionamento is 'Datas em que este PAP pré-cadastrado (ainda sem gerente) estará em atividade — mesmo formato/uso de pontos_apoio.datas_funcionamento. Populado automaticamente a partir de data_funcionamento_texto (ano 2026); revise pelo calendário no admin se precisar.';
+
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date] where nome = 'Mãezinha do Céu' and cidade = 'Guarulhos' and br = '116' and km = 216 and data_funcionamento_texto = '06 a 08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Cantinho do Bem' and cidade = 'Guarulhos' and br = '116' and km = 210.5 and data_funcionamento_texto = '05 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Família Silva' and cidade = 'Guarulhos' and br = '116' and km = 208 and data_funcionamento_texto = '04 a 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date] where nome = 'Irmãos da Fé' and cidade = 'Guarulhos' and br = '116' and km = 207 and data_funcionamento_texto = '07 e 08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Centro Industrial Arujá' and cidade = 'Arujá' and br = '116' and km = 203.5 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date] where nome = 'Ballance' and cidade = 'Arujá' and br = '116' and km = 201.8 and data_funcionamento_texto = '08 e 09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date] where nome = 'Lions' and cidade = 'Arujá' and br = '116' and km = 201.8 and data_funcionamento_texto = '05 a 08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date] where nome = 'Família Oliveira & Amigos' and cidade = 'Arujá' and br = '116' and km = 201.6 and data_funcionamento_texto = '05 a 08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date] where nome = 'Amor em Ação Arujá' and cidade = 'Arujá' and br = '116' and km = 199 and data_funcionamento_texto = '07 e 08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date] where nome = 'Juntos na Superação' and cidade = 'Arujá' and br = '116' and km = 199 and data_funcionamento_texto = '06 a 09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Nossa Senhora Aparecida' and cidade = 'Arujá' and br = '116' and km = 198 and data_funcionamento_texto = '05 a 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Somos da Imaculada' and cidade = 'Santa Isabel' and br = '116' and km = 196.7 and data_funcionamento_texto = '05 a 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date] where nome = 'Comitiva de Aparecida' and cidade = 'Santa Isabel' and br = '116' and km = 194 and data_funcionamento_texto = '08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date] where nome = 'Anjos dos Romeiros' and cidade = 'Santa Isabel' and br = '116' and km = 190 and data_funcionamento_texto = '08 e 09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Nascimento da Fé' and cidade = 'Santa Isabel' and br = '116' and km = 190 and data_funcionamento_texto = '04 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Rancho da Pamonha' and cidade = 'Santa Isabel' and br = '116' and km = 189 and data_funcionamento_texto = '05 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Acolher Bem é Evangelizar' and cidade = 'Santa Isabel' and br = '116' and km = 187 and data_funcionamento_texto = '02 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date] where nome = 'Maria: Advogada Nossa' and cidade = 'Santa Isabel' and br = '116' and km = 184 and data_funcionamento_texto = '07 a 09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date] where nome = 'Lions Guararema' and cidade = 'Guararema' and br = '116' and km = 179.4 and data_funcionamento_texto = '05 a 09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date] where nome = 'Com Sagradas Mãos' and cidade = 'Guararema' and br = '116' and km = 177 and data_funcionamento_texto = '08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date] where nome = 'Peregrinos de Aparecida 1' and cidade = 'Guararema' and br = '116' and km = 177 and data_funcionamento_texto = '08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date] where nome = 'Romaria Mãos Que Servem' and cidade = 'Guararema' and br = '116' and km = 174.5 and data_funcionamento_texto = '07 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date] where nome = 'Romaria Fé na Estrada' and cidade = 'Guararema' and br = '116' and km = 174.5 and data_funcionamento_texto = '07 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date] where nome = 'Mãos de Maria' and cidade = 'Jacareí' and br = '116' and km = 169 and data_funcionamento_texto = '08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Anjos e Acolhidos' and cidade = 'Jacareí' and br = '116' and km = 165 and data_funcionamento_texto = '07 a 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Movidos Pela Fé 1' and cidade = 'Jacareí' and br = '116' and km = 160 and data_funcionamento_texto = '07 a 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Romaria Com Fé Chegaremos' and cidade = 'Jacareí' and br = '116' and km = 160 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Ponto de Apoio aos Peregrinos de Aparecida' and cidade = 'Jacareí' and br = '116' and km = 159 and data_funcionamento_texto = '05 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Amigos de São José' and cidade = 'São José dos Campos' and br = '116' and km = 154 and data_funcionamento_texto = '07 a 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos do Portuga' and cidade = 'São José dos Campos' and br = '116' and km = 152 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Centro de Apoio Bem Te Vi' and cidade = 'São José dos Campos' and br = '116' and km = 150 and data_funcionamento_texto = '02 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date] where nome = 'Saúde e Fé Univ. Anhembi Morumbi' and cidade = 'São José dos Campos' and br = '116' and km = 150 and data_funcionamento_texto = '08 e 09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Lions Clube Internacional' and cidade = 'São José dos Campos' and br = '116' and km = 149.1 and data_funcionamento_texto = '08 a 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Somos Todos Irmãos' and cidade = 'São José dos Campos' and br = '116' and km = 148.6 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Grupo de Escoteiros Cassiano Ricardo' and cidade = 'São José dos Campos' and br = '116' and km = 148 and data_funcionamento_texto = '09 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos - Em Agradecimento à Vida' and cidade = 'São José dos Campos' and br = '116' and km = 145 and data_funcionamento_texto = '07 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'São Peregrino' and cidade = 'São José dos Campos' and br = '116' and km = 144 and data_funcionamento_texto = '08 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-09-28'::date,'2026-09-29'::date,'2026-09-30'::date,'2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date] where nome = 'Tenda de Apoio aos Romeiros - Jardim Diamante' and cidade = 'São José dos Campos' and br = '116' and km = 144 and data_funcionamento_texto = '28 de setembro a 15 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date] where nome = 'Comitiva de Aparecida' and cidade = 'São José dos Campos' and br = '116' and km = 142 and data_funcionamento_texto = '09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Do Mundo' and cidade = 'São José dos Campos' and br = '116' and km = 142 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date] where nome = 'Grupo de Apoio aos Peregrinos' and cidade = 'São José dos Campos' and br = '116' and km = 140 and data_funcionamento_texto = '09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date] where nome = 'Com Sagradas Mãos' and cidade = 'São José dos Campos' and br = '116' and km = 140 and data_funcionamento_texto = '09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Caminho dos Irmãos de Fé' and cidade = 'São José dos Campos' and br = '116' and km = 140 and data_funcionamento_texto = '09 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date] where nome = 'Mãos que servem' and cidade = 'São José dos Campos' and br = '116' and km = 138 and data_funcionamento_texto = '08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date] where nome = 'Romaria Fé na Estrada' and cidade = 'São José dos Campos' and br = '116' and km = 138 and data_funcionamento_texto = '08 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'S.O.S Risos' and cidade = 'São José dos Campos' and br = '116' and km = 137 and data_funcionamento_texto = '08 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Eugênio de Melo' and cidade = 'São José dos Campos' and br = '116' and km = 136.5 and data_funcionamento_texto = '07 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Maria Passa na Frente' and cidade = 'São José dos Campos' and br = '116' and km = 136 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Unidos por Nossa Senhora' and cidade = 'São José dos Campos' and br = '116' and km = 135 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Anjos e Acolhidos 2' and cidade = 'Caçapava' and br = '116' and km = 134 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Perseverantes na Fé' and cidade = 'Caçapava' and br = '116' and km = 133 and data_funcionamento_texto = '09 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Filhos de Maria' and cidade = 'Caçapava' and br = '116' and km = 133 and data_funcionamento_texto = '06 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Silvia e Família' and cidade = 'Caçapava' and br = '116' and km = 132 and data_funcionamento_texto = '08 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Amigos do Inocop' and cidade = 'Caçapava' and br = '116' and km = 130 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Ponto de Apoio aos Romeiros' and cidade = 'Caçapava' and br = '116' and km = 129 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Pássaro Marrom' and cidade = 'Caçapava' and br = '116' and km = 129 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date] where nome = 'Amigos da Fé 3' and cidade = 'Caçapava' and br = '116' and km = 128 and data_funcionamento_texto = '09 e 10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Prova de Amor' and cidade = 'Caçapava' and br = '116' and km = 126.6 and data_funcionamento_texto = '08 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos da Fé (ao lado PRF)' and cidade = 'Caçapava' and br = '116' and km = 126.5 and data_funcionamento_texto = '07 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Família Romeiros' and cidade = 'Caçapava' and br = '116' and km = 125 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Amigos da Val' and cidade = 'Caçapava' and br = '116' and km = 125 and data_funcionamento_texto = '09 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Dos Amigos' and cidade = 'Caçapava' and br = '116' and km = 122 and data_funcionamento_texto = '02 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos Pela Fé' and cidade = 'Caçapava' and br = '116' and km = 118 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'IBG (Igreja Batista)' and cidade = 'Taubaté' and br = '116' and km = 117 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Estação do Peregrino' and cidade = 'Taubaté' and br = '116' and km = 117 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Com Sagradas Mãos' and cidade = 'Taubaté' and br = '116' and km = 115.5 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Romaria Com Fé Chegaremos' and cidade = 'Taubaté' and br = '116' and km = 115 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Sucesso e Alegria' and cidade = 'Taubaté' and br = '116' and km = 115 and data_funcionamento_texto = '09 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Filhos de Maria' and cidade = 'Taubaté' and br = '116' and km = 114 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'União das Pensionistas PMESP' and cidade = 'Taubaté' and br = '116' and km = 113 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Unidos Pela Fé' and cidade = 'Taubaté' and br = '116' and km = 113 and data_funcionamento_texto = '02 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Polenta Solidária' and cidade = 'Taubaté' and br = '116' and km = 113 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Estação Decolores' and cidade = 'Taubaté' and br = '116' and km = 111 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Unidos Pelo Amor e Pela Fé' and cidade = 'Taubaté' and br = '116' and km = 110 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Terço dos Homens' and cidade = 'Taubaté' and br = '116' and km = 108.5 and data_funcionamento_texto = '04 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date] where nome = 'Mãos que Servem' and cidade = 'Taubaté' and br = '116' and km = 108 and data_funcionamento_texto = '09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date] where nome = 'Romaria Fé na Estrada' and cidade = 'Taubaté' and br = '116' and km = 108 and data_funcionamento_texto = '09 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Abutres Moto Clube' and cidade = 'Taubaté' and br = '116' and km = 108 and data_funcionamento_texto = '05 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Nossa Senhora de Nazaré' and cidade = 'Taubaté' and br = '116' and km = 107 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Anjo Pietra' and cidade = 'Taubaté' and br = '116' and km = 107 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Madre Tereza de Calcutá' and cidade = 'Taubaté' and br = '116' and km = 107 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Fé e Saúde' and cidade = 'Taubaté' and br = '116' and km = 107 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Ao Pai e por Maria' and cidade = 'Taubaté' and br = '116' and km = 107 and data_funcionamento_texto = '09 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Sentinelas de Nossa Senhora Aparecida' and cidade = 'Taubaté' and br = '116' and km = 107 and data_funcionamento_texto = '06 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Vó Jandira' and cidade = 'Taubaté' and br = '116' and km = 107 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Estação São Miguel' and cidade = 'Pindamonhangaba' and br = '116' and km = 104 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Esperança' and cidade = 'Pindamonhangaba' and br = '116' and km = 102.5 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Villar e Amigos' and cidade = 'Pindamonhangaba' and br = '116' and km = 101 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos da Fé Interlagos' and cidade = 'Pindamonhangaba' and br = '116' and km = 101 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Manto Azul' and cidade = 'Pindamonhangaba' and br = '116' and km = 101 and data_funcionamento_texto = '08 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Colo de Mãe' and cidade = 'Pindamonhangaba' and br = '116' and km = 101 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Comitiva de Aparecida' and cidade = 'Pindamonhangaba' and br = '116' and km = 101 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Gueri Gueri, Enrolados nas Trilhas' and cidade = 'Pindamonhangaba' and br = '116' and km = 100 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos da Fé SP' and cidade = 'Pindamonhangaba' and br = '116' and km = 99 and data_funcionamento_texto = '08 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Imaculado Coração de Maria' and cidade = 'Pindamonhangaba' and br = '116' and km = 98 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos em Oração' and cidade = 'Pindamonhangaba' and br = '116' and km = 97.8 and data_funcionamento_texto = '10 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-03'::date] where nome = 'Maria Passa à Frente' and cidade = 'Pindamonhangaba' and br = '116' and km = 96 and data_funcionamento_texto = '03 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Coração Valente' and cidade = 'Pindamonhangaba' and br = '116' and km = 96 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Nossa Senhora Rainha do Brasil' and cidade = 'Pindamonhangaba' and br = '116' and km = 96 and data_funcionamento_texto = '08 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Filhos de Aparecida' and cidade = 'Pindamonhangaba' and br = '116' and km = 94 and data_funcionamento_texto = '08 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Aldeia Estelar' and cidade = 'Pindamonhangaba' and br = '116' and km = 93 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Café Romeiro' and cidade = 'Pindamonhangaba' and br = '116' and km = 92 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date] where nome = 'Tenda do Acolhimento' and cidade = 'Pindamonhangaba' and br = '116' and km = 92 and data_funcionamento_texto = '09 a 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-12'::date] where nome = 'Igreja da Cidade' and cidade = 'Pindamonhangaba' and br = '116' and km = 92 and data_funcionamento_texto = '12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Amigos da Fé 3' and cidade = 'Pindamonhangaba' and br = '116' and km = 88 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Peregrinos de Aparecida 2' and cidade = 'Pindamonhangaba' and br = '116' and km = 87 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Mãe Peregrina' and cidade = 'Pindamonhangaba' and br = '116' and km = 87 and data_funcionamento_texto = '10 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Aliança pelos Romeiros' and cidade = 'Pindamonhangaba' and br = '116' and km = 85.5 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-12'::date] where nome = 'Amigos da Fé 3' and cidade = 'Pindamonhangaba' and br = '116' and km = 85.5 and data_funcionamento_texto = '12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Arco-Íris' and cidade = 'Roseira' and br = '116' and km = 82 and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Unifatea' and cidade = 'Roseira' and br = '116' and km = 82 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Luz no Caminho' and cidade = 'Roseira' and br = '116' and km = 82 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Caminho dos Milagres' and cidade = 'Roseira' and br = '116' and km = 81 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Unidos Pela Fé' and cidade = 'Roseira' and br = '116' and km = 81 and data_funcionamento_texto = '10 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Igreja Nova Vida' and cidade = 'Roseira' and br = '116' and km = 80 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date] where nome = 'Pássaro Marrom' and cidade = 'Roseira' and br = '116' and km = 79 and data_funcionamento_texto = '10 e 11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Tenda de Apoio Mãe Aparecida' and cidade = 'Roseira' and br = '116' and km = 79 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos na Vida e Unidos Pela Fé' and cidade = 'Roseira' and br = '116' and km = 79 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'União' and cidade = 'Roseira' and br = '116' and km = 79 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Polenta Solidária' and cidade = 'Roseira' and br = '116' and km = 79 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Bom Fran' and cidade = 'Aparecida' and br = '116' and km = 75 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Refúgio da Imaculada' and cidade = 'Aparecida' and br = '116' and km = 75 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Voluntários Pela Fé' and cidade = 'Aparecida' and br = '116' and km = 75 and data_funcionamento_texto = '10 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Ektor' and cidade = 'Aparecida' and br = '116' and km = 75 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Mãos que Servem' and cidade = 'Aparecida' and br = '116' and km = 75 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date] where nome = 'Romaria Fé na Estrada' and cidade = 'Aparecida' and br = '116' and km = 75 and data_funcionamento_texto = '10 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Família Ferreira-Madinha' and cidade = 'Aparecida' and br = '116' and km = 74.5 and data_funcionamento_texto = '03 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date] where nome = 'Comitiva de Aparecida' and cidade = 'Aparecida' and br = '116' and km = 74.5 and data_funcionamento_texto = '11 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Coração de Mãe Sempre Cabe Mais Um' and cidade = 'Aparecida' and br = '116' and km = 72 and data_funcionamento_texto = '10 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Amigos na Fé' and cidade = 'Aparecida' and br = '488' and km is null and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Casa da Mãe' and cidade = 'Aparecida' and br = '488' and km is null and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date] where nome = 'Tenda Amigos dos Irmãos Peregrinos' and cidade = 'Aparecida' and br = '488' and km is null and data_funcionamento_texto = '02 a 18 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Rosa Azul' and cidade = 'Guaratinguetá' and br = '116' and km = 59 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date] where nome = 'Lion Canas' and cidade = 'Canas' and br = '116' and km = 47 and data_funcionamento_texto = '11 e 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date,'2026-10-16'::date,'2026-10-17'::date,'2026-10-18'::date,'2026-10-19'::date,'2026-10-20'::date,'2026-10-21'::date,'2026-10-22'::date,'2026-10-23'::date,'2026-10-24'::date,'2026-10-25'::date,'2026-10-26'::date,'2026-10-27'::date,'2026-10-28'::date,'2026-10-29'::date,'2026-10-30'::date,'2026-10-31'::date] where nome = 'Pousada São João Batista' and cidade = 'Cachoeira Paulista' and br = '116' and km = 38 and data_funcionamento_texto = 'Sem informação de data';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Unidos pela Fé' and cidade = 'Queluz' and br = '116' and km = 9 and data_funcionamento_texto = '07 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date] where nome = 'Anjos da Estrada' and cidade = 'Apoio Móvel (Itinerante)' and br = '116' and km is null and data_funcionamento_texto = '09 a 12 de outubro';
+update public.paps_pre_cadastro set datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date] where nome = 'Parada da Relíquia' and cidade = 'Rio de Janeiro - Engenheiro Passos' and br = '116' and km = 336 and data_funcionamento_texto = '08 a 10 de outubro';
+
+-- ---------------------------------------------------------------------
+-- "PAP ativos" (home) passa a somar também os pré-cadastrados ainda sem
+-- gerente vinculado, quando a data de hoje estiver no calendário deles —
+-- só os já reivindicados (reivindicado_por preenchido) ficam de fora daqui
+-- porque esses já viraram um pontos_apoio de verdade, já contado acima.
+-- ---------------------------------------------------------------------
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true and status_aprovacao = 'aprovado'
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento))
+    +
+    (select count(*) from public.paps_pre_cadastro
+       where reivindicado_por is null
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento)),
+    (select count(*) from public.certificados);
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- Romaria Plus com até 5 fotos (antes só 1 foto por compra, guardada em
+-- compras_romaria_plus.foto_url/modelo/ajuste_overlay) — cada peregrino
+-- pode criar até 5 artes independentes, uma de cada vez, cada uma com seu
+-- próprio modelo/ajuste e seus próprios contadores de download e
+-- compartilhamento.
+-- ---------------------------------------------------------------------
+create table if not exists public.romaria_plus_fotos (
+  id uuid primary key default gen_random_uuid(),
+  compra_id uuid not null references public.compras_romaria_plus(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  indice int not null check (indice between 1 and 5),
+  foto_url text not null,
+  modelo text not null check (modelo in ('classico', 'destaque', 'painel', 'moldura')),
+  ajuste_overlay jsonb,
+  contador_downloads int not null default 0,
+  contador_compartilhamentos int not null default 0,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  unique (compra_id, indice)
+);
+
+comment on table public.romaria_plus_fotos is 'Cada linha é uma das até 5 artes/fotos que um peregrino com Romaria Plus pode criar para o mesmo certificado (Rodada 18) — substitui compras_romaria_plus.foto_url/modelo/ajuste_overlay, mantidos só por compatibilidade com compras antigas.';
+
+create index if not exists idx_romaria_plus_fotos_compra on public.romaria_plus_fotos(compra_id);
+
+alter table public.romaria_plus_fotos enable row level security;
+
+drop policy if exists romaria_plus_fotos_select_own on public.romaria_plus_fotos;
+create policy romaria_plus_fotos_select_own
+  on public.romaria_plus_fotos for select to authenticated
+  using (user_id = auth.uid());
+
+-- Administração só enxerga data/usuário (a query do painel admin não
+-- seleciona foto_url) — a pedido do usuário, sem ver a imagem de ninguém.
+drop policy if exists romaria_plus_fotos_select_admin on public.romaria_plus_fotos;
+create policy romaria_plus_fotos_select_admin
+  on public.romaria_plus_fotos for select to authenticated
+  using (public.is_admin());
+
+-- Sem política de insert/update/delete direta: toda escrita passa pelas
+-- funções abaixo (security definer), que validam dono + compra paga.
+
+-- Migra fotos já salvas do jeito antigo (uma por compra) para a linha 1 da
+-- nova tabela, sem duplicar se rodar de novo.
+insert into public.romaria_plus_fotos (compra_id, user_id, indice, foto_url, modelo, ajuste_overlay)
+select cp.id, cp.user_id, 1, cp.foto_url, cp.modelo, cp.ajuste_overlay
+from public.compras_romaria_plus cp
+where cp.foto_url is not null and cp.modelo is not null
+on conflict (compra_id, indice) do nothing;
+
+-- Salva (cria ou atualiza) uma das até 5 fotos de uma compra — chamada a
+-- cada troca de foto/modelo/ajuste, igual à antiga salvar_foto_romaria_plus,
+-- só que agora por índice (1 a 5) em vez de uma foto única por compra.
+create or replace function public.salvar_foto_romaria_plus_slot(
+  p_compra_id uuid,
+  p_indice int,
+  p_foto_url text,
+  p_modelo text,
+  p_ajuste_overlay jsonb default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+begin
+  select user_id into v_user_id
+  from public.compras_romaria_plus
+  where id = p_compra_id and user_id = auth.uid() and status = 'pago';
+
+  if v_user_id is null then
+    raise exception 'compra não encontrada, não paga, ou não pertence a este usuário';
+  end if;
+
+  insert into public.romaria_plus_fotos (compra_id, user_id, indice, foto_url, modelo, ajuste_overlay)
+  values (p_compra_id, v_user_id, p_indice, p_foto_url, p_modelo, p_ajuste_overlay)
+  on conflict (compra_id, indice) do update
+    set foto_url = excluded.foto_url,
+        modelo = excluded.modelo,
+        ajuste_overlay = excluded.ajuste_overlay,
+        atualizado_em = now();
+end;
+$$;
+
+grant execute on function public.salvar_foto_romaria_plus_slot(uuid, int, text, text, jsonb) to authenticated;
+
+-- Some com uma das fotos (a pessoa quer refazer do zero um dos 5 slots).
+create or replace function public.excluir_foto_romaria_plus_slot(p_compra_id uuid, p_indice int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.romaria_plus_fotos
+  where compra_id = p_compra_id and indice = p_indice and user_id = auth.uid();
+end;
+$$;
+
+grant execute on function public.excluir_foto_romaria_plus_slot(uuid, int) to authenticated;
+
+-- Contador de download/compartilhamento por foto — incrementado no
+-- momento em que a pessoa efetivamente baixa ou compartilha aquela arte.
+create or replace function public.registrar_evento_foto_romaria_plus(
+  p_compra_id uuid,
+  p_indice int,
+  p_evento text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_evento not in ('download', 'compartilhamento') then
+    raise exception 'evento inválido';
+  end if;
+
+  update public.romaria_plus_fotos
+  set contador_downloads = contador_downloads + (case when p_evento = 'download' then 1 else 0 end),
+      contador_compartilhamentos = contador_compartilhamentos + (case when p_evento = 'compartilhamento' then 1 else 0 end),
+      atualizado_em = now()
+  where compra_id = p_compra_id and indice = p_indice and user_id = auth.uid();
+end;
+$$;
+
+grant execute on function public.registrar_evento_foto_romaria_plus(uuid, int, text) to authenticated;
+
+-- FIM DA MIGRATION 24
