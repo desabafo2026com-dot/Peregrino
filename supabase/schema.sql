@@ -2082,3 +2082,122 @@ create policy "romaria_plus_fotos_delete_own_ou_admin" on storage.objects for de
   );
 
 -- FIM DA MIGRATION 21
+-- =====================================================================
+-- MIGRATION 22 — Rodada 16: cupons da Romaria Plus e acesso de teste do
+-- admin ao Certificado Plus (sem pagamento)
+-- =====================================================================
+
+-- Cupons de código gerados pelo admin em lote (quantidade pré-definida) para
+-- distribuir a peregrinos — cada código dá direito a UMA Romaria Plus
+-- gratuita quando resgatado. A geração dos códigos em si acontece no
+-- próprio painel admin (insert direto, permitido pela política abaixo); o
+-- resgate por um peregrino passa sempre pela função seguraabaixo, nunca por
+-- update direto desta tabela.
+create table if not exists public.cupons_romaria_plus (
+  id uuid primary key default gen_random_uuid(),
+  codigo text not null unique,
+  criado_por uuid references auth.users(id),
+  usado_por uuid references auth.users(id),
+  compra_id uuid references public.compras_romaria_plus(id),
+  criado_em timestamptz not null default now(),
+  usado_em timestamptz
+);
+
+alter table public.cupons_romaria_plus enable row level security;
+
+drop policy if exists cupons_romaria_plus_select_admin on public.cupons_romaria_plus;
+create policy cupons_romaria_plus_select_admin
+  on public.cupons_romaria_plus for select to authenticated
+  using (public.is_admin());
+
+drop policy if exists cupons_romaria_plus_insert_admin on public.cupons_romaria_plus;
+create policy cupons_romaria_plus_insert_admin
+  on public.cupons_romaria_plus for insert to authenticated
+  with check (public.is_admin() and criado_por = auth.uid());
+
+-- Resgate de cupom pelo próprio peregrino: valida o código (existe e ainda
+-- não foi usado), confirma que o certificado é do próprio usuário, cria a
+-- "compra" já paga com valor R$ 0,00 (mesmo efeito de uma compra paga de
+-- verdade — libera Certificado Plus + editor de foto) e marca o cupom como
+-- usado. SECURITY DEFINER porque o cliente não tem (e não deve ter)
+-- permissão de update em cupons nem de insert em compras_romaria_plus.
+create or replace function public.resgatar_cupom_romaria_plus(p_codigo text, p_certificado_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cupom_id uuid;
+  v_ja_usado uuid;
+  v_cert_user uuid;
+  v_ano int;
+  v_compra_id uuid;
+begin
+  select user_id into v_cert_user from public.certificados where id = p_certificado_id;
+  if v_cert_user is null or v_cert_user <> auth.uid() then
+    raise exception 'certificado não encontrado ou não pertence a este usuário';
+  end if;
+
+  select id, usado_por into v_cupom_id, v_ja_usado
+    from public.cupons_romaria_plus
+    where upper(codigo) = upper(trim(p_codigo))
+    for update;
+
+  if v_cupom_id is null then
+    raise exception 'cupom inválido';
+  end if;
+  if v_ja_usado is not null then
+    raise exception 'este cupom já foi usado';
+  end if;
+
+  select extract(year from coalesce(data_fim, emitido_em))::int into v_ano
+    from public.certificados where id = p_certificado_id;
+
+  insert into public.compras_romaria_plus (certificado_id, user_id, valor_centavos, status, pago_em, ano)
+  values (p_certificado_id, auth.uid(), 0, 'pago', now(), v_ano)
+  returning id into v_compra_id;
+
+  update public.cupons_romaria_plus
+  set usado_por = auth.uid(), usado_em = now(), compra_id = v_compra_id
+  where id = v_cupom_id;
+end;
+$$;
+
+grant execute on function public.resgatar_cupom_romaria_plus(text, uuid) to authenticated;
+
+-- Acesso de teste do administrador: libera o Certificado Plus (parte paga)
+-- para um certificado que seja DO PRÓPRIO ADMIN, sem pagamento nem cupom —
+-- para conferir a arte com pergaminho e testar o upload/edição de foto.
+-- Nunca libera o certificado de outra pessoa (checagem v_cert_user <>
+-- auth.uid() abaixo).
+create or replace function public.admin_liberar_romaria_plus_teste(p_certificado_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cert_user uuid;
+  v_ano int;
+begin
+  if not public.is_admin() then
+    raise exception 'apenas administradores podem usar esta função';
+  end if;
+
+  select user_id, extract(year from coalesce(data_fim, emitido_em))::int
+    into v_cert_user, v_ano
+    from public.certificados where id = p_certificado_id;
+
+  if v_cert_user is null or v_cert_user <> auth.uid() then
+    raise exception 'certificado não encontrado ou não pertence a este administrador';
+  end if;
+
+  insert into public.compras_romaria_plus (certificado_id, user_id, valor_centavos, status, pago_em, ano)
+  values (p_certificado_id, auth.uid(), 0, 'pago', now(), v_ano);
+end;
+$$;
+
+grant execute on function public.admin_liberar_romaria_plus_teste(uuid) to authenticated;
+
+-- FIM DA MIGRATION 22
