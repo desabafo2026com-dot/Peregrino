@@ -13,6 +13,7 @@ import {
   UserCog,
   MessageCircle,
   Sparkles,
+  Ticket,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -27,6 +28,7 @@ const ADMIN_LINKS = [
   { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
   { href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert },
   { href: "/admin/romaria-plus", label: "Romaria Plus", icon: Sparkles },
+  { href: "/admin/cupons-romaria-plus", label: "Cupons Romaria Plus", icon: Ticket },
   { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
   { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
 ];
