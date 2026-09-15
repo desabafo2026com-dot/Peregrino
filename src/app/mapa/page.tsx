@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import MapClient from "./MapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { MapPinPlus, TriangleAlert } from "lucide-react";
-import { nomeRota } from "@/lib/constants";
+import { nomeRota, kmPertenceARota } from "@/lib/constants";
 import type { PontoApoio, PontoRisco, RiscoInformado, Rota, PontoCheckin, PapPreCadastro } from "@/types/database";
 import type { PapPreCadastroMapa } from "@/components/MapView";
 
@@ -15,25 +15,89 @@ function normalizarCidade(cidade: string) {
     .replace(/[̀-ͯ]/g, "");
 }
 
-// PAPs pré-cadastrados não têm coordenada própria — vários deles caem na
-// mesma cidade (ex.: Guararema tem 5) e, sem isso, todos ficariam empilhados
-// exatamente na mesma posição do ponto de check-in daquela cidade,
-// aparecendo no mapa como um único marcador visível. Um pequeno desvio
-// determinístico (sempre o mesmo para o mesmo PAP, calculado a partir do
-// próprio id) espalha esses PAPs num raio de ~350m ao redor da cidade — o
-// suficiente para cada um virar um marcador distinto, sem fingir uma
-// precisão que os dados não têm (o popup continua avisando "aproximado").
-function comDesvioDeterministico(id: string, lat: number, lng: number) {
+// Pequeno desvio determinístico (sempre o mesmo para o mesmo PAP, calculado
+// a partir do próprio id) — usado só como último recurso, para os raros
+// pré-cadastros sem km real (itinerantes) ou sem nenhuma âncora de km na
+// rota, e como uma separação mínima entre PAPs que caem exatamente no
+// mesmo km/cidade. Bem menor que o desvio da Rodada 14 (~350m): agora a
+// posição principal vem do km real da rodovia, não mais de "perto da
+// cidade" — este desvio é só para não empilhar dois marcadores idênticos.
+function comDesvioDeterministico(id: string, lat: number, lng: number, raioGraus: number) {
   let h1 = 0;
   let h2 = 0;
   for (let i = 0; i < id.length; i++) {
     h1 = (h1 * 31 + id.charCodeAt(i)) | 0;
     h2 = (h2 * 131 + id.charCodeAt(i)) | 0;
   }
-  const RAIO_GRAUS = 0.0032;
-  const dLat = ((Math.abs(h1) % 2000) / 1000 - 1) * RAIO_GRAUS;
-  const dLng = ((Math.abs(h2) % 2000) / 1000 - 1) * RAIO_GRAUS;
+  const dLat = ((Math.abs(h1) % 2000) / 1000 - 1) * raioGraus;
+  const dLng = ((Math.abs(h2) % 2000) / 1000 - 1) * raioGraus;
   return { lat: lat + dLat, lng: lng + dLng };
+}
+
+// Mediana do km real (rodovia) de cada cidade, calculada a partir de toda a
+// base de pré-cadastro (não só os ainda não vinculados) — quanto mais PAPs
+// uma cidade tiver na lista oficial, mais confiável a estimativa. Serve de
+// "âncora" para interpolar a posição de qualquer PAP pelo seu próprio km,
+// já que a coluna km da tabela usa a quilometragem real da rodovia (ver
+// nota abaixo sobre por que não dá pra usar pontos_checkin.km_aproximado
+// diretamente).
+function medianaKmPorCidade(paps: { cidade: string | null; km: number | null }[]) {
+  const porCidade = new Map<string, number[]>();
+  for (const p of paps) {
+    if (!p.cidade || p.km == null) continue;
+    const chave = normalizarCidade(p.cidade);
+    const lista = porCidade.get(chave) ?? [];
+    lista.push(p.km);
+    porCidade.set(chave, lista);
+  }
+  const resultado = new Map<string, number>();
+  for (const [cidade, valores] of porCidade) {
+    valores.sort((a, b) => a - b);
+    const meio = Math.floor(valores.length / 2);
+    resultado.set(cidade, valores.length % 2 ? valores[meio] : (valores[meio - 1] + valores[meio]) / 2);
+  }
+  return resultado;
+}
+
+interface Ancora {
+  kmReal: number;
+  lat: number;
+  lng: number;
+}
+
+// pontos_checkin.km_aproximado é a distância percorrida desde o início da
+// rota (0 a ~170/45) — uma escala totalmente diferente do km real da
+// rodovia usado em paps_pre_cadastro.km (ex.: Guarulhos = km ~216). As duas
+// não são diretamente conversíveis por fórmula. Em vez disso, usamos cada
+// ponto de check-in cuja cidade também aparece na base de PAP como uma
+// "âncora" (km real conhecido + posição geográfica exata do check-in) e
+// interpolamos linearmente entre as âncoras mais próximas do km pedido —
+// preciso o bastante para posicionar sobre o traçado real da rodovia, sem
+// inventar uma fórmula de conversão que os dados não sustentam.
+function construirAncoras(checkins: PontoCheckin[], kmPorCidade: Map<string, number>): Ancora[] {
+  const ancoras: Ancora[] = [];
+  for (const c of checkins) {
+    const kmReal = kmPorCidade.get(normalizarCidade(c.cidade));
+    if (kmReal == null) continue;
+    ancoras.push({ kmReal, lat: c.latitude, lng: c.longitude });
+  }
+  return ancoras.sort((a, b) => a.kmReal - b.kmReal);
+}
+
+function posicaoPorKmReal(kmReal: number, ancoras: Ancora[]): { lat: number; lng: number } | null {
+  if (ancoras.length === 0) return null;
+  if (kmReal <= ancoras[0].kmReal) return { lat: ancoras[0].lat, lng: ancoras[0].lng };
+  const ultima = ancoras[ancoras.length - 1];
+  if (kmReal >= ultima.kmReal) return { lat: ultima.lat, lng: ultima.lng };
+  for (let i = 0; i < ancoras.length - 1; i++) {
+    const a = ancoras[i];
+    const b = ancoras[i + 1];
+    if (kmReal >= a.kmReal && kmReal <= b.kmReal) {
+      const t = (kmReal - a.kmReal) / (b.kmReal - a.kmReal || 1);
+      return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
+    }
+  }
+  return null;
 }
 
 // Cores claras (pastel), para diferenciar visualmente as duas rotas sem
@@ -67,6 +131,7 @@ export default async function MapaPage() {
     { data: rotas },
     { data: pontosCheckin },
     { data: papsPreCadastroData },
+    { data: todosPapsPreCadastro },
   ] = await Promise.all([
     supabase
       .from("pontos_apoio")
@@ -85,6 +150,10 @@ export default async function MapaPage() {
     // ponto sai daqui e passa a ser representado pelo PAP real (pontos_apoio,
     // já com localização exata) quando a divulgação for aprovada.
     supabase.from("paps_pre_cadastro").select("*").is("reivindicado_por", null),
+    // Base inteira (vinculados ou não) só para estimar o km real médio de
+    // cada cidade — quanto mais PAPs conhecidos numa cidade, mais confiável
+    // a âncora usada na interpolação abaixo.
+    supabase.from("paps_pre_cadastro").select("cidade, km"),
   ]);
 
   const rotasLinhas = ((rotas ?? []) as Rota[]).map((r) => ({
@@ -95,11 +164,27 @@ export default async function MapaPage() {
       .map((p) => ({ lat: p.latitude, lng: p.longitude, ordem: p.ordem })),
   }));
 
-  // O pré-cadastro não tem coordenadas próprias — usamos a localização do
-  // ponto de check-in da mesma cidade como aproximação, só para situar o PAP
-  // no mapa antes de ser vinculado. Sem cidade correspondente, não dá para
-  // aproximar e o ponto fica de fora do mapa (mas continua na lista de busca
-  // do cadastro do gerente).
+  // Posição de cada PAP ainda sem gerente vinculado, em ordem de
+  // preferência: (1) posição exata marcada pela administração (arrastando
+  // no mapa ou pela tela de reposicionar); (2) estimativa pelo km real da
+  // rodovia, interpolando entre os pontos de check-in mais próximos daquele
+  // km (ver construirAncoras/posicaoPorKmReal); (3) só quando não há km
+  // cadastrado (PAP itinerante) nem âncora suficiente na rota, a
+  // aproximação antiga pela cidade do check-in, com um desvio pequeno para
+  // não empilhar marcadores idênticos.
+  const kmPorCidade = medianaKmPorCidade((todosPapsPreCadastro ?? []) as { cidade: string | null; km: number | null }[]);
+  const checkinsPorRota = new Map<string, PontoCheckin[]>();
+  for (const r of (rotas ?? []) as Rota[]) {
+    checkinsPorRota.set(
+      r.slug,
+      ((pontosCheckin ?? []) as PontoCheckin[]).filter((c) => c.rota_id === r.id)
+    );
+  }
+  const ancorasPorRota = new Map<string, Ancora[]>();
+  for (const [slug, checkins] of checkinsPorRota) {
+    ancorasPorRota.set(slug, construirAncoras(checkins, kmPorCidade));
+  }
+
   const cidadeParaCoord = new Map<string, { lat: number; lng: number }>();
   for (const p of (pontosCheckin ?? []) as PontoCheckin[]) {
     const chave = normalizarCidade(p.cidade);
@@ -107,19 +192,39 @@ export default async function MapaPage() {
       cidadeParaCoord.set(chave, { lat: p.latitude, lng: p.longitude });
     }
   }
+
   const papsPreCadastro: PapPreCadastroMapa[] = [];
   for (const p of (papsPreCadastroData ?? []) as PapPreCadastro[]) {
-    // Posição marcada manualmente pela administração (Rodada 13) tem
-    // prioridade sobre a aproximação por cidade — essa, sim, exata, não leva
-    // desvio nenhum.
-    const cidadeCoord = p.cidade ? cidadeParaCoord.get(normalizarCidade(p.cidade)) : undefined;
-    const coord =
-      p.latitude != null && p.longitude != null
-        ? { lat: p.latitude, lng: p.longitude }
-        : cidadeCoord
-          ? comDesvioDeterministico(p.id, cidadeCoord.lat, cidadeCoord.lng)
-          : undefined;
+    let coord: { lat: number; lng: number } | undefined;
+    let precisao: "exata" | "km" | "cidade" | undefined;
+
+    if (p.latitude != null && p.longitude != null) {
+      coord = { lat: p.latitude, lng: p.longitude };
+      precisao = "exata";
+    } else if (p.km != null) {
+      const rotaSlug = kmPertenceARota(p.km, "norte") ? "norte" : "sul";
+      const posicao = posicaoPorKmReal(p.km, ancorasPorRota.get(rotaSlug) ?? []);
+      if (posicao) {
+        coord = posicao;
+        precisao = "km";
+      }
+    }
+    if (!coord) {
+      const cidadeCoord = p.cidade ? cidadeParaCoord.get(normalizarCidade(p.cidade)) : undefined;
+      if (cidadeCoord) {
+        coord = cidadeCoord;
+        precisao = "cidade";
+      }
+    }
     if (!coord) continue;
+
+    // Só afasta visualmente quando a posição não é exata — um pequeno
+    // desvio (bem menor quando já viemos do km real, que já situa o ponto
+    // sobre a rodovia) evita que dois PAPs no mesmo km/cidade fiquem
+    // empilhados num marcador só.
+    const posicaoFinal =
+      precisao === "exata" ? coord : comDesvioDeterministico(p.id, coord.lat, coord.lng, precisao === "km" ? 0.0006 : 0.0032);
+
     papsPreCadastro.push({
       id: p.id,
       nome: p.nome,
@@ -127,8 +232,8 @@ export default async function MapaPage() {
       br: p.br,
       km: p.km,
       sentido_pista: p.sentido_pista,
-      lat: coord.lat,
-      lng: coord.lng,
+      lat: posicaoFinal.lat,
+      lng: posicaoFinal.lng,
     });
   }
 
@@ -141,7 +246,7 @@ export default async function MapaPage() {
           <p className="text-sm text-neutral-500">
             PAP — Pontos de Apoio ao Peregrino (tenda verde = confirmado pela
             administração; tenda cinza tracejada = aguardando vínculo de um
-            gerente, localização aproximada), locais de risco (bandeira
+            gerente, localização estimada pelo km da rodovia), locais de risco (bandeira
             vermelha ou amarela) e avisos recentes de peregrinos (sinistro,
             suspeita ou chuva, em laranja). Use as opções abaixo do mapa para
             mostrar ou esconder cada camada.
@@ -164,6 +269,7 @@ export default async function MapaPage() {
         peregrinos={localizacoes ?? []}
         rotasLinhas={rotasLinhas}
         papsPreCadastro={papsPreCadastro}
+        isAdmin={isAdmin}
       />
 
       <p className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">

@@ -56,6 +56,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const cert = certificado as Certificado;
+  // Ano de conclusão da peregrinação deste certificado — grava desde já
+  // (mesmo antes de pago) para travar a futura edição de foto a este ano
+  // específico, caso o mesmo peregrino compre a Romaria Plus em anos
+  // diferentes com contas/certificados distintos.
+  const ano = new Date(cert.data_fim ?? cert.emitido_em).getFullYear();
+
   const { data: compra, error: erroInsert } = await admin
     .from("compras_romaria_plus")
     .insert({
@@ -63,6 +70,7 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       valor_centavos: ROMARIA_PLUS_VALOR_CENTAVOS,
       status: "pendente",
+      ano,
     })
     .select()
     .single();
@@ -72,7 +80,6 @@ export async function POST(request: NextRequest) {
   }
 
   const { origin } = new URL(request.url);
-  const cert = certificado as Certificado;
 
   try {
     const resposta = await fetch("https://api.mercadopago.com/checkout/preferences", {

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
 import CertificadoView from "@/components/CertificadoView";
 import RomariaPlusView from "@/components/RomariaPlusView";
 import RomariaPlusCompra from "@/components/RomariaPlusCompra";
@@ -57,14 +59,40 @@ export default async function CertificadoPage() {
       <h1 className="text-2xl font-bold">Meus certificados</h1>
       {certificadosLista.map((c) => {
         const compra = compraPorCertificado.get(c.id) ?? null;
+        const pago = compra?.status === "pago";
         return (
           <div key={c.id} className="flex flex-col gap-4">
-            <CertificadoView certificado={c} />
-            {compra?.status === "pago" ? (
-              <RomariaPlusView certificado={c} />
-            ) : (
-              <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} />
-            )}
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-bold text-amber-800 dark:text-amber-500">Certificado</h2>
+              <a
+                href={`#romaria-plus-${c.id}`}
+                className="flex items-center gap-1 text-sm font-semibold text-amber-700 hover:underline dark:text-amber-500"
+              >
+                <Sparkles size={14} /> Certificado Plus →
+              </a>
+            </div>
+            {/* Grátis, sempre disponível para quem concluiu a peregrinação —
+                sem a arte de pergaminho, que agora é exclusiva de quem compra
+                a Romaria Plus (ver "Certificado Plus" abaixo). */}
+            <CertificadoGratuitoView certificado={c} />
+
+            <div id={`romaria-plus-${c.id}`} className="mt-2 flex scroll-mt-6 flex-col gap-4 border-t border-dashed border-amber-200 pt-6 dark:border-amber-900">
+              <h2 className="text-center text-lg font-bold text-amber-800 dark:text-amber-500">Certificado Plus</h2>
+              {pago && compra ? (
+                <>
+                  <CertificadoView certificado={c} />
+                  <RomariaPlusView
+                    certificado={c}
+                    compraId={compra.id}
+                    userId={user.id}
+                    fotoUrlInicial={compra.foto_url}
+                    modeloInicial={compra.modelo}
+                  />
+                </>
+              ) : (
+                <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} />
+              )}
+            </div>
           </div>
         );
       })}

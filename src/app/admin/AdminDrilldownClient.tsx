@@ -179,6 +179,12 @@ interface Props {
   mensagensNovas: number;
 }
 
+// flex-1 (em vez de largura fixa) faz cada card crescer para preencher
+// junto com os outros da mesma linha — inclusive numa última linha
+// incompleta, que já não fica mais nem à esquerda (bug da Rodada 13) nem
+// isolada num bloco pequeno centralizado (Rodada 14): agora ocupa a
+// largura toda da linha, sem sobrar vão nas laterais. `max-w` evita que um
+// card sozinho numa linha vire um retângulo exagerado de ponta a ponta.
 function Card({
   icon: Icon,
   label,
@@ -195,11 +201,11 @@ function Card({
   return (
     <button
       onClick={onClick}
-      className={`card w-[calc(50%-0.25rem)] text-center transition hover:border-amber-300 sm:w-[130px] ${
+      className={`card flex min-w-[100px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1 text-center transition hover:border-amber-300 ${
         destaque ? "border-amber-400" : ""
       }`}
     >
-      <Icon className="mx-auto mb-1 text-amber-700" size={20} />
+      <Icon className="text-amber-700" size={20} />
       <p className="text-2xl font-bold text-amber-800 dark:text-amber-500">{value}</p>
       <p className="text-xs text-neutral-500">{label}</p>
     </button>
@@ -401,7 +407,7 @@ export default function AdminDrilldownClient({
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Peregrinos</h2>
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex flex-wrap gap-2">
           <Card
             icon={Users}
             label="Cadastrados"
@@ -419,7 +425,7 @@ export default function AdminDrilldownClient({
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Peregrinações</h2>
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex flex-wrap gap-2">
           <Card
             icon={CalendarDays}
             label="Planejadas"
@@ -465,7 +471,7 @@ export default function AdminDrilldownClient({
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">PAP</h2>
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex flex-wrap gap-2">
           <Card
             icon={MapPinned}
             label="Cadastrados"
@@ -492,32 +498,18 @@ export default function AdminDrilldownClient({
               abrir({ tipo: "pap", titulo: "PAP vinculados da lista pública pré-cadastrada", dados: papVinculados })
             }
           />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Gerentes de PAP</h2>
-        <div className="flex flex-wrap justify-center gap-2">
           <Card
             icon={Users}
-            label="Cadastrados"
+            label="Gerentes de PAP"
             value={gerentesCadastrados.length}
             onClick={() => abrir({ tipo: "gerente", titulo: "Gerentes de PAP cadastrados", dados: gerentesCadastrados })}
           />
         </div>
-        <p className="mt-2 text-xs text-neutral-500">
-          O cadastro da conta não precisa mais de aprovação — o que continua
-          exigindo aprovação é a divulgação de cada PAP no mapa (ver seção
-          &quot;PAP&quot; acima).
-        </p>
-        <Link href="/admin/gerentes" className="mt-3 inline-block w-fit text-sm text-amber-700 dark:text-amber-500">
-          Ver gerentes de PAP →
-        </Link>
       </section>
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Riscos</h2>
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex flex-wrap gap-2">
           <Card
             icon={FlagIcon}
             label="Cadastrados"

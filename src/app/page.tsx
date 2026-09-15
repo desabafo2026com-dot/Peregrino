@@ -92,26 +92,29 @@ export default async function Home() {
       </section>
 
       {stats && (
-        <section className="flex flex-wrap justify-center gap-3 text-center">
-          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
+        // flex-1 (em vez de largura fixa) faz os 4 cards crescerem juntos
+        // para preencher a linha toda, sem sobrar vão nas laterais — mesma
+        // lógica aplicada aos cards do painel admin.
+        <section className="flex flex-wrap gap-3 text-center">
+          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Users size={20} /> {stats.peregrinos_ativos}
             </p>
             <p className="text-xs text-neutral-500">peregrinos ativos</p>
           </div>
-          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
+          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <CheckCircle2 size={20} /> {stats.checkins_total}
             </p>
             <p className="text-xs text-neutral-500">check-ins realizados</p>
           </div>
-          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
+          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <MapPin size={20} /> {stats.pontos_apoio_ativos}
             </p>
             <p className="text-xs text-neutral-500">PAP ativos</p>
           </div>
-          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
+          <div className="card flex min-w-[130px] max-w-[220px] flex-1 flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Award size={20} /> {stats.peregrinacoes_concluidas}
             </p>

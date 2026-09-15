@@ -22,6 +22,7 @@ interface Props {
   peregrinos: { user_id: string; latitude: number; longitude: number }[];
   rotasLinhas: RotaLinha[];
   papsPreCadastro: PapPreCadastroMapa[];
+  isAdmin?: boolean;
 }
 
 // PAP (confirmados/vinculados e os que ainda aguardam vínculo) aparecem
@@ -40,6 +41,7 @@ export default function MapClient({
   peregrinos,
   rotasLinhas,
   papsPreCadastro,
+  isAdmin = false,
 }: Props) {
   const [mostrarPap, setMostrarPap] = useState(true);
   const [mostrarRisco, setMostrarRisco] = useState(false);
@@ -99,9 +101,14 @@ export default function MapClient({
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-full border border-dashed border-neutral-400 bg-neutral-400" aria-hidden="true" />
-            Aguardando vínculo (localização aproximada)
+            Aguardando vínculo (localização estimada pelo km)
           </span>
         </div>
+      )}
+      {isAdmin && mostrarPap && papsPreCadastro.length > 0 && (
+        <p className="text-xs text-amber-700 dark:text-amber-500">
+          Como administrador, você pode arrastar qualquer marcador cinza tracejado para ajustar a posição exata do PAP.
+        </p>
       )}
 
       {mostrarRotas && rotasLinhas.length > 0 && (
@@ -128,6 +135,7 @@ export default function MapClient({
         papsPreCadastro={papsPreCadastroVisiveis}
         calorPeregrinos={peregrinos.length > 0}
         height="65vh"
+        permitirArrastarPapPreCadastro={isAdmin}
       />
     </div>
   );
