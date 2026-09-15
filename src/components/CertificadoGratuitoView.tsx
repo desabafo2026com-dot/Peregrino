@@ -6,11 +6,28 @@ import { Printer, Download, FileText, Award } from "lucide-react";
 import { MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
 import type { Certificado } from "@/types/database";
 
+// Tamanho de página A4 paisagem, em mm — mesma orientação/proporção usada
+// pelo Certificado Plus (Rodada 16, a pedido do usuário: "o certificado
+// simples tem que ser no tamanho A4 e uma formatação típica de
+// certificados"), só que sem a imagem de pergaminho (essa é exclusiva de
+// quem compra a Romaria Plus).
+const A4_LARGURA_MM = 297;
+const A4_ALTURA_MM = 210;
+
 function formatarData(d: string | null) {
   if (!d) return null;
   return new Date(d).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
+    year: "numeric",
+  });
+}
+
+function formatarDataCurta(d: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
     year: "numeric",
   });
 }
@@ -23,13 +40,15 @@ function extrairOrigem(rotaNome: string | null) {
   return m ? m[1].trim() : null;
 }
 
-// Certificado grátis — versão simples (Rodada 15): sem a arte de pergaminho
-// (essa passou a ser exclusiva de quem compra a Romaria Plus, como
-// "Certificado Plus"), mas com um layout próprio, cuidado visualmente
-// (faixa com a identidade do app, tipografia clara), disponível para
-// qualquer peregrino que concluiu a caminhada, sem custo. O conteúdo (nome,
-// trajeto, período, check-ins, código) é o mesmo do certificado pago —
-// só a moldura/arte muda.
+// Certificado grátis — versão simples (Rodada 15, redesenhado na Rodada 16
+// para o formato A4 e uma formatação mais próxima da de um certificado
+// impresso de verdade): sem a arte de pergaminho (essa passou a ser
+// exclusiva de quem compra a Romaria Plus, como "Certificado Plus"), com
+// moldura, nome centralizado em destaque e uma linha de dados objetivos
+// (início, término, tempo total e check-ins) — disponível para qualquer
+// peregrino que concluiu a caminhada, sem custo. O conteúdo (nome, trajeto,
+// período, check-ins, código) é o mesmo do certificado pago — só a
+// moldura/arte muda.
 export default function CertificadoGratuitoView({ certificado: c }: { certificado: Certificado }) {
   const ref = useRef<HTMLDivElement>(null);
   const [baixando, setBaixando] = useState(false);
@@ -44,19 +63,7 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
         : "a pé";
 
   const origem = extrairOrigem(c.rota_nome);
-  const dataInicio = formatarData(c.data_inicio);
-  const dataFim = formatarData(c.data_fim);
-  const mesmoDia = !!(c.data_inicio && c.data_fim && dataInicio === dataFim);
   const trajetoTexto = origem ? `de ${origem} até` : "até";
-
-  let periodoTexto: string;
-  if (mesmoDia && dataInicio) {
-    periodoTexto = `no dia ${dataInicio}`;
-  } else if (dataInicio && dataFim) {
-    periodoTexto = `no período de ${dataInicio} a ${dataFim}${c.duracao_texto ? ` (${c.duracao_texto})` : ""}`;
-  } else {
-    periodoTexto = c.duracao_texto ? `em ${c.duracao_texto}` : "";
-  }
 
   function imprimir() {
     ref.current?.classList.add("print-alvo");
@@ -95,19 +102,12 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
     try {
       const [{ toPng }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
       const dataUrl = await toPng(ref.current, { pixelRatio: 2 });
-      // Mede o retângulo já renderizado (em vez de uma proporção fixa
-      // hardcoded) para gerar a página do PDF com a proporção real deste
-      // layout, que — diferente do certificado com imagem de fundo — não
-      // tem uma proporção travada de antemão.
-      const rect = ref.current.getBoundingClientRect();
-      const larguraMm = 210;
-      const alturaMm = (larguraMm * rect.height) / rect.width;
       const pdf = new jsPDF({
-        orientation: alturaMm > larguraMm ? "portrait" : "landscape",
+        orientation: "landscape",
         unit: "mm",
-        format: [larguraMm, alturaMm],
+        format: [A4_LARGURA_MM, A4_ALTURA_MM],
       });
-      pdf.addImage(dataUrl, "PNG", 0, 0, larguraMm, alturaMm);
+      pdf.addImage(dataUrl, "PNG", 0, 0, A4_LARGURA_MM, A4_ALTURA_MM);
       pdf.save(`certificado-peregrino-${c.codigo}.pdf`);
     } catch {
       setErro("Não foi possível gerar o PDF agora. Tente novamente.");
@@ -116,42 +116,90 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
     }
   }
 
+  const dados = [
+    { label: "Início", valor: formatarDataCurta(c.data_inicio) },
+    { label: "Término", valor: formatarDataCurta(c.data_fim) },
+    { label: "Tempo total", valor: c.duracao_texto || "—" },
+    { label: "Check-ins", valor: String(c.total_checkins ?? 0) },
+  ];
+
   return (
     <div>
       <div
         ref={ref}
         id={`cert-gratis-${c.id}`}
-        className="mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm dark:border-amber-900 dark:bg-neutral-900"
+        className="mx-auto w-full max-w-4xl bg-white text-neutral-900 dark:bg-white dark:text-neutral-900"
+        style={{ aspectRatio: `${A4_LARGURA_MM} / ${A4_ALTURA_MM}`, containerType: "inline-size" }}
       >
-        <div className="flex items-center gap-3 bg-gradient-to-r from-amber-800 to-amber-900 px-6 py-4 text-white">
-          <Image
-            src="/icons/logo-emblema.png"
-            alt=""
-            width={40}
-            height={40}
-            className="h-10 w-10 rounded-lg ring-1 ring-white/40"
-          />
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-amber-200">O Peregrino</p>
-            <p className="font-serif text-lg font-bold leading-tight">Certificado de Peregrinação</p>
-          </div>
-          <Award className="ml-auto shrink-0 text-stripe-400" size={28} />
-        </div>
+        {/* Moldura dupla — referência clássica de certificado impresso, sem
+            depender de nenhuma imagem externa. */}
+        <div className="flex h-full w-full flex-col border-[3px] border-amber-800 p-[1.4cqw]">
+          <div className="flex h-full w-full flex-col items-center justify-between border border-amber-300 px-[3cqw] py-[2.2cqw] text-center">
+            <div className="flex flex-col items-center gap-[0.6cqw]">
+              <Image
+                src="/icons/logo-emblema.png"
+                alt=""
+                width={56}
+                height={56}
+                style={{ width: "4.2cqw", height: "4.2cqw" }}
+                className="rounded-full ring-1 ring-amber-300"
+              />
+              <p
+                className="font-semibold uppercase tracking-[0.3em] text-amber-700"
+                style={{ fontSize: "1.1cqw" }}
+              >
+                O Peregrino
+              </p>
+              <h2
+                className="font-serif font-bold uppercase tracking-[0.1em] text-amber-900"
+                style={{ fontSize: "2.3cqw" }}
+              >
+                Certificado de Peregrinação
+              </h2>
+            </div>
 
-        <div className="px-6 py-8 text-center">
-          <p className="text-sm text-neutral-500">Certificamos que</p>
-          <p className="my-2 font-serif text-2xl font-bold text-neutral-900 dark:text-neutral-50">
-            {c.nome_peregrino}
-          </p>
-          <p className="mx-auto max-w-md text-justify text-sm text-neutral-700 dark:text-neutral-300">
-            concluiu {meioLabel} sua peregrinação {trajetoTexto} a Basílica de
-            Nossa Senhora Aparecida-SP {periodoTexto}, com{" "}
-            <strong>{c.total_checkins}</strong> check-in(s) confirmados ao
-            longo da rota.
-          </p>
-          <div className="mt-6 flex items-center justify-between border-t border-dashed border-amber-200 pt-3 text-xs text-neutral-500 dark:border-amber-900">
-            <span>Emitido em {formatarData(c.emitido_em)}</span>
-            <span className="font-mono">Código: {c.codigo}</span>
+            <div className="flex flex-col items-center gap-[0.5cqw]">
+              <p className="text-neutral-500" style={{ fontSize: "1.3cqw" }}>
+                Certificamos que
+              </p>
+              <p
+                className="border-b-2 border-amber-200 px-[2cqw] pb-[0.4cqw] font-serif font-bold text-neutral-900"
+                style={{ fontSize: "3cqw", lineHeight: 1.15 }}
+              >
+                {c.nome_peregrino}
+              </p>
+              <p
+                className="mx-auto max-w-[85%] text-justify text-neutral-700"
+                style={{ fontSize: "1.35cqw", lineHeight: 1.4, marginTop: "0.6cqw" }}
+              >
+                concluiu {meioLabel} sua peregrinação {trajetoTexto} a Basílica
+                de Nossa Senhora Aparecida-SP, conforme os dados abaixo.
+              </p>
+            </div>
+
+            <div
+              className="flex w-full items-stretch justify-center divide-x divide-amber-200"
+              style={{ fontSize: "1.15cqw" }}
+            >
+              {dados.map((d) => (
+                <div key={d.label} className="flex flex-1 flex-col items-center gap-[0.2cqw] px-[1.2cqw]">
+                  <span className="uppercase tracking-wide text-neutral-400" style={{ fontSize: "0.85cqw" }}>
+                    {d.label}
+                  </span>
+                  <span className="font-bold text-amber-800">{d.valor}</span>
+                </div>
+              ))}
+            </div>
+
+            <div
+              className="flex w-full items-center justify-between border-t border-dashed border-amber-200 pt-[0.8cqw] text-neutral-500"
+              style={{ fontSize: "1cqw" }}
+            >
+              <span>Emitido em {formatarData(c.emitido_em)}</span>
+              <span className="flex items-center gap-1 font-mono">
+                <Award size={14} className="text-amber-600" /> Código: {c.codigo}
+              </span>
+            </div>
           </div>
         </div>
       </div>
