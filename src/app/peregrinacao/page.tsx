@@ -13,22 +13,30 @@ export default async function PeregrinacaoPage() {
 
   if (!user) redirect("/login?redirect=/peregrinacao");
 
-  // Contas de Gerente de PAP têm sua própria área e nunca acessam o fluxo
-  // de peregrino.
   const { data: gerente } = await supabase
     .from("gerentes_pap")
     .select("id")
     .eq("id", user.id)
     .maybeSingle();
-  if (gerente || user.user_metadata?.tipo_conta === "gerente_pap") {
-    redirect("/gerente-pap");
-  }
 
   const { data: perfil } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Uma conta de gerente de PAP que nunca teve perfil próprio de peregrino
+  // (sem linha em `profiles`) tem sua própria área e nunca acessa o fluxo
+  // de peregrino — mandada direto para lá. Mas uma conta que acumula os
+  // dois papéis (tem linha em `profiles` E em `gerentes_pap`) precisa
+  // conseguir chegar aqui de verdade: é o destino do "Minha peregrinação"
+  // no menu de troca de perfil da barra superior (Navbar/AuthRoleProvider).
+  // Antes esse redirecionamento era incondicional e jogava essa conta de
+  // volta para "/gerente-pap" sempre, fazendo a troca de perfil nunca
+  // funcionar de fato (Rodada 16).
+  if (!perfil && (gerente || user.user_metadata?.tipo_conta === "gerente_pap")) {
+    redirect("/gerente-pap");
+  }
 
   if (!perfil) {
     return (
@@ -61,16 +69,21 @@ export default async function PeregrinacaoPage() {
 
   const { data: certificadosData } = await supabase
     .from("certificados")
-    .select("peregrinacao_id")
+    .select("id, peregrinacao_id")
     .eq("user_id", user.id);
 
-  const idsComCertificado = new Set(
-    (certificadosData ?? []).map((c) => c.peregrinacao_id as string)
-  );
+  // Mapa peregrinacao_id -> certificado_id — usado tanto para "Ver
+  // certificado" quanto para o link "Certificado Plus →" (Rodada 16, movido
+  // para esta lista) de cada peregrinação concluída.
+  const certificadoIdPorPeregrinacao = new Map<string, string>();
+  (certificadosData ?? []).forEach((c) => {
+    certificadoIdPorPeregrinacao.set(c.peregrinacao_id as string, c.id as string);
+  });
 
   const peregrinacoesConcluidas = (concluidasData ?? []).map((p) => ({
     ...(p as Peregrinacao),
-    temCertificado: idsComCertificado.has(p.id as string),
+    temCertificado: certificadoIdPorPeregrinacao.has(p.id as string),
+    certificadoId: certificadoIdPorPeregrinacao.get(p.id as string) ?? null,
   }));
 
   // PAPs ativos hoje (para o módulo de mapa em "Minha peregrinação") — só

@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Trash2,
   LocateFixed,
+  Sparkles,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
@@ -54,6 +55,7 @@ function distanciaKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 
 interface PeregrinacaoConcluida extends Peregrinacao {
   temCertificado: boolean;
+  certificadoId: string | null;
 }
 
 interface Props {
@@ -965,11 +967,25 @@ export default function PeregrinacaoClient({
               const rota = rotas.find((r) => r.id === p.rota_id);
               return (
                 <div key={p.id} className="card flex flex-col gap-2">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
-                    {p.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
-                    {labelMeioTransporte(p.meio_transporte, p.meio_transporte_outro_desc)}
-                    {rota ? ` — ${nomeRota(rota)}` : ""}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
+                      {p.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
+                      {labelMeioTransporte(p.meio_transporte, p.meio_transporte_outro_desc)}
+                      {rota ? ` — ${nomeRota(rota)}` : ""}
+                    </p>
+                    {/* Movido para cá na Rodada 16 (antes ficava dentro da
+                        página de certificado, ao lado do certificado grátis)
+                        — só faz sentido quando esta peregrinação já tem
+                        certificado emitido. */}
+                    {p.certificadoId && (
+                      <a
+                        href={`/certificado#romaria-plus-${p.certificadoId}`}
+                        className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-700 hover:underline dark:text-amber-500"
+                      >
+                        <Sparkles size={12} /> Certificado Plus →
+                      </a>
+                    )}
+                  </div>
                   <p className="text-sm text-neutral-600 dark:text-neutral-300">
                     {p.data_inicio ? new Date(p.data_inicio).toLocaleDateString("pt-BR") : "-"}
                     {" a "}
