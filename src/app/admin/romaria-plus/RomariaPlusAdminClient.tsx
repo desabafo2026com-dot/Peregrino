@@ -12,6 +12,8 @@ export interface CompraComCertificado extends CompraRomariaPlus {
 const MODELO_LABEL: Record<string, string> = {
   classico: "Clássico",
   destaque: "Foto em destaque",
+  painel: "Painel flutuante",
+  moldura: "Moldura dourada",
 };
 
 // Fora do componente de propósito (ver mesmo comentário em
