@@ -92,26 +92,26 @@ export default async function Home() {
       </section>
 
       {stats && (
-        <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-          <div className="card">
+        <section className="flex flex-wrap justify-center gap-3 text-center">
+          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Users size={20} /> {stats.peregrinos_ativos}
             </p>
             <p className="text-xs text-neutral-500">peregrinos ativos</p>
           </div>
-          <div className="card">
+          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <CheckCircle2 size={20} /> {stats.checkins_total}
             </p>
             <p className="text-xs text-neutral-500">check-ins realizados</p>
           </div>
-          <div className="card">
+          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <MapPin size={20} /> {stats.pontos_apoio_ativos}
             </p>
             <p className="text-xs text-neutral-500">PAP ativos</p>
           </div>
-          <div className="card">
+          <div className="card w-[calc(50%-0.375rem)] sm:w-[150px]">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Award size={20} /> {stats.peregrinacoes_concluidas}
             </p>

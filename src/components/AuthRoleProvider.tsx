@@ -8,6 +8,11 @@ interface AuthRoleState {
   loggedIn: boolean;
   isAdmin: boolean;
   isGerente: boolean;
+  // Tem uma linha própria em `profiles` — ou seja, em algum momento já usou
+  // (ou começou a usar) a conta como peregrino, independente de também ser
+  // gerente de PAP. Uma conta de gerente criada do zero (nunca logou como
+  // peregrino) não tem linha em `profiles` e por isso fica false aqui.
+  temPerfilPeregrino: boolean;
   nomeCompleto: string | null;
   avatarUrl: string | null;
 }
@@ -17,6 +22,7 @@ const DEFAULT_STATE: AuthRoleState = {
   loggedIn: false,
   isAdmin: false,
   isGerente: false,
+  temPerfilPeregrino: false,
   nomeCompleto: null,
   avatarUrl: null,
 };
@@ -55,6 +61,7 @@ export function AuthRoleProvider({ children }: { children: ReactNode }) {
         loggedIn: true,
         isAdmin: !!perfil?.is_admin,
         isGerente,
+        temPerfilPeregrino: !!perfil,
         nomeCompleto:
           (perfil?.nome_completo as string | undefined) ??
           (gerente?.nome_completo as string | undefined) ??

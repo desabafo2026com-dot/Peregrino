@@ -8,7 +8,32 @@ import type { PontoApoio, PontoRisco, RiscoInformado, Rota, PontoCheckin, PapPre
 import type { PapPreCadastroMapa } from "@/components/MapView";
 
 function normalizarCidade(cidade: string) {
-  return cidade.trim().toLowerCase();
+  return cidade
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+// PAPs pré-cadastrados não têm coordenada própria — vários deles caem na
+// mesma cidade (ex.: Guararema tem 5) e, sem isso, todos ficariam empilhados
+// exatamente na mesma posição do ponto de check-in daquela cidade,
+// aparecendo no mapa como um único marcador visível. Um pequeno desvio
+// determinístico (sempre o mesmo para o mesmo PAP, calculado a partir do
+// próprio id) espalha esses PAPs num raio de ~350m ao redor da cidade — o
+// suficiente para cada um virar um marcador distinto, sem fingir uma
+// precisão que os dados não têm (o popup continua avisando "aproximado").
+function comDesvioDeterministico(id: string, lat: number, lng: number) {
+  let h1 = 0;
+  let h2 = 0;
+  for (let i = 0; i < id.length; i++) {
+    h1 = (h1 * 31 + id.charCodeAt(i)) | 0;
+    h2 = (h2 * 131 + id.charCodeAt(i)) | 0;
+  }
+  const RAIO_GRAUS = 0.0032;
+  const dLat = ((Math.abs(h1) % 2000) / 1000 - 1) * RAIO_GRAUS;
+  const dLng = ((Math.abs(h2) % 2000) / 1000 - 1) * RAIO_GRAUS;
+  return { lat: lat + dLat, lng: lng + dLng };
 }
 
 // Cores claras (pastel), para diferenciar visualmente as duas rotas sem
@@ -85,12 +110,14 @@ export default async function MapaPage() {
   const papsPreCadastro: PapPreCadastroMapa[] = [];
   for (const p of (papsPreCadastroData ?? []) as PapPreCadastro[]) {
     // Posição marcada manualmente pela administração (Rodada 13) tem
-    // prioridade sobre a aproximação por cidade.
+    // prioridade sobre a aproximação por cidade — essa, sim, exata, não leva
+    // desvio nenhum.
+    const cidadeCoord = p.cidade ? cidadeParaCoord.get(normalizarCidade(p.cidade)) : undefined;
     const coord =
       p.latitude != null && p.longitude != null
         ? { lat: p.latitude, lng: p.longitude }
-        : p.cidade
-          ? cidadeParaCoord.get(normalizarCidade(p.cidade))
+        : cidadeCoord
+          ? comDesvioDeterministico(p.id, cidadeCoord.lat, cidadeCoord.lng)
           : undefined;
     if (!coord) continue;
     papsPreCadastro.push({

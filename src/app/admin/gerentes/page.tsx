@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import GerentesAdminClient from "./GerentesAdminClient";
 import VoltarButton from "@/components/VoltarButton";
@@ -24,10 +25,17 @@ export default async function AdminGerentesPage() {
     <div>
       <VoltarButton href="/admin" />
       <h2 className="mb-1 text-xl font-bold">Gerentes de PAP</h2>
-      <p className="mb-6 text-sm text-neutral-500">
-        Aprove ou rejeite cadastros de gerentes de PAP. Só gerentes aprovados
-        conseguem cadastrar pontos de apoio.
+      <p className="mb-2 text-sm text-neutral-500">
+        Lista de consulta — o cadastro da conta de gerente não precisa mais de
+        aprovação. O que continua exigindo aprovação da administração é a
+        divulgação de cada PAP no mapa.
       </p>
+      <Link
+        href="/admin/pap"
+        className="mb-6 inline-block w-fit text-sm font-medium text-amber-700 dark:text-amber-500"
+      >
+        Aprovar vinculação de PAP →
+      </Link>
       <GerentesAdminClient
         gerentesIniciais={(data ?? []) as GerentePap[]}
         papsPorGerente={Object.fromEntries(papsPorGerente)}

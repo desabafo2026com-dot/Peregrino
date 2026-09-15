@@ -64,8 +64,6 @@ export default async function AdminDashboardPage() {
   let riscosCadastrados: RiscoLinha[] = [];
   let riscosInformados: RiscoInformadoLinha[] = [];
   let gerentesCadastrados: GerenteLinha[] = [];
-  let gerentesPendentes: GerenteLinha[] = [];
-  let gerentesAprovados: GerenteLinha[] = [];
   let mensagensNovas = 0;
 
   if (isAdmin) {
@@ -274,8 +272,6 @@ export default async function AdminDashboardPage() {
         criadoEm: g.criado_em,
       })
     );
-    gerentesPendentes = gerentesCadastrados.filter((g) => g.status === "pendente");
-    gerentesAprovados = gerentesCadastrados.filter((g) => g.status === "aprovado");
   }
 
   return (
@@ -298,8 +294,6 @@ export default async function AdminDashboardPage() {
           riscosCadastrados={riscosCadastrados}
           riscosInformados={riscosInformados}
           gerentesCadastrados={gerentesCadastrados}
-          gerentesPendentes={gerentesPendentes}
-          gerentesAprovados={gerentesAprovados}
           mensagensNovas={mensagensNovas}
         />
       )}
