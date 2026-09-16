@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Move,
   Sparkle,
+  Route,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
@@ -255,6 +256,9 @@ export default function RomariaPlusView({
   const ano = new Date(c.data_fim ?? c.emitido_em).getFullYear();
   const periodo = formatarPeriodo(c.data_inicio, c.data_fim);
   const tempo = formatarTempoCompacto(c.data_inicio, c.data_fim) ?? c.duracao_texto;
+  // Distância aproximada percorrida (Rodada 22) — ausente em certificados
+  // emitidos antes dessa rodada, então some do layout sem deixar buraco.
+  const distancia = c.distancia_km != null ? `≈ ${c.distancia_km} km` : null;
 
   // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo e o
   // ajuste de posição/tamanho escolhidos, via a função segura
@@ -541,6 +545,11 @@ export default function RomariaPlusView({
                         <Clock size={16} className="shrink-0" /> {tempo}
                       </span>
                     )}
+                    {distancia && (
+                      <span className="flex items-center gap-1">
+                        <Route size={16} className="shrink-0" /> {distancia}
+                      </span>
+                    )}
                   </div>
                   <div className="mt-[2%] flex w-full items-center justify-center gap-[10%]">{simbolos}</div>
                 </PainelAjustavel>
@@ -573,6 +582,11 @@ export default function RomariaPlusView({
                     {tempo && (
                       <span className="flex items-center gap-1">
                         <Clock size={16} className="shrink-0" /> {tempo}
+                      </span>
+                    )}
+                    {distancia && (
+                      <span className="flex items-center gap-1">
+                        <Route size={16} className="shrink-0" /> {distancia}
                       </span>
                     )}
                   </div>
@@ -627,6 +641,11 @@ export default function RomariaPlusView({
                         <Clock size={16} className="shrink-0" /> {tempo}
                       </span>
                     )}
+                    {distancia && (
+                      <span className="flex items-center gap-1">
+                        <Route size={16} className="shrink-0" /> {distancia}
+                      </span>
+                    )}
                   </div>
                   <div className="mt-[4%] flex items-center justify-center gap-[8%] border-t border-white/20 pt-[4%]">
                     {simbolos}
@@ -672,6 +691,11 @@ export default function RomariaPlusView({
                         {tempo && (
                           <span className="flex items-center gap-1">
                             <Clock size={13} className="shrink-0" /> {tempo}
+                          </span>
+                        )}
+                        {distancia && (
+                          <span className="flex items-center gap-1">
+                            <Route size={13} className="shrink-0" /> {distancia}
                           </span>
                         )}
                       </div>

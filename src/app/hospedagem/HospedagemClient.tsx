@@ -72,13 +72,17 @@ export default function HospedagemClient({ comercios }: { comercios: PontoComerc
         </label>
       </div>
 
-      {comercios.length === 0 ? (
-        <p className="text-sm text-neutral-400">Nenhum hotel ou restaurante cadastrado ainda.</p>
-      ) : (
-        <>
-          <MapView pontosComerciais={visiveis} height="55vh" />
+      {/* O mapa e a lista aparecem sempre, mesmo sem nenhum cadastro ainda —
+          antes ficavam escondidos com comercios.length === 0, o que fazia a
+          página parecer quebrada assim que alguém abria "Hotéis e
+          Restaurantes" pela home antes do primeiro cadastro. */}
+      <MapView pontosComerciais={visiveis} height="55vh" />
 
-          <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
+        {comercios.length === 0 ? (
+          <p className="text-sm text-neutral-400">Nenhum hotel ou restaurante cadastrado ainda.</p>
+        ) : (
+          <>
             {visiveis.map((c) => {
               const Icon = c.tipo === "hotel" ? Hotel : Utensils;
               return (
@@ -118,9 +122,9 @@ export default function HospedagemClient({ comercios }: { comercios: PontoComerc
             {visiveis.length === 0 && (
               <p className="text-sm text-neutral-400">Nenhum resultado com os filtros marcados.</p>
             )}
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

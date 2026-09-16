@@ -274,6 +274,7 @@ export interface Certificado {
   meio_transporte: MeioTransporte | null;
   meio_transporte_outro_desc: string | null;
   duracao_texto: string | null;
+  distancia_km: number | null;
   emitido_em: string;
 }
 

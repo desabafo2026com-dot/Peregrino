@@ -56,6 +56,14 @@ const APARECIDA_LAT = -22.8494;
 const APARECIDA_LNG = -45.2317;
 const DISTANCIA_AVISO_KM = 5;
 
+// Raio de tolerância para o check-in em cada cidade — o ponto cadastrado
+// costuma ser um local de referência (praça, prefeitura, etc.), não o exato
+// lugar por onde a Dutra passa nem onde o peregrino está caminhando, então
+// alguns km de folga evitam bloquear check-ins legítimos por um GPS
+// impreciso. Acima disso, avisa mas ainda deixa confirmar mesmo assim —
+// mesmo padrão já usado em finalizarPeregrinacao().
+const RAIO_CHECKIN_KM = 5;
+
 function distanciaKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -437,6 +445,26 @@ export default function PeregrinacaoClient({
     setMsg(null);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        // Confere se a localização reportada está mesmo perto da cidade do
+        // check-in — antes qualquer check-in era aceito sem checar isso,
+        // então dava para "check-in" em várias cidades em segundos, sem
+        // nunca ter chegado perto delas. Se não bater, avisa mas permite
+        // confirmar mesmo assim (GPS impreciso, ponto de referência um
+        // pouco distante da rota real, etc.).
+        const ponto = pontoCheckinId ? pontosCheckin.find((p) => p.id === pontoCheckinId) : null;
+        if (ponto) {
+          const dist = distanciaKm(pos.coords.latitude, pos.coords.longitude, ponto.latitude, ponto.longitude);
+          if (dist > RAIO_CHECKIN_KM) {
+            const distTexto = dist < 10 ? dist.toFixed(1) : Math.round(dist).toString();
+            if (
+              !confirm(
+                `Não conseguimos confirmar que você está perto de ${ponto.cidade} pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja fazer o check-in mesmo assim?`
+              )
+            ) {
+              return;
+            }
+          }
+        }
         const { error } = await supabase.from("checkins").insert({
           peregrinacao_id: peregrinacao.id,
           user_id: peregrinacao.user_id,
@@ -520,6 +548,17 @@ export default function PeregrinacaoClient({
       primeiroPonto.cidade.trim().toLowerCase() !== "aparecida" &&
       checkinsFeitosIds.includes(ultimoPonto.id);
 
+    // Distância aproximada percorrida, calculada a partir do km_aproximado
+    // já cadastrado em cada ponto de check-in (distância acumulada desde a
+    // origem da rota, pesquisada com base no traçado real da Dutra — ver
+    // Rodada 11) — em vez de integrar uma API de rotas externa, reaproveita
+    // esses dados já curados para dar uma distância "aproximada", como
+    // pedido pelo usuário.
+    const distanciaKmRota =
+      primeiroPonto?.km_aproximado != null && ultimoPonto?.km_aproximado != null
+        ? Math.round(ultimoPonto.km_aproximado - primeiroPonto.km_aproximado)
+        : null;
+
     setLoading(false);
 
     if (!elegivel) {
@@ -544,6 +583,7 @@ export default function PeregrinacaoClient({
       meio_transporte: meioAtual,
       meio_transporte_outro_desc: peregrinacao.meio_transporte_outro_desc,
       duracao_texto: duracaoTexto,
+      distancia_km: distanciaKmRota,
     });
 
     if (certError) {

@@ -5,8 +5,15 @@ import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Circle, TriangleAlert, Megaphone } from "lucide-react";
 import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
+import { distanciaMetros } from "@/lib/geo";
 import InformarSinistro from "@/components/InformarSinistro";
 import type { Peregrinacao, PontoCheckin, PontoRisco, RiscoInformado, Rota } from "@/types/database";
+
+// Mesma tolerância usada em /peregrinacao para o check-in principal — o
+// ponto cadastrado é uma referência da cidade, não o exato lugar da Dutra
+// por onde o peregrino passa, então alguns km de folga evitam bloquear
+// check-ins legítimos por imprecisão do GPS.
+const RAIO_CHECKIN_KM = 5;
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -77,6 +84,23 @@ export default function TrajetoClient({
     setLoadingId(ponto.id);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        // Mesma validação de proximidade de /peregrinacao — aqui era ainda
+        // mais fácil de furar, já que cada cidade da lista tem seu próprio
+        // botão "Fazer check-in" sempre habilitado, sem checar se a
+        // localização reportada tem algo a ver com aquela cidade.
+        const distM = distanciaMetros(pos.coords.latitude, pos.coords.longitude, ponto.latitude, ponto.longitude);
+        const distKm = distM / 1000;
+        if (distKm > RAIO_CHECKIN_KM) {
+          const distTexto = distKm < 10 ? distKm.toFixed(1) : Math.round(distKm).toString();
+          if (
+            !confirm(
+              `Não conseguimos confirmar que você está perto de ${ponto.cidade} pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja fazer o check-in mesmo assim?`
+            )
+          ) {
+            setLoadingId(null);
+            return;
+          }
+        }
         const { error } = await supabase.from("checkins").insert({
           peregrinacao_id: peregrinacao.id,
           user_id: peregrinacao.user_id,
@@ -99,6 +123,15 @@ export default function TrajetoClient({
   }
 
   const concluidos = pontosCheckin.filter((p) => checkinsFeitos.has(p.id)).length;
+
+  // Distância aproximada que falta até Aparecida, calculada a partir do
+  // km_aproximado já cadastrado (distância acumulada desde a origem da
+  // rota) — o maior valor da lista representa o próprio ponto de Aparecida.
+  const kmAparecida = pontosCheckin.reduce(
+    (max, p) => (p.km_aproximado != null && p.km_aproximado > max ? p.km_aproximado : max),
+    -Infinity
+  );
+  const temKmAparecida = kmAparecida !== -Infinity;
 
   // Mesma ordem de leitura usada em /rotas: sentido Norte (km decrescente),
   // sentido Sul (km crescente) — sem km cadastrado, fica por último.
@@ -205,7 +238,12 @@ export default function TrajetoClient({
                       {p.ordem}. {p.cidade}
                     </p>
                     {p.km_aproximado != null && (
-                      <p className="text-xs text-neutral-500">≈ km {p.km_aproximado} da rota</p>
+                      <p className="text-xs text-neutral-500">
+                        ≈ km {p.km_aproximado} da rota
+                        {temKmAparecida && p.km_aproximado < kmAparecida && (
+                          <> — faltam ≈ {Math.round(kmAparecida - p.km_aproximado)} km até Aparecida</>
+                        )}
+                      </p>
                     )}
                     {p.descricao && <p className="text-xs text-neutral-500">{p.descricao}</p>}
                   </div>

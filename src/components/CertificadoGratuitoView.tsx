@@ -121,6 +121,11 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
     { label: "Término", valor: formatarDataCurta(c.data_fim) },
     { label: "Tempo total", valor: c.duracao_texto || "—" },
     { label: "Check-ins", valor: String(c.total_checkins ?? 0) },
+    // Só aparece em certificados emitidos depois da Rodada 22 — os
+    // anteriores não têm distância calculada e continuam com 4 colunas.
+    ...(c.distancia_km != null
+      ? [{ label: "Distância", valor: `≈ ${c.distancia_km} km` }]
+      : []),
   ];
 
   return (

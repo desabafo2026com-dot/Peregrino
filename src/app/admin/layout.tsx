@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Sparkles,
   Ticket,
+  Hotel,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -21,9 +22,13 @@ import {
 // saiu do menu do administrador — era uma ferramenta antiga de trechos de
 // segurança que não reflete mais como o app mostra risco (por ponto, não
 // por trecho); continua existindo só para o agente cadastrar trechos.
+// "Cadastrar hotel/restaurante" (Rodada 22) foi movido para cá, ao lado de
+// "Cadastrar PAP", a pedido do usuário — antes só existia lá embaixo, na
+// seção "Hotéis e Restaurantes" do painel, e passava despercebido.
 const ADMIN_LINKS = [
   { href: "/admin", label: "Painel", icon: LayoutDashboard },
   { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
+  { href: "/admin/hospedagem", label: "Cadastrar hotel/restaurante", icon: Hotel },
   { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
   { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
   { href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert },

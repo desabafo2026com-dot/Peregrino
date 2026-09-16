@@ -158,7 +158,13 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
             concluiu {meioLabel} sua peregrinação {trajetoTexto} a Basílica de
             Nossa Senhora Aparecida-SP {periodoTexto}, com{" "}
             <strong>{c.total_checkins}</strong> check-in(s) confirmados ao
-            longo da rota.
+            longo da rota
+            {c.distancia_km != null && (
+              <>
+                , percorrendo aproximadamente <strong>{c.distancia_km} km</strong>
+              </>
+            )}
+            .
           </p>
           <div
             className="mt-[1.5cqw] flex w-full items-center justify-between text-neutral-500"

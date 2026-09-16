@@ -565,10 +565,10 @@ export default function AdminDrilldownClient({
           <Hotel size={20} /> Hotéis e Restaurantes
         </h2>
         <p className="mb-2 text-sm text-neutral-500">{comerciosCount} cadastrado(s).</p>
+        {/* O botão de cadastrar novo foi para o menu do topo, ao lado de
+            "Cadastrar PAP" (Rodada 22) — aqui fica só o acesso para editar
+            ou excluir os já cadastrados. */}
         <div className="flex flex-wrap gap-2">
-          <Link href="/admin/hospedagem/novo" className="btn-secondary inline-block w-fit text-sm">
-            Cadastrar hotel ou restaurante
-          </Link>
           <Link href="/admin/hospedagem" className="btn-secondary inline-block w-fit text-sm">
             Editar / excluir cadastrados
           </Link>
