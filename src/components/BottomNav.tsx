@@ -9,17 +9,21 @@ import { useAuthRole } from "./AuthRoleProvider";
 // "Minha peregrinação" ao centro — com o item "Adm" (só para
 // administradores) a lista fica com 5 posições, e "Minha peregrinação" cai
 // exatamente no meio. Os dois ganham destaque de cor permanente.
+// Rodada 20: "Mapa" renomeado para "Pontos de Apoio" (a página passou a
+// mostrar só PAP, ver /mapa) e "Rotas" para "Rotas e Riscos" (reflete melhor
+// o conteúdo da página, que já mostrava as rotas e a tabela/mapa de pontos
+// de risco) — só o texto do item mudou, a rota (/mapa, /rotas) é a mesma.
 const LINKS_PEREGRINO = [
   { href: "/", label: "Início", icon: Home },
-  { href: "/mapa", label: "Mapa", icon: MapPin, destaque: true },
+  { href: "/mapa", label: "Pontos de Apoio", icon: MapPin, destaque: true },
   { href: "/peregrinacao", label: "Minha peregrinação", icon: Footprints, destaque: true },
-  { href: "/rotas", label: "Rotas", icon: Route },
+  { href: "/rotas", label: "Rotas e Riscos", icon: Route },
 ];
 
 const LINKS_GERENTE = [
   { href: "/", label: "Início", icon: Home },
-  { href: "/mapa", label: "Mapa", icon: MapPin },
-  { href: "/rotas", label: "Rotas", icon: Route },
+  { href: "/mapa", label: "Pontos de Apoio", icon: MapPin },
+  { href: "/rotas", label: "Rotas e Riscos", icon: Route },
   { href: "/gerente-pap", label: "Meu PAP", icon: MapPinPlus },
 ];
 

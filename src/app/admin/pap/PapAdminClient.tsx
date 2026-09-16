@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Clock, CheckCircle2, XCircle, MapPinned, QrCode, Link2, Move } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, MapPinned, QrCode, Link2, Move, Trash2 } from "lucide-react";
 import { STATUS_PAP_LABELS } from "@/lib/constants";
 import type { PontoApoio } from "@/types/database";
 
@@ -27,6 +27,26 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
     const { error } = await supabase.from("pontos_apoio").update({ status_aprovacao: status }).eq("id", id);
     if (!error) {
       setPontos((prev) => prev.map((p) => (p.id === id ? { ...p, status_aprovacao: status } : p)));
+    }
+  }
+
+  // Exclusão definitiva do PAP (Rodada 20, a pedido do usuário) — diferente
+  // de "rejeitar" (que só tira do mapa público, mantendo o registro para
+  // histórico), aqui a linha é removida de vez de pontos_apoio. A política
+  // de RLS já permite (pontos_apoio_delete_admin_ou_gerente), sem precisar
+  // de nenhuma migration nova.
+  async function excluirPap(p: PontoApoio) {
+    if (
+      !confirm(
+        `Excluir definitivamente o PAP "${p.nome}"? Essa ação não pode ser desfeita.`
+      )
+    )
+      return;
+    const { error } = await supabase.from("pontos_apoio").delete().eq("id", p.id);
+    if (!error) {
+      setPontos((prev) => prev.filter((item) => item.id !== p.id));
+    } else {
+      alert(error.message);
     }
   }
 
@@ -91,6 +111,12 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
           >
             <Move size={14} /> Reposicionar
           </Link>
+          <button
+            onClick={() => excluirPap(p)}
+            className="flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            <Trash2 size={14} /> Excluir
+          </button>
         </div>
       </div>
     );

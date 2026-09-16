@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Tent, TriangleAlert, Megaphone, Route } from "lucide-react";
-import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
-import type { RotaLinha, PapPreCadastroMapa } from "@/components/MapView";
+import { Tent } from "lucide-react";
+import type { PontoApoio } from "@/types/database";
+import type { PapPreCadastroMapa } from "@/components/MapView";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -17,44 +17,46 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 
 interface Props {
   pontosApoio: PontoApoio[];
-  pontosRisco: PontoRisco[];
-  avisos: RiscoInformado[];
-  peregrinos: { user_id: string; latitude: number; longitude: number }[];
-  rotasLinhas: RotaLinha[];
   papsPreCadastro: PapPreCadastroMapa[];
   isAdmin?: boolean;
 }
 
-// PAP (confirmados/vinculados e os que ainda aguardam vínculo) aparecem
-// juntos, no mesmo toggle, marcados por padrão — é o que a maioria vem
-// buscar. A cor de cada tenda já diferencia os dois (verde = confirmado
-// pela administração; cinza tracejado = aguardando vínculo de um
-// gerente), então não faz sentido escondê-los atrás de um segundo toggle
-// separado. Locais de risco e avisos de peregrinos continuam opcionais,
-// para não poluir o mapa de quem só quer achar apoio. As rotas Norte/Sul
-// também vêm marcadas por padrão, para ajudar a situar os demais
-// elementos na rodovia.
-export default function MapClient({
-  pontosApoio,
-  pontosRisco,
-  avisos,
-  peregrinos,
-  rotasLinhas,
-  papsPreCadastro,
-  isAdmin = false,
-}: Props) {
-  const [mostrarPap, setMostrarPap] = useState(true);
-  const [mostrarRisco, setMostrarRisco] = useState(false);
-  const [mostrarAvisos, setMostrarAvisos] = useState(false);
-  const [mostrarRotas, setMostrarRotas] = useState(true);
+function hojeISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
-  const pontosApoioVisiveis = useMemo(() => (mostrarPap ? pontosApoio : []), [mostrarPap, pontosApoio]);
-  const pontosRiscoVisiveis = useMemo(() => (mostrarRisco ? pontosRisco : []), [mostrarRisco, pontosRisco]);
-  const avisosVisiveis = useMemo(() => (mostrarAvisos ? avisos : []), [mostrarAvisos, avisos]);
-  const rotasVisiveis = useMemo(() => (mostrarRotas ? rotasLinhas : []), [mostrarRotas, rotasLinhas]);
+// Mesmo critério de "ativo hoje" já usado no contador da home e no popup do
+// mapa (ver ativoHoje em MapView.tsx): precisa estar marcado como ativo e
+// ter a data de hoje no próprio calendário de funcionamento. PAP sem
+// nenhuma data marcada nunca entra no filtro, mesmo estando aprovado.
+function papAtivoAgora(p: PontoApoio) {
+  return p.ativo && p.datas_funcionamento.length > 0 && p.datas_funcionamento.includes(hojeISO());
+}
+
+function preCadastroAtivoAgora(p: PapPreCadastroMapa) {
+  const datas = p.datas_funcionamento ?? [];
+  return datas.length > 0 && datas.includes(hojeISO());
+}
+
+// Rodada 20: a pedido do usuário, esta página passou a mostrar só PAP — as
+// camadas de locais de risco, avisos de peregrinos e rotas Norte/Sul (que
+// existiam desde as Rodadas 3/4/8) saíram daqui (continuam em /rotas, que
+// já tinha seu próprio mapa de riscos). Sobra um único filtro, "PAP ativos
+// agora", desmarcado por padrão — todos os PAP (vinculados e aguardando
+// vínculo) aparecem de cara, e marcar o filtro estreita para só os que
+// estão ativos neste momento (mesmo critério do contador "PAP ativos" da
+// home).
+export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = false }: Props) {
+  const [somenteAtivos, setSomenteAtivos] = useState(false);
+
+  const pontosApoioVisiveis = useMemo(
+    () => (somenteAtivos ? pontosApoio.filter(papAtivoAgora) : pontosApoio),
+    [somenteAtivos, pontosApoio]
+  );
   const papsPreCadastroVisiveis = useMemo(
-    () => (mostrarPap ? papsPreCadastro : []),
-    [mostrarPap, papsPreCadastro]
+    () => (somenteAtivos ? papsPreCadastro.filter(preCadastroAtivoAgora) : papsPreCadastro),
+    [somenteAtivos, papsPreCadastro]
   );
 
   return (
@@ -63,37 +65,14 @@ export default function MapClient({
         <label className="flex items-center gap-2 text-sm font-medium">
           <input
             type="checkbox"
-            checked={mostrarRotas}
-            onChange={(e) => setMostrarRotas(e.target.checked)}
+            checked={somenteAtivos}
+            onChange={(e) => setSomenteAtivos(e.target.checked)}
           />
-          <Route size={16} className="text-sky-500" /> Rotas Norte/Sul
-        </label>
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={mostrarPap}
-            onChange={(e) => setMostrarPap(e.target.checked)}
-          />
-          <Tent size={16} className="text-green-600" /> PAP ({pontosApoio.length + papsPreCadastro.length})
-        </label>
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={mostrarRisco}
-            onChange={(e) => setMostrarRisco(e.target.checked)}
-          />
-          <TriangleAlert size={16} className="text-red-600" /> Locais de risco ({pontosRisco.length})
-        </label>
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={mostrarAvisos}
-            onChange={(e) => setMostrarAvisos(e.target.checked)}
-          />
-          <Megaphone size={16} className="text-orange-600" /> Avisos de peregrinos ({avisos.length})
+          <Tent size={16} className="text-green-600" /> PAP ativos agora
         </label>
       </div>
-      {mostrarPap && (papsPreCadastro.length > 0 || pontosApoio.length > 0) && (
+
+      {(papsPreCadastro.length > 0 || pontosApoio.length > 0) && (
         <div className="flex flex-wrap gap-4 text-xs text-neutral-500">
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-600" aria-hidden="true" />
@@ -105,35 +84,15 @@ export default function MapClient({
           </span>
         </div>
       )}
-      {isAdmin && mostrarPap && papsPreCadastro.length > 0 && (
+      {isAdmin && papsPreCadastro.length > 0 && (
         <p className="text-xs text-amber-700 dark:text-amber-500">
           Como administrador, você pode arrastar qualquer marcador cinza tracejado para ajustar a posição exata do PAP.
         </p>
       )}
 
-      {mostrarRotas && rotasLinhas.length > 0 && (
-        <div className="flex flex-wrap gap-4 text-xs text-neutral-500">
-          {rotasLinhas.map((r) => (
-            <span key={r.nome} className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-1.5 w-5 rounded-full"
-                style={{ backgroundColor: r.cor }}
-                aria-hidden="true"
-              />
-              {r.nome}
-            </span>
-          ))}
-        </div>
-      )}
-
       <MapView
         pontosApoio={pontosApoioVisiveis}
-        pontosRisco={pontosRiscoVisiveis}
-        avisos={avisosVisiveis}
-        peregrinos={peregrinos}
-        rotasLinhas={rotasVisiveis}
         papsPreCadastro={papsPreCadastroVisiveis}
-        calorPeregrinos={peregrinos.length > 0}
         height="65vh"
         permitirArrastarPapPreCadastro={isAdmin}
       />

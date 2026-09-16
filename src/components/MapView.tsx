@@ -189,25 +189,24 @@ export default function MapView({
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([p.longitude, p.latitude])
         .setPopup(
+          // Conteúdo do popup simplificado na Rodada 20, a pedido do
+          // usuário: uma informação por linha, sempre nesta ordem — foto (se
+          // houver), nome, telefone (se autorizado a exibir), cidade, km e
+          // sentido, horário de funcionamento, serviços e, por último, se
+          // aceita doações (e quais). Linhas sem dado disponível não
+          // aparecem, em vez de mostrar "—".
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
-              <span style="font-size:10px;letter-spacing:.05em;color:#16a34a;font-weight:700">PAP</span><br/>
+              ${p.foto_url ? `<img src="${p.foto_url}" alt="Foto do PAP" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
               <strong>${p.nome}</strong><br/>
-              ${p.cidade ? `${p.cidade}${p.sentido_pista ? ` — sentido ${p.sentido_pista === "sp" ? "Norte" : "Sul"}` : ""}<br/>` : ""}
-              ${p.responsavel ? `Responsável: ${p.responsavel}<br/>` : ""}
-              ${p.telefone && p.exibir_telefone !== false ? `Tel: ${p.telefone}<br/>` : ""}
+              ${p.telefone && p.exibir_telefone !== false ? `Telefone: ${p.telefone}<br/>` : ""}
+              ${p.cidade ? `Cidade: ${p.cidade}<br/>` : ""}
+              ${kmSentidoLabel(p.km_referencia, p.sentido_pista) ? `${kmSentidoLabel(p.km_referencia, p.sentido_pista)}<br/>` : ""}
               ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
-              ${
-                !ativoHoje(p.datas_funcionamento)
-                  ? `<span style="color:#dc2626;font-weight:600">Fora do período de funcionamento hoje</span><br/>`
-                  : p.aberto_agora === false
-                    ? `<span style="color:#dc2626;font-weight:600">Fechado no momento</span><br/>`
-                    : `<span style="color:#16a34a;font-weight:600">Aberto agora</span><br/>`
-              }
               Serviços: ${servicosLabel(p.servicos)}<br/>
               ${
                 p.aceita_doacoes
-                  ? `<span style="color:#92400e;font-weight:600">Aceita doações</span>${p.doacao_necessidade ? `: ${p.doacao_necessidade}` : ""}<br/>${p.contato_doacao ? `Contato doação: ${p.contato_doacao}` : ""}`
+                  ? `<span style="color:#92400e;font-weight:600">Aceita doações: ${p.doacao_necessidade || "não especificado o quê"}</span>`
                   : ""
               }
             </div>

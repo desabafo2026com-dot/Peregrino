@@ -3,7 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
-import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota } from "@/types/database";
+import { kmPertenceARota } from "@/lib/constants";
+import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota } from "@/types/database";
 
 export default async function PeregrinacaoPage() {
   const supabase = await createClient();
@@ -130,6 +131,14 @@ export default async function PeregrinacaoPage() {
   let checkinsCount = 0;
   let pontosCheckin: PontoCheckin[] = [];
   let checkinsFeitosIds: string[] = [];
+  // Pontos de risco e avisos de peregrinos da rota atual (Rodada 20) — o
+  // mapa de "Minha peregrinação" passou a mostrar essas duas camadas junto
+  // com os PAP ativos, com filtro para desativar cada uma. Mesma lógica já
+  // usada em /peregrinacao/trajeto: risco entra pela rota se o km bater
+  // (kmPertenceARota) ou, sem km cadastrado, pela rota_id; aviso entra se
+  // for da rota atual ou sem rota marcada.
+  let pontosRisco: PontoRisco[] = [];
+  let avisos: RiscoInformado[] = [];
 
   if (peregrinacao) {
     const { count } = await supabase
@@ -144,6 +153,26 @@ export default async function PeregrinacaoPage() {
         ? (pontosRota.find((p) => p.cidade === peregrinacao.cidade_inicio)?.ordem ?? 1)
         : 1;
       pontosCheckin = pontosRota.filter((p) => p.ordem >= ordemInicio);
+
+      const rotaAtual = ((rotas ?? []) as Rota[]).find((r) => r.id === peregrinacao.rota_id);
+      const [{ data: todosRiscos }, { data: avisosData }] = await Promise.all([
+        supabase.from("pontos_risco").select("*"),
+        // RLS já filtra: só vêm avisos confirmados ou dentro da janela
+        // pública de tempo (ver migration 11).
+        supabase
+          .from("riscos_informados")
+          .select("*")
+          .or(`rota_id.eq.${peregrinacao.rota_id},rota_id.is.null`)
+          .order("criado_em", { ascending: false }),
+      ]);
+      pontosRisco = rotaAtual
+        ? ((todosRiscos ?? []) as PontoRisco[]).filter((r) =>
+            r.km_referencia != null
+              ? kmPertenceARota(r.km_referencia, rotaAtual.slug)
+              : r.rota_id === null || r.rota_id === rotaAtual.id
+          )
+        : [];
+      avisos = (avisosData ?? []) as RiscoInformado[];
     }
 
     const { data: feitos } = await supabase
@@ -172,6 +201,8 @@ export default async function PeregrinacaoPage() {
         peregrinacaoInicial={peregrinacao as Peregrinacao | null}
         peregrinacoesConcluidas={peregrinacoesConcluidas}
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
+        pontosRisco={pontosRisco}
+        avisos={avisos}
         rotas={(rotas ?? []) as Rota[]}
         checkinsCount={checkinsCount}
         pontosCheckin={pontosCheckin}

@@ -19,12 +19,25 @@ import {
   Trash2,
   LocateFixed,
   Sparkles,
+  Tent,
+  TriangleAlert,
+  Megaphone,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
 import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
-import type { Peregrinacao, PontoApoio, PontoCheckin, Profile, Rota, MeioTransporte, Motivo } from "@/types/database";
+import type {
+  Peregrinacao,
+  PontoApoio,
+  PontoCheckin,
+  PontoRisco,
+  RiscoInformado,
+  Profile,
+  Rota,
+  MeioTransporte,
+  Motivo,
+} from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -64,6 +77,8 @@ interface Props {
   peregrinacaoInicial: Peregrinacao | null;
   peregrinacoesConcluidas: PeregrinacaoConcluida[];
   pontosApoio: PontoApoio[];
+  pontosRisco: PontoRisco[];
+  avisos: RiscoInformado[];
   rotas: Rota[];
   checkinsCount: number;
   pontosCheckin: PontoCheckin[];
@@ -161,6 +176,8 @@ export default function PeregrinacaoClient({
   peregrinacaoInicial,
   peregrinacoesConcluidas,
   pontosApoio,
+  pontosRisco,
+  avisos,
   rotas,
   checkinsCount: checkinsCountInicial,
   pontosCheckin,
@@ -169,6 +186,12 @@ export default function PeregrinacaoClient({
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
+  // Filtros do mapa de "Minha peregrinação" (Rodada 20) — os 3 vêm ativos
+  // por padrão (mesma convenção da página de trajeto), com opção de
+  // desativar cada camada individualmente.
+  const [mostrarPapMapa, setMostrarPapMapa] = useState(true);
+  const [mostrarRiscoMapa, setMostrarRiscoMapa] = useState(true);
+  const [mostrarAvisosMapa, setMostrarAvisosMapa] = useState(true);
 
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
   const [loadingConcluidaId, setLoadingConcluidaId] = useState<string | null>(null);
@@ -883,47 +906,85 @@ export default function PeregrinacaoClient({
           </div>
         </div>
 
-        {/* Módulos 2 e 3, lado a lado — Informar sinistro/suspeita e Fazer check-in. */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="card">
-            <h2 className="mb-3 text-center text-base font-bold text-red-700">
-              Informe sinistro ou suspeita
-            </h2>
-            <InformarSinistro rotaId={peregrinacao.rota_id} />
-          </div>
-
-          <div className="card">
-            <h2 className="mb-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
-              Fazer check-in ({checkinsCount})
-            </h2>
-            <p className="mb-3 text-justify text-xs text-neutral-500">
-              Aviso: você deve fazer pelo menos um check-in entre a origem e a
-              cidade de Aparecida para receber o certificado.
-            </p>
-            <button
-              onClick={() => fazerCheckin(proximoPonto?.id)}
-              disabled={!proximoPonto}
-              className="btn-primary flex w-full items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <CheckCircle2 size={18} />{" "}
-              {proximoPonto ? `Fazer check-in em ${proximoPonto.cidade}` : "Todos os check-ins feitos"}
-            </button>
-            {msg && <p className="mt-2 text-center text-sm text-green-700">{msg}</p>}
-          </div>
+        {/* Módulo 2 — Fazer check-in, sozinho acima do mapa (Rodada 20: antes
+            dividia a linha com "Informe sinistro ou suspeita", que desceu
+            para depois do mapa, ver abaixo). */}
+        <div className="card">
+          <h2 className="mb-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
+            Fazer check-in ({checkinsCount})
+          </h2>
+          <p className="mb-3 text-justify text-xs text-neutral-500">
+            Aviso: você deve fazer pelo menos um check-in entre a origem e a
+            cidade de Aparecida para receber o certificado.
+          </p>
+          <button
+            onClick={() => fazerCheckin(proximoPonto?.id)}
+            disabled={!proximoPonto}
+            className="btn-primary flex w-full items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <CheckCircle2 size={18} />{" "}
+            {proximoPonto ? `Fazer check-in em ${proximoPonto.cidade}` : "Todos os check-ins feitos"}
+          </button>
+          {msg && <p className="mt-2 text-center text-sm text-green-700">{msg}</p>}
         </div>
 
-        {/* Módulo 4 — PAPs ativos hoje, no mapa. */}
+        {/* Módulo 3 — mapa combinado: PAP ativos, pontos de risco e avisos
+            de peregrinos da rota atual, todos ativos por padrão, com filtro
+            para desligar cada camada (Rodada 20 — antes só mostrava PAP). */}
         <div className="card">
           <h2 className="mb-3 flex items-center justify-center gap-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
-            <MapPinned size={18} /> PAPs ativos hoje
+            <MapPinned size={18} /> PAP, riscos e avisos na rota
           </h2>
-          {pontosApoio.length === 0 ? (
+          <div className="mb-3 flex flex-wrap justify-center gap-4 text-sm font-medium">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mostrarPapMapa}
+                onChange={(e) => setMostrarPapMapa(e.target.checked)}
+              />
+              <Tent size={16} className="text-green-600" /> PAP ativos ({pontosApoio.length})
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mostrarRiscoMapa}
+                onChange={(e) => setMostrarRiscoMapa(e.target.checked)}
+              />
+              <TriangleAlert size={16} className="text-red-600" /> Riscos ({pontosRisco.length})
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mostrarAvisosMapa}
+                onChange={(e) => setMostrarAvisosMapa(e.target.checked)}
+              />
+              <Megaphone size={16} className="text-orange-600" /> Avisos ({avisos.length})
+            </label>
+          </div>
+          {pontosApoio.length === 0 && pontosRisco.length === 0 && avisos.length === 0 ? (
             <p className="text-center text-sm text-neutral-500">
-              Nenhum PAP marcado como ativo para hoje no momento.
+              Nada para mostrar no mapa no momento.
             </p>
           ) : (
-            <MapView pontosApoio={pontosApoio} height="300px" zoom={8} />
+            <MapView
+              pontosApoio={mostrarPapMapa ? pontosApoio : []}
+              pontosRisco={mostrarRiscoMapa ? pontosRisco : []}
+              avisos={mostrarAvisosMapa ? avisos : []}
+              height="300px"
+              zoom={8}
+            />
           )}
+        </div>
+
+        {/* Módulo 4 — Informe sinistro ou suspeita, agora abaixo do mapa
+            (Rodada 20), com título e botão centralizados. */}
+        <div className="card">
+          <h2 className="mb-3 text-center text-base font-bold text-red-700">
+            Informe sinistro ou suspeita
+          </h2>
+          <div className="flex justify-center">
+            <InformarSinistro rotaId={peregrinacao.rota_id} />
+          </div>
         </div>
 
         {erro && <p className="text-center text-sm text-red-600">{erro}</p>}
