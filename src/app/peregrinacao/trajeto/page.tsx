@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
 import TrajetoClient from "./TrajetoClient";
-import { nomeRota, kmPertenceARota } from "@/lib/constants";
+import { nomeRota, kmPertenceARota, avisoVisivelPublicamente } from "@/lib/constants";
 import type { Peregrinacao, PontoCheckin, PontoRisco, RiscoInformado, Rota } from "@/types/database";
 
 export default async function TrajetoPage() {
@@ -33,8 +33,11 @@ export default async function TrajetoPage() {
       // decidir a associação com a rota pelo km real (ver kmPertenceARota),
       // não só pela rota_id escolhida no cadastro.
       supabase.from("pontos_risco").select("*"),
-      // RLS já filtra: só vêm avisos confirmados ou dentro da janela pública
-      // de tempo (ver migration 11).
+      // A RLS sozinha não filtra isto de verdade para uma conta de admin
+      // (ou para a própria autora de um relato antigo) — ver o comentário
+      // equivalente, mais detalhado, em src/app/peregrinacao/page.tsx.
+      // `avisoVisivelPublicamente` reaplica a regra de visibilidade aqui no
+      // app (Rodada 21).
       supabase
         .from("riscos_informados")
         .select("*")
@@ -81,7 +84,7 @@ export default async function TrajetoPage() {
         pontosCheckin={pontosCheckin}
         checkinsFeitosIdsIniciais={checkinsFeitosIds}
         riscos={(riscos ?? []) as PontoRisco[]}
-        avisos={(avisos ?? []) as RiscoInformado[]}
+        avisos={((avisos ?? []) as RiscoInformado[]).filter(avisoVisivelPublicamente)}
         rota={rota as Rota | null}
       />
     </div>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
-import { kmPertenceARota } from "@/lib/constants";
+import { kmPertenceARota, avisoVisivelPublicamente } from "@/lib/constants";
 import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota } from "@/types/database";
 
 export default async function PeregrinacaoPage() {
@@ -157,8 +157,15 @@ export default async function PeregrinacaoPage() {
       const rotaAtual = ((rotas ?? []) as Rota[]).find((r) => r.id === peregrinacao.rota_id);
       const [{ data: todosRiscos }, { data: avisosData }] = await Promise.all([
         supabase.from("pontos_risco").select("*"),
-        // RLS já filtra: só vêm avisos confirmados ou dentro da janela
-        // pública de tempo (ver migration 11).
+        // A RLS sozinha não basta para filtrar isto: além da política
+        // pública por tempo (migration 17/26), existe uma política separada
+        // que dá acesso irrestrito a quem enviou o relato e a
+        // administradores — então uma conta de admin, ou a própria autora
+        // de um aviso antigo, receberia de volta linhas que já deveriam ter
+        // expirado para o público. `avisoVisivelPublicamente` reaplica a
+        // mesma regra de visibilidade aqui no app (Rodada 21) para este
+        // mapa mostrar sempre o que qualquer peregrino veria, não o que a
+        // conta logada tem permissão de enxergar por outro motivo.
         supabase
           .from("riscos_informados")
           .select("*")
@@ -172,7 +179,7 @@ export default async function PeregrinacaoPage() {
               : r.rota_id === null || r.rota_id === rotaAtual.id
           )
         : [];
-      avisos = (avisosData ?? []) as RiscoInformado[];
+      avisos = ((avisosData ?? []) as RiscoInformado[]).filter(avisoVisivelPublicamente);
     }
 
     const { data: feitos } = await supabase

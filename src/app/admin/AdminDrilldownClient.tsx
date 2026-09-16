@@ -28,6 +28,7 @@ import {
   Save,
   AlertTriangle,
   MessageCircle,
+  Hotel,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -177,6 +178,10 @@ interface Props {
   riscosInformados: RiscoInformadoLinha[];
   gerentesCadastrados: GerenteLinha[];
   mensagensNovas: number;
+  // Hotéis e Restaurantes (Rodada 21) — só a contagem, o cadastro/edição/
+  // exclusão de verdade acontece em /admin/hospedagem, nos mesmos moldes
+  // do cadastro de PAP.
+  comerciosCount: number;
 }
 
 // flex-1 (em vez de largura fixa) faz cada card crescer para preencher
@@ -228,6 +233,7 @@ export default function AdminDrilldownClient({
   riscosInformados: riscosInformadosIniciais,
   gerentesCadastrados,
   mensagensNovas,
+  comerciosCount,
 }: Props) {
   const router = useRouter();
   const [categoria, setCategoria] = useState<Categoria | null>(null);
@@ -550,6 +556,21 @@ export default function AdminDrilldownClient({
           </Link>
           <Link href="/admin/riscos" className="btn-secondary inline-block w-fit text-sm">
             Editar / excluir locais de risco
+          </Link>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+          <Hotel size={20} /> Hotéis e Restaurantes
+        </h2>
+        <p className="mb-2 text-sm text-neutral-500">{comerciosCount} cadastrado(s).</p>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/hospedagem/novo" className="btn-secondary inline-block w-fit text-sm">
+            Cadastrar hotel ou restaurante
+          </Link>
+          <Link href="/admin/hospedagem" className="btn-secondary inline-block w-fit text-sm">
+            Editar / excluir cadastrados
           </Link>
         </div>
       </section>

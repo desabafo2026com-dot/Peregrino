@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, UserRound, ChevronDown, Footprints, Tent, UserCog } from "lucide-react";
+import { LogOut, UserRound, ChevronDown, Tent, UserCog } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthRole } from "./AuthRoleProvider";
 import ThemeToggle from "./ThemeToggle";
@@ -88,13 +88,11 @@ export default function Navbar() {
                   </button>
                   {menuAberto && (
                     <div className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
-                      <Link
-                        href="/peregrinacao"
-                        onClick={() => setMenuAberto(false)}
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                      >
-                        <Footprints size={16} className="text-amber-700 dark:text-amber-500" /> Minha peregrinação
-                      </Link>
+                      {/* "Minha peregrinação" saiu daqui na Rodada 21, a
+                          pedido do usuário — agora vive no centro da barra
+                          inferior (BottomNav), igual já acontece do lado do
+                          peregrino, em vez de escondida neste menu perto da
+                          foto. */}
                       <Link
                         href="/gerente-pap"
                         onClick={() => setMenuAberto(false)}

@@ -183,6 +183,17 @@ export const DIAS_SEMANA_OPTIONS: { value: string; label: string; abrev: string 
   { value: "dom", label: "Domingo", abrev: "Dom" },
 ];
 
+// Hotéis e Restaurantes (Rodada 21)
+export const TIPO_COMERCIO_OPTIONS: { value: string; label: string }[] = [
+  { value: "hotel", label: "Hotel / pousada" },
+  { value: "restaurante", label: "Restaurante" },
+];
+
+export const TIPO_COMERCIO_LABELS: Record<string, string> = {
+  hotel: "Hotel / pousada",
+  restaurante: "Restaurante",
+};
+
 export const PAP_SIGLA = "PAP";
 export const PAP_NOME_COMPLETO = "PAP — Ponto de Apoio ao Peregrino";
 
@@ -238,6 +249,27 @@ export const STATUS_RISCO_INFORMADO_LABELS: Record<string, string> = {
   aprovado: "Confirmado pela administração",
   rejeitado: "Não aprovado",
 };
+
+// Replica, no código do app, a mesma regra de visibilidade pública que a
+// política de RLS "riscos_informados_select_publicos" aplica no banco (ver
+// Migration 17 e o reforço da Migration 26): chuva fica pública na hora,
+// as demais categorias só depois de 30min sem revisão, e tudo expira em 1h
+// — rejeitado nunca aparece. Isso é necessário (Rodada 21) porque a RLS
+// também tem uma política separada "select_own_ou_admin" que dá acesso
+// irrestrito a quem enviou o relato e a administradores — sem esse filtro
+// aplicado aqui no código, uma conta de admin (ou a própria autora do
+// relato) veria seus próprios avisos antigos no mapa de "Minha
+// peregrinação" muito depois de expirarem para os demais peregrinos,
+// porque a RLS "deixaria passar" essas linhas por um motivo que nada tem a
+// ver com "ainda está público agora".
+export function avisoVisivelPublicamente(r: { status: string; categoria: string; criado_em: string }) {
+  if (r.status === "rejeitado") return false;
+  const idadeMs = Date.now() - new Date(r.criado_em).getTime();
+  if (idadeMs > 60 * 60 * 1000) return false;
+  if (r.status === "aprovado") return true;
+  if (r.categoria === "chuva") return true;
+  return idadeMs >= 30 * 60 * 1000;
+}
 
 // Só 3 níveis de risco (Moderado/Alto/Muito alto) — "Muito baixo"/"Baixo"
 // foram removidos porque, na prática, ninguém cadastrava um "local de

@@ -65,6 +65,7 @@ export default async function AdminDashboardPage() {
   let riscosInformados: RiscoInformadoLinha[] = [];
   let gerentesCadastrados: GerenteLinha[] = [];
   let mensagensNovas = 0;
+  let comerciosCount = 0;
 
   if (isAdmin) {
     const [
@@ -75,6 +76,7 @@ export default async function AdminDashboardPage() {
       { data: certificados },
       { data: informados },
       { count: contagemMensagensNovas },
+      { count: contagemComercios },
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome_completo, cidade, uf"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
@@ -83,9 +85,11 @@ export default async function AdminDashboardPage() {
       supabase.from("certificados").select("peregrinacao_id"),
       supabase.from("riscos_informados").select("*").order("criado_em", { ascending: false }),
       supabase.from("mensagens_contato").select("id", { count: "exact", head: true }).eq("status", "novo"),
+      supabase.from("pontos_comerciais").select("id", { count: "exact", head: true }),
     ]);
 
     mensagensNovas = contagemMensagensNovas ?? 0;
+    comerciosCount = contagemComercios ?? 0;
 
     interface PerfilBasico {
       id: string;
@@ -295,6 +299,7 @@ export default async function AdminDashboardPage() {
           riscosInformados={riscosInformados}
           gerentesCadastrados={gerentesCadastrados}
           mensagensNovas={mensagensNovas}
+          comerciosCount={comerciosCount}
         />
       )}
 

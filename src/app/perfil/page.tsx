@@ -17,22 +17,30 @@ export default async function PerfilPage() {
     redirect("/login?redirect=/perfil");
   }
 
-  // Contas de Gerente de PAP têm sua própria área e nunca acessam o perfil
-  // de peregrino.
   const { data: gerente } = await supabase
     .from("gerentes_pap")
     .select("id")
     .eq("id", user.id)
     .maybeSingle();
-  if (gerente || user.user_metadata?.tipo_conta === "gerente_pap") {
-    redirect("/gerente-pap");
-  }
 
   const { data: perfil } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Uma conta de gerente de PAP que NUNCA teve perfil próprio de peregrino
+  // (sem linha em `profiles`) tem sua própria área e nunca acessa o perfil
+  // de peregrino — mandada direto para lá. Mas uma conta que acumula os
+  // dois papéis (tem linha em `profiles` E em `gerentes_pap`) precisa
+  // conseguir editar seu próprio perfil normalmente: antes esse
+  // redirecionamento era incondicional e mandava essa conta de volta para
+  // "/gerente-pap" sempre que ela clicava em "Editar perfil", fazendo
+  // parecer que o botão não fazia nada (bug relatado na Rodada 21) — mesma
+  // classe de bug já corrigida em `/peregrinacao` na Rodada 16.
+  if (!perfil && (gerente || user.user_metadata?.tipo_conta === "gerente_pap")) {
+    redirect("/gerente-pap");
+  }
 
   const { data: mensagens } = await supabase
     .from("mensagens_contato")

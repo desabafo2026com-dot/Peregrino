@@ -31,6 +31,12 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
   const [resgatando, setResgatando] = useState(false);
   const [erroCupom, setErroCupom] = useState<string | null>(null);
   const [liberandoAdmin, setLiberandoAdmin] = useState(false);
+  // "Foto" do instante em que este componente foi montado — usada só para
+  // decidir se uma compra "pendente" é recente o bastante para valer a
+  // pena esperar (ver `pendenteRecente` abaixo). Guardada em estado (com
+  // inicializador preguiçoso) em vez de chamar `Date.now()` direto no corpo
+  // do componente, que o React trata como impuro durante a renderização.
+  const [montadoEm] = useState(() => Date.now());
 
   // Ignora um status "pendente" travado (ex.: a pessoa desistiu do
   // pagamento no Mercado Pago e voltou, ou fechou a aba) depois de ~1
@@ -38,7 +44,19 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
   // em "Confirmando pagamento..." para sempre, sem voltar para a opção de
   // comprar de novo (bug relatado na Rodada 18).
   const [ignorarPendente, setIgnorarPendente] = useState(false);
-  const pendente = compra?.status === "pendente" && !ignorarPendente;
+  // A correção da Rodada 18 só resolvia isso DENTRO de uma mesma sessão da
+  // página: como `ignorarPendente` é um estado local, uma compra "pendente"
+  // de dias atrás (pagamento nunca concluído nem retomado) fazia a tela
+  // recomeçar a esperar ~1 minuto do zero TODA VEZ que a página era aberta
+  // de novo — na prática, para quem só dava uma espiada rápida, "só ficava
+  // preso" (bug relatado na Rodada 21). Agora só entra no modo de espera
+  // quando a compra pendente é recente (foi criada há pouco, coerente com
+  // "acabei de voltar do Mercado Pago") — uma pendente antiga já mostra a
+  // tela de compra direto, sem esperar mais nada.
+  const RECENTE_MS = 10 * 60 * 1000; // 10 minutos
+  const pendenteRecente =
+    !!compra && compra.status === "pendente" && montadoEm - new Date(compra.criado_em).getTime() < RECENTE_MS;
+  const pendente = pendenteRecente && !ignorarPendente;
 
   // Enquanto o pagamento estiver pendente (ex.: acabou de voltar do
   // Mercado Pago), consulta o status a cada poucos segundos — a confirmação

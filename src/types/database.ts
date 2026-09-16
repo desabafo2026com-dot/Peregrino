@@ -121,6 +121,30 @@ export interface PontoApoio {
   atualizado_em: string;
 }
 
+export type TipoComercio = "hotel" | "restaurante";
+
+// Hotéis e Restaurantes (Rodada 21) — cadastro só pela administração, sem o
+// fluxo de aprovação de gerente/pré-cadastro que o PAP tem.
+export interface PontoComercial {
+  id: string;
+  tipo: TipoComercio;
+  nome: string;
+  cidade: string | null;
+  br: Br;
+  km_referencia: number | null;
+  sentido_pista: SentidoPista | null;
+  telefone: string | null;
+  exibir_telefone: boolean;
+  ponto_referencia: string | null;
+  descricao: string | null;
+  foto_url: string | null;
+  latitude: number;
+  longitude: number;
+  ativo: boolean;
+  criado_por: string | null;
+  criado_em: string;
+}
+
 export interface PapPreCadastro {
   id: string;
   nome: string;

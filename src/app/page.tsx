@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import DoacaoCard from "@/components/DoacaoCard";
 
@@ -69,6 +69,12 @@ export default async function Home() {
       icon: Route,
       title: "Rotas de peregrinação",
       desc: "São Paulo - Aparecida ou Rio de Janeiro - Aparecida: dicas de segurança e pontos de maior risco em cada rota.",
+    },
+    {
+      href: "/hospedagem",
+      icon: Hotel,
+      title: "Hotéis e Restaurantes",
+      desc: "Opções de hospedagem e alimentação ao longo da rodovia, com mapa e filtro por tipo.",
     },
   ];
 

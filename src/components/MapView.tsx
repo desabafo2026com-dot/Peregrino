@@ -4,9 +4,9 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS, NIVEL_RISCO_LABELS } from "@/lib/constants";
+import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS, NIVEL_RISCO_LABELS, TIPO_COMERCIO_LABELS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
-import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
+import type { PontoApoio, PontoRisco, RiscoInformado, PontoComercial } from "@/types/database";
 
 const OSM_STYLE: StyleSpecification = {
   version: 8,
@@ -75,6 +75,8 @@ interface Props {
   trajeto?: PontoTrajeto[];
   rotasLinhas?: RotaLinha[];
   papsPreCadastro?: PapPreCadastroMapa[];
+  // Hotéis e Restaurantes (Rodada 21)
+  pontosComerciais?: PontoComercial[];
   center?: [number, number];
   zoom?: number;
   height?: string;
@@ -121,6 +123,7 @@ export default function MapView({
   trajeto = [],
   rotasLinhas = [],
   papsPreCadastro = [],
+  pontosComerciais = [],
   center = DEFAULT_CENTER,
   zoom = 9,
   height = "500px",
@@ -355,7 +358,38 @@ export default function MapView({
 
       markersRef.current.push(marker);
     });
-  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, permitirArrastarPapPreCadastro]);
+
+    pontosComerciais.forEach((c) => {
+      // Hotéis (azul, cama) e restaurantes (violeta, talheres) — cores e
+      // ícones diferentes dos usados por PAP/risco/avisos/pré-cadastro, para
+      // não se confundirem no mapa.
+      const hotel = c.tipo === "hotel";
+      const cor = hotel ? "#2563eb" : "#7c3aed";
+      const el = document.createElement("div");
+      el.style.cssText = `width:28px;height:28px;border-radius:50%;background:${cor};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center`;
+      el.innerHTML = hotel
+        ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>`
+        : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>`;
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([c.longitude, c.latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 20 }).setHTML(`
+            <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
+              ${c.foto_url ? `<img src="${c.foto_url}" alt="Foto de ${c.nome}" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
+              <span style="font-size:10px;letter-spacing:.05em;color:${cor};font-weight:700">${TIPO_COMERCIO_LABELS[c.tipo] ?? c.tipo}</span><br/>
+              <strong>${c.nome}</strong><br/>
+              ${c.telefone && c.exibir_telefone !== false ? `Telefone: ${c.telefone}<br/>` : ""}
+              ${c.cidade ? `Cidade: ${c.cidade}<br/>` : ""}
+              ${kmSentidoLabel(c.km_referencia, c.sentido_pista) ? `${kmSentidoLabel(c.km_referencia, c.sentido_pista)}<br/>` : ""}
+              ${c.ponto_referencia ? `${c.ponto_referencia}<br/>` : ""}
+              ${c.descricao ? `${c.descricao}` : ""}
+            </div>
+          `)
+        )
+        .addTo(map);
+      markersRef.current.push(marker);
+    });
+  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, pontosComerciais, permitirArrastarPapPreCadastro]);
 
   // Trajeto — linha ligando os pontos de check-in da rota, destacando os
   // já concluídos (verde) dos pendentes (âmbar)
