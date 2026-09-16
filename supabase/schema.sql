@@ -2665,3 +2665,103 @@ set file_size_limit = 6 * 1024 * 1024, -- 6MB (folga sobre os 3-4MB checados no 
 where id in ('avatars', 'pap-fotos', 'risco-fotos', 'romaria-plus-fotos');
 
 -- FIM DA MIGRATION 25
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 26 — Rodada 21:
+-- 1) Novo módulo "Hotéis e Restaurantes" (pontos_comerciais): cadastro
+--    feito pela administração (nos mesmos moldes do cadastro de PAP —
+--    localização no mapa, foto, km/sentido/cidade), mostrado ao peregrino
+--    num mapa com filtro por tipo e numa lista ordenada por km.
+-- 2) Corrige uma falha na política de RLS pública de riscos_informados
+--    (introduzida na migration 17): um relato "rejeitado" pela
+--    administração podia voltar a ficar visível ao público entre 30 e 60
+--    minutos depois do envio, porque a condição de tempo não excluía
+--    explicitamente esse status — só não aparecia antes desse intervalo
+--    (a maioria dos casos, por isso não tinha sido percebido). Agora
+--    "rejeitado" nunca aparece, em qualquer momento.
+-- ---------------------------------------------------------------------
+
+create table if not exists public.pontos_comerciais (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null check (tipo in ('hotel', 'restaurante')),
+  nome text not null,
+  cidade text,
+  br text not null default '116' check (br in ('116', '488')),
+  km_referencia numeric(6,1),
+  sentido_pista text check (sentido_pista in ('sp', 'rj')),
+  telefone text,
+  exibir_telefone boolean not null default true,
+  ponto_referencia text,
+  descricao text,
+  foto_url text,
+  latitude double precision not null,
+  longitude double precision not null,
+  ativo boolean not null default true,
+  criado_por uuid references auth.users(id) on delete set null,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.pontos_comerciais is 'Hotéis e restaurantes cadastrados pela administração (Rodada 21) — cadastro pago/anunciado, sem fluxo de aprovação de gerente como o PAP.';
+
+create index if not exists idx_pontos_comerciais_km on public.pontos_comerciais(km_referencia);
+
+alter table public.pontos_comerciais enable row level security;
+
+drop policy if exists "comerciais_select_ativos_ou_admin" on public.pontos_comerciais;
+create policy "comerciais_select_ativos_ou_admin" on public.pontos_comerciais for select
+  using (ativo or public.is_admin());
+
+drop policy if exists "comerciais_insert_admin" on public.pontos_comerciais;
+create policy "comerciais_insert_admin" on public.pontos_comerciais for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "comerciais_update_admin" on public.pontos_comerciais;
+create policy "comerciais_update_admin" on public.pontos_comerciais for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "comerciais_delete_admin" on public.pontos_comerciais;
+create policy "comerciais_delete_admin" on public.pontos_comerciais for delete to authenticated
+  using (public.is_admin());
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'comercios-fotos',
+  'comercios-fotos',
+  true,
+  6 * 1024 * 1024,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+)
+on conflict (id) do nothing;
+
+drop policy if exists "comercios_fotos_select_all" on storage.objects;
+create policy "comercios_fotos_select_all" on storage.objects for select
+  using (bucket_id = 'comercios-fotos');
+
+drop policy if exists "comercios_fotos_insert_admin" on storage.objects;
+create policy "comercios_fotos_insert_admin" on storage.objects for insert to authenticated
+  with check (bucket_id = 'comercios-fotos' and public.is_admin());
+
+drop policy if exists "comercios_fotos_update_admin" on storage.objects;
+create policy "comercios_fotos_update_admin" on storage.objects for update to authenticated
+  using (bucket_id = 'comercios-fotos' and public.is_admin());
+
+drop policy if exists "comercios_fotos_delete_admin" on storage.objects;
+create policy "comercios_fotos_delete_admin" on storage.objects for delete to authenticated
+  using (bucket_id = 'comercios-fotos' and public.is_admin());
+
+-- Fecha a brecha descrita no item 2 do cabeçalho desta migration: adiciona
+-- "status <> 'rejeitado'" explicitamente, em vez de confiar que as demais
+-- condições já excluíam esse caso.
+drop policy if exists "riscos_informados_select_publicos" on public.riscos_informados;
+create policy "riscos_informados_select_publicos" on public.riscos_informados for select
+  using (
+    status <> 'rejeitado'
+    and criado_em > now() - interval '1 hour'
+    and (
+      status = 'aprovado'
+      or categoria = 'chuva'
+      or criado_em <= now() - interval '30 minutes'
+    )
+  );
+
+-- FIM DA MIGRATION 26
