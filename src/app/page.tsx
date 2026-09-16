@@ -156,6 +156,16 @@ export default async function Home() {
       </p>
 
       <DoacaoCard />
+
+      <p className="text-center text-xs text-neutral-400">
+        <Link href="/termos" className="underline">
+          Termos de Uso
+        </Link>{" "}
+        ·{" "}
+        <Link href="/privacidade" className="underline">
+          Política de Privacidade
+        </Link>
+      </p>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { validarNomeCompleto } from "@/lib/validation";
+import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
 import { LogIn, Mail, Footprints, MapPinPlus, ArrowLeft } from "lucide-react";
 
@@ -132,9 +133,9 @@ function LoginForm() {
       setErro("A senha deve ter pelo menos 6 caracteres.");
       return;
     }
-    if (tipoConta === "peregrino" && !aceitaTermos) {
+    if (!aceitaTermos) {
       setErro(
-        "É necessário aceitar os termos, incluindo o compartilhamento de localização durante a peregrinação, para se cadastrar."
+        "É necessário aceitar os Termos de Uso e a Política de Privacidade para se cadastrar."
       );
       return;
     }
@@ -149,7 +150,8 @@ function LoginForm() {
           nome_completo: nome,
           telefone,
           tipo_conta: tipoConta,
-          aceita_termos: tipoConta === "peregrino" ? true : undefined,
+          aceita_termos: true,
+          termos_versao: TERMOS_VERSAO_ATUAL,
         },
         emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
@@ -175,8 +177,8 @@ function LoginForm() {
   }
 
   async function finalizarCadastro() {
+    const supabase = createClient();
     if (tipoConta === "gerente_pap") {
-      const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -187,8 +189,15 @@ function LoginForm() {
           telefone,
         });
       }
+      // O aceite (checkbox obrigatório acima) já foi dado — registra a
+      // versão/data no servidor agora que a linha em gerentes_pap existe.
+      await supabase.rpc("registrar_aceite_termos", {});
       router.push("/gerente-pap");
     } else {
+      // Para peregrino, o perfil completo só é preenchido depois em
+      // /perfil — passamos o nome para a função poder já criar uma linha
+      // mínima em profiles com o aceite registrado (ver Migration 25).
+      await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome });
       router.push("/perfil");
     }
     router.refresh();
@@ -383,26 +392,29 @@ function LoginForm() {
               />
             </div>
 
-            {tipoConta === "peregrino" && (
-              <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
-                <input
-                  id="termos"
-                  type="checkbox"
-                  required
-                  className="mt-0.5 h-4 w-4"
-                  checked={aceitaTermos}
-                  onChange={(e) => setAceitaTermos(e.target.checked)}
-                />
-                <label htmlFor="termos" className="text-xs text-neutral-600 dark:text-neutral-300">
-                  Li e aceito os Termos de Uso. Autorizo o compartilhamento da
-                  minha localização durante o trajeto, do início ao fim de
-                  cada peregrinação, para registro dos check-ins, registro do
-                  local de sinistros informados, para que a equipe de apoio
-                  possa avisar sobre condições adversas na rota e para
-                  localização em caso de emergência.
-                </label>
-              </div>
-            )}
+            <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
+              <input
+                id="termos"
+                type="checkbox"
+                required
+                className="mt-0.5 h-4 w-4"
+                checked={aceitaTermos}
+                onChange={(e) => setAceitaTermos(e.target.checked)}
+              />
+              <label htmlFor="termos" className="text-xs text-neutral-600 dark:text-neutral-300">
+                Li e aceito os{" "}
+                <Link href="/termos" target="_blank" className="underline">
+                  Termos de Uso
+                </Link>{" "}
+                e a{" "}
+                <Link href="/privacidade" target="_blank" className="underline">
+                  Política de Privacidade
+                </Link>
+                . Declaro ter 18 anos ou mais.
+                {tipoConta === "peregrino" &&
+                  " Autorizo o compartilhamento da minha localização durante o trajeto, do início ao fim de cada peregrinação, para registro dos check-ins, registro do local de sinistros informados, para que a equipe de apoio possa avisar sobre condições adversas na rota e para localização em caso de emergência."}
+              </label>
+            </div>
 
             {erro && <MensagemErro texto={erro} />}
 

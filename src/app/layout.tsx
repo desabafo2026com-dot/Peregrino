@@ -5,6 +5,7 @@ import BottomNav from "@/components/BottomNav";
 import EmergencyButton from "@/components/EmergencyButton";
 import LocationSharingManager from "@/components/LocationSharingManager";
 import { AuthRoleProvider } from "@/components/AuthRoleProvider";
+import TermosGate from "@/components/TermosGate";
 
 export const metadata: Metadata = {
   title: "O Peregrino — Rodovia Dutra até Aparecida",
@@ -50,6 +51,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-neutral-50 font-sans text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-50">
         <AuthRoleProvider>
+          <TermosGate />
           <Navbar />
           <main className="mx-auto max-w-5xl px-4 pt-6" style={{ paddingBottom: "calc(5.5rem + var(--safe-bottom))" }}>
             {children}

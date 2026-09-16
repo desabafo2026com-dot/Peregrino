@@ -279,3 +279,11 @@ export const EMERGENCIAS = [
   { numero: "193", nome: "Bombeiros", descricao: "Resgate, incêndio, emergência médica" },
   { numero: "192", nome: "SAMU", descricao: "Emergência médica" },
 ];
+
+// Versão vigente dos Termos de Uso / Política de Privacidade (Rodada 19).
+// Precisa bater exatamente com a string gravada dentro da função SQL
+// registrar_aceite_termos (supabase/schema.sql, Migration 25) — se um dia
+// os termos forem revisados de novo, atualize as DUAS ao mesmo tempo (aqui
+// e na função), assim quem já aceitou a versão antiga passa a ver o aviso
+// de novo (ver TermosGate.tsx) até aceitar a nova.
+export const TERMOS_VERSAO_ATUAL = "1.0 (16/09/2026)";

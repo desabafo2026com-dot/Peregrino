@@ -4,6 +4,7 @@ import ProfileForm from "@/components/ProfileForm";
 import AlterarSenhaForm from "@/components/AlterarSenhaForm";
 import ContatoDesenvolvedorForm from "@/components/ContatoDesenvolvedorForm";
 import VoltarButton from "@/components/VoltarButton";
+import Link from "next/link";
 import type { Profile, MensagemContato } from "@/types/database";
 
 export default async function PerfilPage() {
@@ -39,14 +40,20 @@ export default async function PerfilPage() {
     .eq("user_id", user.id)
     .order("criado_em", { ascending: false });
 
+  // "Completo" aqui significa a cidade já preenchida (o campo mais cedo do
+  // formulário de perfil de peregrino) — não só a linha existir, já que
+  // ela pode existir ainda vazia, com só o aceite dos termos gravado no
+  // cadastro (ver registrar_aceite_termos, Rodada 19).
+  const perfilCompleto = !!(perfil as Profile | null)?.cidade;
+
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href="/" />
       <h1 className="mb-1 text-2xl font-bold">
-        {perfil ? "Meu perfil" : "Complete seu cadastro"}
+        {perfilCompleto ? "Meu perfil" : "Complete seu cadastro"}
       </h1>
       <p className="mb-6 text-sm text-neutral-500">
-        {perfil
+        {perfilCompleto
           ? "Atualize suas informações quando precisar."
           : "Passo 2 de 2: conte um pouco sobre sua peregrinação."}
       </p>
@@ -66,6 +73,15 @@ export default async function PerfilPage() {
           mensagensIniciais={(mensagens ?? []) as MensagemContato[]}
         />
       </div>
+      <p className="mt-8 text-center text-xs text-neutral-400">
+        <Link href="/termos" className="underline">
+          Termos de Uso
+        </Link>{" "}
+        ·{" "}
+        <Link href="/privacidade" className="underline">
+          Política de Privacidade
+        </Link>
+      </p>
     </div>
   );
 }

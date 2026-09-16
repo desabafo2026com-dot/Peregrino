@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { validarNomeCompleto } from "@/lib/validation";
 import VoltarButton from "@/components/VoltarButton";
 import { MapPinPlus } from "lucide-react";
+import Link from "next/link";
 
 // Criar uma conta nova de Gerente de PAP agora faz parte do fluxo único de
 // entrada por e-mail em /login ("sou gerente de PAP"). Esta página só
@@ -17,6 +18,7 @@ export default function CadastroGerentePapPage() {
   const [checando, setChecando] = useState(true);
   const [nomeCompleto, setNomeCompleto] = useState("");
   const [telefone, setTelefone] = useState("");
+  const [aceitaTermos, setAceitaTermos] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -50,6 +52,10 @@ export default function CadastroGerentePapPage() {
       setErro(erroNome);
       return;
     }
+    if (!aceitaTermos) {
+      setErro("É necessário aceitar os Termos de Uso e a Política de Privacidade para continuar.");
+      return;
+    }
 
     setLoading(true);
     const supabase = createClient();
@@ -69,11 +75,16 @@ export default function CadastroGerentePapPage() {
       telefone,
     });
 
-    setLoading(false);
     if (insertError) {
+      setLoading(false);
       setErro(insertError.message);
       return;
     }
+
+    // O aceite (checkbox obrigatório acima) já foi dado — registra a
+    // versão/data no servidor agora que a linha em gerentes_pap existe.
+    await supabase.rpc("registrar_aceite_termos", {});
+    setLoading(false);
 
     router.push("/gerente-pap");
     router.refresh();
@@ -115,6 +126,28 @@ export default function CadastroGerentePapPage() {
               onChange={(e) => setTelefone(e.target.value)}
               placeholder="(00) 00000-0000"
             />
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
+            <input
+              id="termos-gerente"
+              type="checkbox"
+              required
+              className="mt-0.5 h-4 w-4"
+              checked={aceitaTermos}
+              onChange={(e) => setAceitaTermos(e.target.checked)}
+            />
+            <label htmlFor="termos-gerente" className="text-xs text-neutral-600 dark:text-neutral-300">
+              Li e aceito os{" "}
+              <Link href="/termos" target="_blank" className="underline">
+                Termos de Uso
+              </Link>{" "}
+              e a{" "}
+              <Link href="/privacidade" target="_blank" className="underline">
+                Política de Privacidade
+              </Link>{" "}
+              também para esta conta de Gerente de PAP.
+            </label>
           </div>
 
           {erro && (

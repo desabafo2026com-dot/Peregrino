@@ -42,6 +42,11 @@ export interface Profile {
   avatar_url: string | null;
   is_admin: boolean;
   is_agente: boolean;
+  // Versão dos Termos de Uso/Política de Privacidade aceita por último, e
+  // quando — gravados só pela função registrar_aceite_termos (Rodada 19),
+  // nunca escritos direto pelo app. Nulo = nunca aceitou (ver TermosGate).
+  termos_aceitos_versao: string | null;
+  termos_aceitos_em: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -55,6 +60,8 @@ export interface GerentePap {
   observacao_admin: string | null;
   aprovado_por: string | null;
   aprovado_em: string | null;
+  termos_aceitos_versao: string | null;
+  termos_aceitos_em: string | null;
   criado_em: string;
 }
 
