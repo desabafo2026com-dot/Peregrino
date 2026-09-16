@@ -2765,3 +2765,12 @@ create policy "riscos_informados_select_publicos" on public.riscos_informados fo
   );
 
 -- FIM DA MIGRATION 26
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 27 — distância aproximada percorrida, guardada no certificado
+-- ---------------------------------------------------------------------
+alter table public.certificados add column if not exists distancia_km numeric;
+
+comment on column public.certificados.distancia_km is 'Distância aproximada percorrida (km), calculada como km_aproximado do último ponto de check-in (Aparecida) menos km_aproximado do primeiro ponto (origem escolhida). Nulo em certificados emitidos antes da Rodada 22 ou quando os pontos da rota não têm km_aproximado cadastrado.';
+
+-- FIM DA MIGRATION 27
