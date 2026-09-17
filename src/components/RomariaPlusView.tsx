@@ -15,6 +15,9 @@ import {
   Move,
   Sparkle,
   Route,
+  Check,
+  Pencil,
+  ZoomIn,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
@@ -92,6 +95,13 @@ const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   painel: { x: 50, y: 78, escala: 100 },
   moldura: null,
 };
+
+// Posição/zoom padrão da FOTO em si dentro do recorte de cada modelo (Rodada
+// 23) — diferente do AJUSTE_PADRAO acima, que é só do painel de texto. Vale
+// para os 4 modelos, já que todos recortam a foto (object-fit: cover) para
+// caber no espaço reservado a ela.
+const FOTO_POS_PADRAO = { x: 50, y: 50 };
+const FOTO_ESCALA_PADRAO = 100;
 
 // Fora do componente de propósito: o lint de pureza de hooks trata qualquer
 // função declarada dentro do componente como parte da renderização, mesmo
@@ -184,6 +194,70 @@ function PainelAjustavel({
   );
 }
 
+// Camada transparente sobre a foto para reposicioná-la dentro do seu recorte
+// (Rodada 23, a pedido do usuário: "na edição com molduras ele conseguisse
+// ajustar a foto para que não corte a parte desejada"). Diferente do
+// PainelAjustavel acima (que move um painel de texto para uma posição
+// absoluta em x/y%), aqui o arraste é RELATIVO — cada movimento do ponteiro
+// desloca o object-position atual pela distância arrastada, do jeito que se
+// espera ao "empurrar" uma foto por trás de uma janela fixa (arrastar para a
+// direita revela mais do lado esquerdo da foto original, então o valor de
+// object-position diminui).
+function FotoAjustavel({
+  editando,
+  onArrastar,
+  onSoltarArraste,
+}: {
+  editando: boolean;
+  onArrastar: (delta: { dx: number; dy: number }) => void;
+  onSoltarArraste: () => void;
+}) {
+  const ultimaPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  function aoPressionar(e: React.PointerEvent<HTMLDivElement>) {
+    if (!editando) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ultimaPosRef.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function aoMover(e: React.PointerEvent<HTMLDivElement>) {
+    if (!editando || !ultimaPosRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const dx = ((e.clientX - ultimaPosRef.current.x) / rect.width) * 100;
+    const dy = ((e.clientY - ultimaPosRef.current.y) / rect.height) * 100;
+    ultimaPosRef.current = { x: e.clientX, y: e.clientY };
+    onArrastar({ dx, dy });
+  }
+
+  function aoSoltar(e: React.PointerEvent<HTMLDivElement>) {
+    if (!ultimaPosRef.current) return;
+    ultimaPosRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    onSoltarArraste();
+  }
+
+  return (
+    <div
+      className={`absolute inset-0 z-10 ${editando ? "cursor-grab touch-none active:cursor-grabbing" : "pointer-events-none"}`}
+      onPointerDown={aoPressionar}
+      onPointerMove={aoMover}
+      onPointerUp={aoSoltar}
+      onPointerCancel={aoSoltar}
+    >
+      {editando && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+          <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-medium text-white">
+            <Move size={10} /> arraste a foto para reposicionar
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   certificado: Certificado;
   // Presentes só quando a compra já está paga (ver
@@ -229,17 +303,36 @@ export default function RomariaPlusView({
 
   const [fotoUrl, setFotoUrl] = useState<string | null>(fotoUrlInicial);
   const [modelo, setModelo] = useState<Modelo>(modeloInicial ?? "classico");
-  const [ajuste, setAjuste] = useState<AjusteOverlayRomariaPlus>(
-    ajusteInicial ?? AJUSTE_PADRAO[modeloInicial ?? "classico"] ?? { x: 50, y: 80, escala: 100 }
-  );
+  const [ajuste, setAjuste] = useState<AjusteOverlayRomariaPlus>(() => {
+    const base = ajusteInicial ?? AJUSTE_PADRAO[modeloInicial ?? "classico"] ?? { x: 50, y: 80, escala: 100 };
+    return {
+      ...base,
+      fotoPos: ajusteInicial?.fotoPos ?? FOTO_POS_PADRAO,
+      fotoEscala: ajusteInicial?.fotoEscala ?? FOTO_ESCALA_PADRAO,
+    };
+  });
   const [editando, setEditando] = useState(false);
+  // Ajuste da FOTO (posição/zoom dentro do recorte), separado do ajuste do
+  // painel de texto acima — Rodada 23. Só um dos dois modos de arraste fica
+  // ativo por vez (ver alternarEdicaoTexto/alternarEdicaoFoto).
+  const [editandoFoto, setEditandoFoto] = useState(false);
   const [gerando, setGerando] = useState<"baixar" | "compartilhar" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [avisoSalvar, setAvisoSalvar] = useState<string | null>(null);
   const [contadorDownloads, setContadorDownloads] = useState(contadorDownloadsInicial);
   const [contadorCompartilhamentos, setContadorCompartilhamentos] = useState(contadorCompartilhamentosInicial);
+  // Rodada 23, a pedido do usuário: antes dava para baixar/compartilhar a
+  // qualquer momento, o que confundia (a pessoa mexia de novo sem perceber
+  // que já tinha baixado aquela versão). Agora é preciso "Finalizar edição"
+  // antes de baixar/compartilhar — a partir daí a foto/modelo/ajustes ficam
+  // travados (as opções de edição somem) até a pessoa optar por "Editar
+  // novamente". Uma foto que já veio salva do servidor (reabrindo a tela)
+  // começa direto finalizada, sem precisar confirmar de novo.
+  const [finalizado, setFinalizado] = useState(!!fotoUrlInicial);
 
   const infoModelo = MODELOS.find((m) => m.id === modelo) ?? MODELOS[0];
+  const fotoPos = ajuste.fotoPos ?? FOTO_POS_PADRAO;
+  const fotoEscala = ajuste.fotoEscala ?? FOTO_ESCALA_PADRAO;
 
   // Libera o object URL da foto ao trocar ou sair da tela, para não vazar
   // memória — só quando é mesmo um blob local (uma foto já persistida no
@@ -319,15 +412,57 @@ export default function RomariaPlusView({
   function escolherModelo(m: Modelo) {
     setModelo(m);
     setEditando(false);
-    const padrao = AJUSTE_PADRAO[m];
-    if (padrao) setAjuste(padrao);
-    if (fotoUrl) void persistirFoto(m, padrao ?? ajuste);
+    setEditandoFoto(false);
+    const padraoTexto = AJUSTE_PADRAO[m];
+    // Trocar de modelo só reseta a posição do PAINEL DE TEXTO para o padrão
+    // daquele modelo — o reposicionamento/zoom da foto (fotoPos/fotoEscala)
+    // é independente do modelo e continua do jeito que a pessoa deixou.
+    const novoAjuste: AjusteOverlayRomariaPlus = padraoTexto
+      ? { ...padraoTexto, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala }
+      : ajuste;
+    setAjuste(novoAjuste);
+    if (fotoUrl) void persistirFoto(m, novoAjuste);
   }
 
   function centralizarAjuste() {
     const padrao = AJUSTE_PADRAO[modelo] ?? { x: 50, y: 80, escala: 100 };
-    setAjuste(padrao);
-    void persistirFoto(modelo, padrao);
+    const novoAjuste = { ...padrao, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala };
+    setAjuste(novoAjuste);
+    void persistirFoto(modelo, novoAjuste);
+  }
+
+  // Reposicionamento/zoom da FOTO (Rodada 23) — independente do painel de
+  // texto acima, por isso tem seu próprio "centralizar" que não mexe em
+  // x/y/escala do texto.
+  function centralizarFoto() {
+    const novoAjuste = { ...ajuste, fotoPos: FOTO_POS_PADRAO, fotoEscala: FOTO_ESCALA_PADRAO };
+    setAjuste(novoAjuste);
+    void persistirFoto(modelo, novoAjuste);
+  }
+
+  function moverFoto(delta: { dx: number; dy: number }) {
+    setAjuste((atual) => {
+      const posAtual = atual.fotoPos ?? FOTO_POS_PADRAO;
+      // Arrastar para a direita/baixo revela mais do lado esquerdo/de cima
+      // da foto original — por isso o delta é subtraído, não somado.
+      return {
+        ...atual,
+        fotoPos: {
+          x: Math.min(100, Math.max(0, posAtual.x - delta.dx)),
+          y: Math.min(100, Math.max(0, posAtual.y - delta.dy)),
+        },
+      };
+    });
+  }
+
+  function alternarEdicaoTexto() {
+    setEditandoFoto(false);
+    setEditando((v) => !v);
+  }
+
+  function alternarEdicaoFoto() {
+    setEditando(false);
+    setEditandoFoto((v) => !v);
   }
 
   function selecionarFoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -335,34 +470,82 @@ export default function RomariaPlusView({
     e.target.value = "";
     if (!arquivo) return;
     setErro(null);
+    setFinalizado(false);
     arquivoPendenteRef.current = arquivo;
     setFotoUrl((anterior) => {
       if (anterior?.startsWith("blob:")) URL.revokeObjectURL(anterior);
       return URL.createObjectURL(arquivo);
     });
-    void persistirFoto(modelo, ajuste);
+    // Uma foto nova começa sem zoom/deslocamento — o recorte de uma foto
+    // anterior não faz sentido nenhum para a foto que acabou de entrar.
+    const novoAjuste = { ...ajuste, fotoPos: FOTO_POS_PADRAO, fotoEscala: FOTO_ESCALA_PADRAO };
+    setAjuste(novoAjuste);
+    void persistirFoto(modelo, novoAjuste);
   }
 
   function trocarFoto() {
+    setFinalizado(false);
+    setEditando(false);
+    setEditandoFoto(false);
     setFotoUrl((anterior) => {
       if (anterior?.startsWith("blob:")) URL.revokeObjectURL(anterior);
       return null;
     });
   }
 
+  function finalizarEdicao() {
+    setEditando(false);
+    setEditandoFoto(false);
+    setFinalizado(true);
+  }
+
+  function editarNovamente() {
+    setFinalizado(false);
+  }
+
+  // Espera cada <img> da arte terminar de carregar antes de capturar o PNG —
+  // Rodada 23, corrige o bug relatado ("ao clicar em compartilhar antes de
+  // baixar, ia só a arte sem a foto"): ao escolher uma foto nova e clicar
+  // logo em seguida em Compartilhar (sem esperar nada), a tag <img> podia
+  // ainda não ter terminado de carregar no DOM quando o html-to-image
+  // percorria a árvore para gerar a imagem — resultando numa arte sem a
+  // foto. Baixar "por acaso" costumava funcionar por vir depois de a pessoa
+  // já ter olhado a prévia por alguns segundos, tempo suficiente para a foto
+  // carregar. Agora os dois esperam pela foto de verdade antes de gerar.
+  function aguardarImagem(img: HTMLImageElement): Promise<void> {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finalizar = () => {
+        img.removeEventListener("load", finalizar);
+        img.removeEventListener("error", finalizar);
+        resolve();
+      };
+      img.addEventListener("load", finalizar);
+      img.addEventListener("error", finalizar);
+      // Evita travar para sempre se por algum motivo a imagem nunca disparar
+      // load/error (ex.: já removida do DOM entre o clique e esta checagem).
+      setTimeout(finalizar, 5000);
+    });
+  }
+
   async function gerarPng(): Promise<string | null> {
     if (!ref.current) return null;
+    const imagens = Array.from(ref.current.querySelectorAll("img"));
+    await Promise.all(imagens.map(aguardarImagem));
     const { toPng } = await import("html-to-image");
     return toPng(ref.current, { pixelRatio: 2 });
   }
 
   // Sai do modo de ajuste antes de gerar a imagem final, para a moldura
-  // tracejada e o rótulo "arraste para mover" nunca aparecerem no PNG
-  // baixado/compartilhado — mesmo que a pessoa tenha esquecido de concluir
-  // o ajuste antes de clicar em baixar/compartilhar.
+  // tracejada e os rótulos "arraste para mover"/"arraste a foto para
+  // reposicionar" nunca aparecerem no PNG baixado/compartilhado — mesmo que
+  // a pessoa tenha esquecido de concluir o ajuste antes de clicar em
+  // baixar/compartilhar (na prática, com a Rodada 23, esses botões só ficam
+  // visíveis antes de "Finalizar edição", mas o cuidado continua valendo).
   async function sairDoModoAjuste() {
-    if (!editando) return;
+    if (!editando && !editandoFoto) return;
     setEditando(false);
+    setEditandoFoto(false);
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }
 
@@ -473,22 +656,24 @@ export default function RomariaPlusView({
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap justify-center gap-2">
-            {MODELOS.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => escolherModelo(m.id)}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
-                  modelo === m.id
-                    ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
-                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-                }`}
-              >
-                {m.nome}
-              </button>
-            ))}
-          </div>
+          {!finalizado && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {MODELOS.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => escolherModelo(m.id)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                    modelo === m.id
+                      ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
+                      : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                  }`}
+                >
+                  {m.nome}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div
             ref={ref}
@@ -501,8 +686,14 @@ export default function RomariaPlusView({
                 <img
                   src={fotoUrl}
                   alt=""
+                  crossOrigin="anonymous"
                   className="absolute inset-0 h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
+                    transform: `scale(${fotoEscala / 100})`,
+                  }}
                 />
+                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/40" />
                 <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 pt-[5%] text-white">
                   <Image
@@ -567,7 +758,17 @@ export default function RomariaPlusView({
                 </p>
                 <div className="relative w-[78%] overflow-hidden rounded-2xl ring-4 ring-white/30" style={{ aspectRatio: "1 / 1" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={fotoUrl} alt="" className="h-full w-full object-cover" />
+                  <img
+                    src={fotoUrl}
+                    alt=""
+                    crossOrigin="anonymous"
+                    className="h-full w-full object-cover"
+                    style={{
+                      objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
+                      transform: `scale(${fotoEscala / 100})`,
+                    }}
+                  />
+                  <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                 </div>
                 <div
                   className="mt-[6%] flex w-full flex-col gap-[3%] rounded-xl bg-white/10 py-[4%] backdrop-blur-sm"
@@ -601,8 +802,14 @@ export default function RomariaPlusView({
                 <img
                   src={fotoUrl}
                   alt=""
+                  crossOrigin="anonymous"
                   className="absolute inset-0 h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
+                    transform: `scale(${fotoEscala / 100})`,
+                  }}
                 />
+                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                 {/* Vinheta bem sutil, só para garantir contraste nas bordas —
                     diferente do "Clássico", a foto fica quase inteira à
                     vista, sem escurecer o centro da imagem. */}
@@ -673,7 +880,17 @@ export default function RomariaPlusView({
                     </div>
                     <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg ring-2 ring-amber-700/40">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={fotoUrl} alt="" className="h-full w-full object-cover" />
+                      <img
+                        src={fotoUrl}
+                        alt=""
+                        crossOrigin="anonymous"
+                        className="h-full w-full object-cover"
+                        style={{
+                          objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
+                          transform: `scale(${fotoEscala / 100})`,
+                        }}
+                      />
+                      <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                     </div>
                     <div className="mt-[4%] flex flex-col items-center gap-[2%] text-center text-amber-900">
                       <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "5.4cqw", lineHeight: 1.1, textAlign: "center" }}>
@@ -717,91 +934,163 @@ export default function RomariaPlusView({
             )}
           </div>
 
-          {infoModelo.temAjuste && (
-            <div className="flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setEditando((v) => !v)}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium ${
-                  editando
-                    ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
-                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-                }`}
-              >
-                <Move size={14} /> {editando ? "Concluir ajuste" : "Ajustar posição do texto"}
-              </button>
-              {editando && (
-                <div className="flex w-full max-w-xs flex-col items-center gap-1.5">
-                  <p className="text-center text-xs text-neutral-500">
-                    Arraste o texto na prévia acima para não cobrir ninguém na foto.
-                  </p>
-                  <label htmlFor="tamanho-texto-romaria" className="text-xs font-medium text-neutral-500">
-                    Tamanho do texto
-                  </label>
-                  <input
-                    id="tamanho-texto-romaria"
-                    type="range"
-                    min={70}
-                    max={140}
-                    step={5}
-                    value={ajuste.escala}
-                    onChange={(e) => {
-                      const novo = { ...ajuste, escala: Number(e.target.value) };
-                      setAjuste(novo);
-                      agendarPersistirAjuste(novo);
-                    }}
-                    className="w-full accent-amber-700"
-                  />
+          {!finalizado && (
+            <>
+              {/* Ajuste da FOTO em si (zoom + reposicionar dentro do recorte)
+                  — Rodada 23, disponível nos 4 modelos, já que todos recortam
+                  a foto para caber no espaço reservado a ela. */}
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={alternarEdicaoFoto}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                    editandoFoto
+                      ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
+                      : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                  }`}
+                >
+                  <ZoomIn size={14} /> {editandoFoto ? "Concluir ajuste" : "Ajustar posição da foto"}
+                </button>
+                {editandoFoto && (
+                  <div className="flex w-full max-w-xs flex-col items-center gap-1.5">
+                    <p className="text-center text-xs text-neutral-500">
+                      Arraste a foto na prévia acima para não cortar a parte que você quer mostrar.
+                    </p>
+                    <label htmlFor="zoom-foto-romaria" className="text-xs font-medium text-neutral-500">
+                      Zoom da foto
+                    </label>
+                    <input
+                      id="zoom-foto-romaria"
+                      type="range"
+                      min={100}
+                      max={200}
+                      step={5}
+                      value={fotoEscala}
+                      onChange={(e) => {
+                        const novo = { ...ajuste, fotoEscala: Number(e.target.value) };
+                        setAjuste(novo);
+                        agendarPersistirAjuste(novo);
+                      }}
+                      className="w-full accent-amber-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={centralizarFoto}
+                      className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-500"
+                    >
+                      Centralizar de novo
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {infoModelo.temAjuste && (
+                <div className="flex flex-col items-center gap-2">
                   <button
                     type="button"
-                    onClick={centralizarAjuste}
-                    className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-500"
+                    onClick={alternarEdicaoTexto}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                      editando
+                        ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
+                        : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                    }`}
                   >
-                    Centralizar de novo
+                    <Move size={14} /> {editando ? "Concluir ajuste" : "Ajustar posição do texto"}
                   </button>
+                  {editando && (
+                    <div className="flex w-full max-w-xs flex-col items-center gap-1.5">
+                      <p className="text-center text-xs text-neutral-500">
+                        Arraste o texto na prévia acima para não cobrir ninguém na foto.
+                      </p>
+                      <label htmlFor="tamanho-texto-romaria" className="text-xs font-medium text-neutral-500">
+                        Tamanho do texto
+                      </label>
+                      <input
+                        id="tamanho-texto-romaria"
+                        type="range"
+                        min={70}
+                        max={140}
+                        step={5}
+                        value={ajuste.escala}
+                        onChange={(e) => {
+                          const novo = { ...ajuste, escala: Number(e.target.value) };
+                          setAjuste(novo);
+                          agendarPersistirAjuste(novo);
+                        }}
+                        className="w-full accent-amber-700"
+                      />
+                      <button
+                        type="button"
+                        onClick={centralizarAjuste}
+                        className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-500"
+                      >
+                        Centralizar de novo
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+
+              {/* Rodada 23: antes dava para baixar/compartilhar a qualquer
+                  momento; agora é preciso escolher entre trocar de foto ou
+                  confirmar que terminou de editar — só depois disso aparecem
+                  os botões de baixar/compartilhar (ver bloco "finalizado"
+                  abaixo), evitando editar sem perceber depois de já ter
+                  baixado/compartilhado a arte. */}
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  onClick={trocarFoto}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <RefreshCw size={16} /> Trocar foto
+                </button>
+                <button onClick={finalizarEdicao} className="btn-primary flex items-center gap-2">
+                  <Check size={16} /> Finalizar edição
+                </button>
+              </div>
+            </>
           )}
 
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex flex-wrap justify-center gap-2">
-              <button
-                onClick={compartilhar}
-                disabled={gerando !== null}
-                className="btn-primary flex items-center gap-2"
-              >
-                <Share2 size={16} /> {gerando === "compartilhar" ? "Gerando..." : "Compartilhar"}
-              </button>
-              <button
-                onClick={baixar}
-                disabled={gerando !== null}
-                className="btn-secondary flex items-center gap-2"
-              >
-                <Download size={16} /> {gerando === "baixar" ? "Gerando..." : "Baixar imagem"}
-              </button>
-              <button
-                onClick={trocarFoto}
-                disabled={gerando !== null}
-                className="btn-secondary flex items-center gap-2"
-              >
-                <RefreshCw size={16} /> Trocar foto
-              </button>
-            </div>
-            {(contadorDownloads > 0 || contadorCompartilhamentos > 0) && (
-              <p className="text-xs text-neutral-400">
-                {contadorDownloads > 0 && `Baixada ${contadorDownloads}x`}
-                {contadorDownloads > 0 && contadorCompartilhamentos > 0 && " · "}
-                {contadorCompartilhamentos > 0 && `Compartilhada ${contadorCompartilhamentos}x`}
+          {finalizado && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  onClick={compartilhar}
+                  disabled={gerando !== null}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Share2 size={16} /> {gerando === "compartilhar" ? "Gerando..." : "Compartilhar"}
+                </button>
+                <button
+                  onClick={baixar}
+                  disabled={gerando !== null}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Download size={16} /> {gerando === "baixar" ? "Gerando..." : "Baixar imagem"}
+                </button>
+                <button
+                  onClick={editarNovamente}
+                  disabled={gerando !== null}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Pencil size={16} /> Editar novamente
+                </button>
+              </div>
+              {(contadorDownloads > 0 || contadorCompartilhamentos > 0) && (
+                <p className="text-xs text-neutral-400">
+                  {contadorDownloads > 0 && `Baixada ${contadorDownloads}x`}
+                  {contadorDownloads > 0 && contadorCompartilhamentos > 0 && " · "}
+                  {contadorCompartilhamentos > 0 && `Compartilhada ${contadorCompartilhamentos}x`}
+                </p>
+              )}
+              <p className="flex items-center gap-1 text-xs text-neutral-400">
+                <Sparkle size={12} className="shrink-0" /> Dica: o modelo &quot;Moldura dourada&quot; nunca cobre a
+                foto — o texto sempre fica numa área própria.
               </p>
-            )}
-            <p className="flex items-center gap-1 text-xs text-neutral-400">
-              <Sparkle size={12} className="shrink-0" /> Dica: o modelo &quot;Moldura dourada&quot; nunca cobre a
-              foto — o texto sempre fica numa área própria.
-            </p>
-            {erro && <p className="text-xs text-red-600">{erro}</p>}
-            {avisoSalvar && <p className="max-w-xs text-center text-xs text-amber-700 dark:text-amber-500">{avisoSalvar}</p>}
-          </div>
+            </div>
+          )}
+          {erro && <p className="text-xs text-red-600">{erro}</p>}
+          {avisoSalvar && <p className="max-w-xs text-center text-xs text-amber-700 dark:text-amber-500">{avisoSalvar}</p>}
         </>
       )}
     </div>

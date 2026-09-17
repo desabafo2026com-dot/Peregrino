@@ -32,14 +32,6 @@ function formatarDataCurta(d: string | null) {
   });
 }
 
-// O campo rota_nome é salvo como "Nome da rota (Origem → Aparecida)" — daqui
-// extraímos só a cidade de origem para a frase do certificado.
-function extrairOrigem(rotaNome: string | null) {
-  if (!rotaNome) return null;
-  const m = rotaNome.match(/\(([^→]+)→/);
-  return m ? m[1].trim() : null;
-}
-
 // Certificado grátis — versão simples (Rodada 15, redesenhado na Rodada 16
 // para o formato A4 e uma formatação mais próxima da de um certificado
 // impresso de verdade): sem a arte de pergaminho (essa passou a ser
@@ -62,7 +54,14 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
         ? MEIO_TRANSPORTE_LABELS[c.meio_transporte]
         : "a pé";
 
-  const origem = extrairOrigem(c.rota_nome);
+  // Até a Rodada 22, isto vinha de uma extração por regex de rota_nome
+  // ("Nome da rota (Origem → Aparecida)") que já não batia com nenhum
+  // certificado desde a Rodada 10, quando nomeRota() passou a mostrar só o
+  // nome da rota, sem essa parte entre parênteses — na prática, "origem"
+  // sempre dava null e a frase caía sempre no "até..." sem "de [origem]".
+  // Rodada 23: c.origem é a cidade de origem declarada pelo peregrino,
+  // gravada direto no certificado no momento da emissão.
+  const origem = c.origem;
   const trajetoTexto = origem ? `de ${origem} até` : "até";
 
   function imprimir() {

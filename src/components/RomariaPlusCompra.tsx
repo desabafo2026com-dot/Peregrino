@@ -188,8 +188,27 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
         seu tempo.
       </p>
       {erro && <p className="mb-2 text-sm text-red-600">{erro}</p>}
-      <button onClick={comprar} disabled={loading} className="btn-primary">
-        {loading ? "Abrindo pagamento..." : `Adquirir Certificado Plus + arte de 5 fotos — ${VALOR_LABEL}`}
+      {/* Rodada 23: a pedido do usuário ("o botão de romaria plus devia ser
+          melhor, mais intuitivo e destacado com valor e depois com título
+          só") — antes era um botão padrão com uma frase longa e o preço no
+          fim, fácil de ler por cima e nem perceber o valor. Agora o valor
+          vem primeiro, bem grande, com o título/benefício abaixo em texto
+          menor, num botão maior e mais chamativo que o restante da tela. */}
+      <button
+        onClick={comprar}
+        disabled={loading}
+        className="flex w-full flex-col items-center gap-0.5 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-4 text-white shadow-md transition hover:from-amber-700 hover:to-amber-900 disabled:opacity-60 dark:from-amber-700 dark:to-amber-900"
+      >
+        {loading ? (
+          <span className="py-1 text-base font-bold">Abrindo pagamento...</span>
+        ) : (
+          <>
+            <span className="text-3xl leading-tight font-black tracking-tight">{VALOR_LABEL}</span>
+            <span className="text-sm font-semibold text-amber-50">
+              Certificado Plus + arte de 5 fotos
+            </span>
+          </>
+        )}
       </button>
 
       {cupomAberto ? (

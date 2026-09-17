@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { nomeRota } from "@/lib/constants";
+import { nomeRota, avisoVisivelPublicamente } from "@/lib/constants";
 import AdminMapClient from "./AdminMapClient";
 import AdminDrilldownClient, {
   type PeregrinoLinha,
@@ -43,8 +43,15 @@ export default async function AdminDashboardPage() {
     .maybeSingle();
   const isAdmin = !!perfil?.is_admin;
 
+  // Rodada 23: o mapa geral só mostra PAP realmente ativos (aprovados e
+  // divulgados) — antes vinha sem nenhum filtro de aprovação, misturando
+  // PAP pendente/rejeitado com o resto. Os avisos de peregrinos (abaixo)
+  // também passaram a aparecer aqui, filtrados pela mesma regra de
+  // visibilidade pública já usada em /peregrinacao e /peregrinacao/trajeto
+  // desde a Rodada 21 — o admin vê exatamente o que qualquer peregrino veria
+  // no mapa, não o que a própria conta de admin tem permissão de enxergar.
   const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] = await Promise.all([
-    supabase.from("pontos_apoio").select("*"),
+    supabase.from("pontos_apoio").select("*").eq("status_aprovacao", "aprovado"),
     supabase.from("pontos_risco").select("*"),
     supabase.from("localizacoes_ativas").select("user_id, latitude, longitude"),
   ]);
@@ -65,7 +72,7 @@ export default async function AdminDashboardPage() {
   let riscosInformados: RiscoInformadoLinha[] = [];
   let gerentesCadastrados: GerenteLinha[] = [];
   let mensagensNovas = 0;
-  let comerciosCount = 0;
+  let avisos: RiscoInformado[] = [];
 
   if (isAdmin) {
     const [
@@ -76,7 +83,6 @@ export default async function AdminDashboardPage() {
       { data: certificados },
       { data: informados },
       { count: contagemMensagensNovas },
-      { count: contagemComercios },
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome_completo, cidade, uf"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
@@ -85,11 +91,10 @@ export default async function AdminDashboardPage() {
       supabase.from("certificados").select("peregrinacao_id"),
       supabase.from("riscos_informados").select("*").order("criado_em", { ascending: false }),
       supabase.from("mensagens_contato").select("id", { count: "exact", head: true }).eq("status", "novo"),
-      supabase.from("pontos_comerciais").select("id", { count: "exact", head: true }),
     ]);
 
     mensagensNovas = contagemMensagensNovas ?? 0;
-    comerciosCount = contagemComercios ?? 0;
+    avisos = ((informados ?? []) as RiscoInformado[]).filter(avisoVisivelPublicamente);
 
     interface PerfilBasico {
       id: string;
@@ -299,17 +304,17 @@ export default async function AdminDashboardPage() {
           riscosInformados={riscosInformados}
           gerentesCadastrados={gerentesCadastrados}
           mensagensNovas={mensagensNovas}
-          comerciosCount={comerciosCount}
         />
       )}
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">
-          Mapa geral — PAP, riscos e peregrinos em caminhada
+          Mapa geral — PAP ativos, riscos, avisos de peregrinos e peregrinos em caminhada
         </h2>
         <AdminMapClient
           pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
           pontosRisco={(pontosRisco ?? []) as PontoRisco[]}
+          avisos={avisos}
           peregrinos={localizacoes ?? []}
         />
       </section>

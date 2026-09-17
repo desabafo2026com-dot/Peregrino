@@ -209,40 +209,67 @@ export default function PeregrinacaoClient({
   const [dataInicioPrevista, setDataInicioPrevista] = useState("");
   const [meioTransporte, setMeioTransporte] = useState<MeioTransporte>("a_pe");
   const [meioTransporteOutro, setMeioTransporteOutro] = useState("");
-  const [rotaId, setRotaId] = useState(rotas[0]?.id ?? "");
-  const [cidadeInicio, setCidadeInicio] = useState("");
+  // Rodada 23: a pedido do usuário, o cadastro deixou de pedir uma "Rota"
+  // separada — a pessoa escolhe direto a cidade de origem (todas as cidades
+  // já cadastradas nas duas rotas, agrupadas, ou "Outra cidade/outro
+  // estado") e o app deduz sozinho a rota e a cidade de entrada real.
+  // `OUTRA_ORIGEM` é o valor especial do select que revela os dois campos
+  // extras (nome livre da cidade + por qual cidade da rota ela vai entrar).
+  const [origemSelecionada, setOrigemSelecionada] = useState("");
+  const [cidadeOrigemLivre, setCidadeOrigemLivre] = useState("");
+  const [entradaRotaCidade, setEntradaRotaCidade] = useState("");
   const [detectandoCidade, setDetectandoCidade] = useState(false);
   const [emGrupo, setEmGrupo] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
   const [tamanhoGrupo, setTamanhoGrupo] = useState("");
   const [jaFezTrajeto, setJaFezTrajeto] = useState(perfil.ja_fez_trajeto ?? false);
 
-  // Cidades da rota escolhida, na ordem em que a Dutra passa por elas —
-  // usadas para restringir os check-ins ao trecho que o peregrino de fato
-  // vai percorrer (de onde ele começa até Aparecida).
-  const cidadesDaRota = useMemo(
+  const OUTRA_ORIGEM = "__outra__";
+
+  // Todas as cidades de check-in de todas as rotas, agrupadas por rota e na
+  // ordem em que a Dutra passa por elas — a lista completa que alimenta
+  // tanto o select principal de "Cidade de origem" quanto, para quem
+  // escolhe "Outra cidade", o select de "por qual cidade da rota vai
+  // entrar". Cada cidade sabe sua própria rota (p.rota_id), então nenhum
+  // seletor de rota separado é mais necessário.
+  const gruposCidades = useMemo(
     () =>
-      todosPontosCheckin
-        .filter((p) => p.rota_id === rotaId)
-        .sort((a, b) => a.ordem - b.ordem),
-    [todosPontosCheckin, rotaId]
+      rotas
+        .map((r) => ({
+          rota: r,
+          cidades: todosPontosCheckin
+            .filter((p) => p.rota_id === r.id)
+            .sort((a, b) => a.ordem - b.ordem),
+        }))
+        .filter((g) => g.cidades.length > 0),
+    [rotas, todosPontosCheckin]
+  );
+  const todasAsCidades = useMemo(
+    () => gruposCidades.flatMap((g) => g.cidades),
+    [gruposCidades]
   );
 
+  // Cidade real que vai determinar a rota e o ponto de entrada dos
+  // check-ins: a própria origem escolhida (caso comum) ou, para quem
+  // escolheu "Outra cidade", a cidade da rota selecionada separadamente.
+  const cidadeEntradaEfetiva = origemSelecionada === OUTRA_ORIGEM ? entradaRotaCidade : origemSelecionada;
+  const pontoEntrada = todasAsCidades.find((p) => p.cidade === cidadeEntradaEfetiva);
+
   async function detectarCidadeInicio() {
-    if (!navigator.geolocation || cidadesDaRota.length === 0) return;
+    if (!navigator.geolocation || todasAsCidades.length === 0) return;
     setDetectandoCidade(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        let maisProxima = cidadesDaRota[0];
+        let maisProxima = todasAsCidades[0];
         let menorDist = Infinity;
-        for (const p of cidadesDaRota) {
+        for (const p of todasAsCidades) {
           const d = distanciaKm(pos.coords.latitude, pos.coords.longitude, p.latitude, p.longitude);
           if (d < menorDist) {
             menorDist = d;
             maisProxima = p;
           }
         }
-        setCidadeInicio(maisProxima.cidade);
+        setOrigemSelecionada(maisProxima.cidade);
         setDetectandoCidade(false);
       },
       () => setDetectandoCidade(false)
@@ -290,6 +317,24 @@ export default function PeregrinacaoClient({
       setErro("Especifique o meio de transporte.");
       return;
     }
+    if (!origemSelecionada) {
+      setErro("Selecione a cidade de origem.");
+      return;
+    }
+    if (origemSelecionada === OUTRA_ORIGEM && !cidadeOrigemLivre.trim()) {
+      setErro("Digite o nome da sua cidade de origem.");
+      return;
+    }
+    if (!pontoEntrada) {
+      setErro(
+        origemSelecionada === OUTRA_ORIGEM
+          ? "Selecione por qual cidade da rota você vai entrar."
+          : "Não foi possível identificar a rota dessa cidade. Tente selecionar de novo."
+      );
+      return;
+    }
+    const cidadeOrigemFinal =
+      origemSelecionada === OUTRA_ORIGEM ? cidadeOrigemLivre.trim() : origemSelecionada;
     setLoading(true);
     const {
       data: { user },
@@ -331,8 +376,9 @@ export default function PeregrinacaoClient({
         data_inicio: null,
         meio_transporte: meioTransporte,
         meio_transporte_outro_desc: meioTransporte === "outros" ? meioTransporteOutro : null,
-        rota_id: rotaId || null,
-        cidade_inicio: cidadeInicio || null,
+        rota_id: pontoEntrada.rota_id,
+        cidade_inicio: pontoEntrada.cidade,
+        cidade_origem: cidadeOrigemFinal,
         em_grupo: emGrupo,
         nome_grupo: emGrupo ? nomeGrupo || null : null,
         tamanho_grupo: emGrupo && tamanhoGrupo ? Number(tamanhoGrupo) : null,
@@ -580,6 +626,7 @@ export default function PeregrinacaoClient({
       data_fim: agora.toISOString(),
       total_checkins: checkinsCount,
       rota_nome: rotaAtual ? nomeRota(rotaAtual) : null,
+      origem: peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio,
       meio_transporte: meioAtual,
       meio_transporte_outro_desc: peregrinacao.meio_transporte_outro_desc,
       duracao_texto: duracaoTexto,
@@ -703,40 +750,32 @@ export default function PeregrinacaoClient({
               />
             </div>
           )}
-          {rotas.length > 0 && (
-            <div>
-              <label className="label">Rota</label>
-              <select
-                className="input"
-                value={rotaId}
-                onChange={(e) => {
-                  setRotaId(e.target.value);
-                  setCidadeInicio("");
-                }}
-              >
-                {rotas.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {nomeRota(r)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {cidadesDaRota.length > 0 && (
-            <div>
-              <label className="label">Cidade de início na Dutra</label>
+          {gruposCidades.length > 0 && (
+            <div className="sm:col-span-2">
+              <label className="label">Cidade de origem</label>
               <div className="flex gap-2">
                 <select
+                  required
                   className="input flex-1"
-                  value={cidadeInicio}
-                  onChange={(e) => setCidadeInicio(e.target.value)}
+                  value={origemSelecionada}
+                  onChange={(e) => {
+                    setOrigemSelecionada(e.target.value);
+                    setEntradaRotaCidade("");
+                  }}
                 >
-                  <option value="">Início da rota (padrão)</option>
-                  {cidadesDaRota.map((c) => (
-                    <option key={c.id} value={c.cidade}>
-                      {c.cidade}
-                    </option>
+                  <option value="" disabled>
+                    Selecione
+                  </option>
+                  {gruposCidades.map((g) => (
+                    <optgroup key={g.rota.id} label={nomeRota(g.rota)}>
+                      {g.cidades.map((c) => (
+                        <option key={c.id} value={c.cidade}>
+                          {c.cidade}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
+                  <option value={OUTRA_ORIGEM}>Outra cidade (outro estado)</option>
                 </select>
                 <button
                   type="button"
@@ -749,10 +788,49 @@ export default function PeregrinacaoClient({
                 </button>
               </div>
               <p className="mt-1 text-xs text-neutral-500">
-                Só é preciso preencher se você vai começar a caminhar de uma
-                cidade mais adiante na rota — os check-ins mostrados vão
-                começar a partir dela.
+                Os check-ins mostrados vão começar a partir dela — a rota é
+                uma coisa só, mas cada peregrino pode caminhar só uma parte
+                dela, entrando por uma cidade mais adiante.
               </p>
+              {origemSelecionada === OUTRA_ORIGEM && (
+                <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-200 p-3 dark:border-amber-900">
+                  <div>
+                    <label className="label">Qual cidade?</label>
+                    <input
+                      required
+                      className="input"
+                      value={cidadeOrigemLivre}
+                      onChange={(e) => setCidadeOrigemLivre(e.target.value)}
+                      placeholder="Ex: Belo Horizonte - MG"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Por qual cidade da rota você vai entrar</label>
+                    <select
+                      required
+                      className="input"
+                      value={entradaRotaCidade}
+                      onChange={(e) => setEntradaRotaCidade(e.target.value)}
+                    >
+                      <option value="" disabled>
+                        Selecione
+                      </option>
+                      {gruposCidades.map((g) => (
+                        <optgroup key={g.rota.id} label={nomeRota(g.rota)}>
+                          {g.cidades.map((c) => (
+                            <option key={c.id} value={c.cidade}>
+                              {c.cidade}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Os check-ins vão começar a partir desta cidade.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="sm:col-span-2">
@@ -865,7 +943,7 @@ export default function PeregrinacaoClient({
           {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
           {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
           {rotaPlanejada ? ` — ${nomeRota(rotaPlanejada)}` : ""}
-          {peregrinacao.cidade_inicio ? ` — início em ${peregrinacao.cidade_inicio}` : ""}
+          {(peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio) ? ` — origem: ${peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio}` : ""}
           {peregrinacao.em_grupo
             ? ` — em grupo${peregrinacao.tamanho_grupo ? ` de ${peregrinacao.tamanho_grupo}` : ""}${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
             : ""}
@@ -903,7 +981,7 @@ export default function PeregrinacaoClient({
                 {peregrinacao.meio_transporte === "bicicleta" ? <Bike size={14} className="inline" /> : <Footprints size={14} className="inline" />}{" "}
                 {labelMeioTransporte(peregrinacao.meio_transporte, peregrinacao.meio_transporte_outro_desc)}
                 {rotaAtiva ? ` — ${nomeRota(rotaAtiva)}` : ""}
-                {peregrinacao.cidade_inicio ? ` — início em ${peregrinacao.cidade_inicio}` : ""}
+                {(peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio) ? ` — origem: ${peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio}` : ""}
                 {peregrinacao.em_grupo
                   ? ` — em grupo${peregrinacao.tamanho_grupo ? ` de ${peregrinacao.tamanho_grupo}` : ""}${peregrinacao.nome_grupo ? ` (${peregrinacao.nome_grupo})` : ""}`
                   : ""}

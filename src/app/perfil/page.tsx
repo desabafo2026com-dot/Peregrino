@@ -17,31 +17,25 @@ export default async function PerfilPage() {
     redirect("/login?redirect=/perfil");
   }
 
-  const { data: gerente } = await supabase
-    .from("gerentes_pap")
-    .select("id")
-    .eq("id", user.id)
-    .maybeSingle();
-
   const { data: perfil } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
 
-  // Uma conta de gerente de PAP que NUNCA teve perfil próprio de peregrino
-  // (sem linha em `profiles`) tem sua própria área e nunca acessa o perfil
-  // de peregrino — mandada direto para lá. Mas uma conta que acumula os
-  // dois papéis (tem linha em `profiles` E em `gerentes_pap`) precisa
-  // conseguir editar seu próprio perfil normalmente: antes esse
-  // redirecionamento era incondicional e mandava essa conta de volta para
-  // "/gerente-pap" sempre que ela clicava em "Editar perfil", fazendo
-  // parecer que o botão não fazia nada (bug relatado na Rodada 21) — mesma
-  // classe de bug já corrigida em `/peregrinacao` na Rodada 16.
-  if (!perfil && (gerente || user.user_metadata?.tipo_conta === "gerente_pap")) {
-    redirect("/gerente-pap");
-  }
-
+  // Até a Rodada 22, uma conta de gerente de PAP sem perfil próprio de
+  // peregrino era mandada direto de volta para "/gerente-pap" ao tentar
+  // abrir o perfil — o que fazia sentido para "Editar perfil" de uma conta
+  // só-gerente (não há nada de peregrino para editar), mas também bloqueava
+  // por completo o único jeito de essa mesma conta completar um cadastro de
+  // peregrino (ver ProfileForm logo abaixo, que já suporta perfilExistente
+  // nulo — "Passo 2 de 2"). Rodada 23: o redirecionamento foi removido daqui
+  // — quem chega em /perfil sem perfil de peregrino (gerente ou não) agora
+  // vê a tela de completar cadastro, em vez de ser mandado de volta sem
+  // conseguir nada. "Editar perfil" continua levando quem é só-gerente para
+  // /gerente-pap (ver Navbar.tsx) — este redirecionamento nunca acontecia
+  // por causa dele, e sim para quem chegava aqui por outro caminho (ex.: o
+  // novo link em /gerente-pap para "fazer também minha peregrinação").
   const { data: mensagens } = await supabase
     .from("mensagens_contato")
     .select("*")

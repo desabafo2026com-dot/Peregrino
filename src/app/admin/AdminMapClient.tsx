@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { PontoApoio, PontoRisco } from "@/types/database";
+import type { PontoApoio, PontoRisco, RiscoInformado } from "@/types/database";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -15,14 +15,16 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 interface Props {
   pontosApoio: PontoApoio[];
   pontosRisco: PontoRisco[];
+  avisos: RiscoInformado[];
   peregrinos: { user_id: string; latitude: number; longitude: number }[];
 }
 
-export default function AdminMapClient({ pontosApoio, pontosRisco, peregrinos }: Props) {
+export default function AdminMapClient({ pontosApoio, pontosRisco, avisos, peregrinos }: Props) {
   return (
     <MapView
       pontosApoio={pontosApoio}
       pontosRisco={pontosRisco}
+      avisos={avisos}
       peregrinos={peregrinos}
       calorPeregrinos
       height="55vh"

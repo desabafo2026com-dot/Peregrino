@@ -234,6 +234,13 @@ export interface Peregrinacao {
   meio_transporte_outro_desc: string | null;
   rota_id: string | null;
   cidade_inicio: string | null;
+  // Rodada 23: a cidade que a pessoa de fato declara como sua origem — na
+  // maioria dos casos é a mesma de `cidade_inicio` (uma cidade real da
+  // rota), mas para quem vem de fora das duas rotas (cadastro de caravana,
+  // "outro estado") é um texto livre, diferente de `cidade_inicio` (que
+  // continua sendo sempre uma cidade real, usada para filtrar os
+  // check-ins). Nula em peregrinações criadas antes desta rodada.
+  cidade_origem: string | null;
   em_grupo: boolean;
   nome_grupo: string | null;
   tamanho_grupo: number | null;
@@ -271,6 +278,14 @@ export interface Certificado {
   data_fim: string | null;
   total_checkins: number;
   rota_nome: string | null;
+  // Rodada 23: a origem declarada pelo peregrino (ver cidade_origem em
+  // Peregrinacao), copiada para o certificado no momento da emissão e
+  // congelada dali em diante — usada nos textos "de [origem] até
+  // Aparecida-SP" do certificado e da Romaria Plus, no lugar da extração
+  // por regex de `rota_nome` (quebrada desde a Rodada 10, quando o nome da
+  // rota deixou de incluir "(origem → destino)"). Nula em certificados
+  // emitidos antes desta rodada.
+  origem: string | null;
   meio_transporte: MeioTransporte | null;
   meio_transporte_outro_desc: string | null;
   duracao_texto: string | null;
@@ -285,10 +300,19 @@ export type StatusCompraRomariaPlus = "pendente" | "pago" | "cancelado" | "estor
 // próprio peregrino (Rodada 17), para evitar cobrir rostos/pessoas na foto.
 // x/y são o centro do painel, em % da largura/altura da arte; escala é a
 // porcentagem do tamanho original (100 = tamanho padrão do modelo).
+// Rodada 23: `fotoPos`/`fotoEscala` guardam, junto no mesmo JSON (a coluna é
+// jsonb, sem precisar de migration), o reposicionamento/zoom da FOTO em si
+// dentro do recorte de cada modelo — pedido do usuário porque o recorte
+// automático (object-fit: cover) podia cortar uma parte da foto que a
+// pessoa queria mostrar (rosto, alguém do grupo, etc.), principalmente nos
+// modelos com moldura/área fixa. Independente do ajuste de texto acima, e
+// disponível nos 4 modelos (não só nos que têm texto sobre a foto).
 export interface AjusteOverlayRomariaPlus {
   x: number;
   y: number;
   escala: number;
+  fotoPos?: { x: number; y: number };
+  fotoEscala?: number;
 }
 
 // Compra do produto pago "Romaria Plus" (arte personalizada para

@@ -64,6 +64,20 @@ export default async function GerentePapPage() {
     .order("criado_em", { ascending: false });
   const pontos = (data ?? []) as PontoApoio[];
 
+  // Rodada 23: o caminho inverso (peregrino que também vira gerente, em
+  // /gerente-pap/cadastro) já existia desde a Rodada 2 — mas não havia
+  // nenhum link, em lugar nenhum do app, para uma conta que começou como
+  // gerente ganhar acesso a "Minha peregrinação" com a mesma conta. A pessoa
+  // teria que criar uma conta nova do zero, o que nem funciona de verdade
+  // (o e-mail já existe). Este link resolve isso: leva a /peregrinacao, que
+  // agora aceita uma conta só-gerente e pede para completar o perfil de
+  // peregrino ali mesmo, sem precisar de outro cadastro.
+  const { data: perfil } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href="/" />
@@ -73,6 +87,16 @@ export default async function GerentePapPage() {
         pendente até um administrador aprovar a divulgação no mapa.
       </p>
       <GerentePapClient gerente={gerente as GerentePap} pontosIniciais={pontos} />
+      <div className="mt-6 border-t border-neutral-200 pt-4 text-center dark:border-neutral-800">
+        <p className="mb-2 text-sm text-neutral-500">
+          {perfil
+            ? "Você também tem cadastro de peregrino nesta conta."
+            : "Vai caminhar também? Você pode usar esta mesma conta para fazer sua peregrinação."}
+        </p>
+        <Link href="/peregrinacao" className="btn-secondary inline-block text-sm">
+          {perfil ? "Ir para Minha peregrinação" : "Quero também fazer minha peregrinação"}
+        </Link>
+      </div>
     </div>
   );
 }

@@ -14,31 +14,28 @@ export default async function PeregrinacaoPage() {
 
   if (!user) redirect("/login?redirect=/peregrinacao");
 
-  const { data: gerente } = await supabase
-    .from("gerentes_pap")
-    .select("id")
-    .eq("id", user.id)
-    .maybeSingle();
-
   const { data: perfil } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
 
-  // Uma conta de gerente de PAP que nunca teve perfil próprio de peregrino
-  // (sem linha em `profiles`) tem sua própria área e nunca acessa o fluxo
-  // de peregrino — mandada direto para lá. Mas uma conta que acumula os
-  // dois papéis (tem linha em `profiles` E em `gerentes_pap`) precisa
-  // conseguir chegar aqui de verdade: é o destino do "Minha peregrinação"
-  // no menu de troca de perfil da barra superior (Navbar/AuthRoleProvider).
-  // Antes esse redirecionamento era incondicional e jogava essa conta de
-  // volta para "/gerente-pap" sempre, fazendo a troca de perfil nunca
-  // funcionar de fato (Rodada 16).
-  if (!perfil && (gerente || user.user_metadata?.tipo_conta === "gerente_pap")) {
-    redirect("/gerente-pap");
-  }
-
+  // Até a Rodada 22, uma conta de gerente de PAP sem perfil próprio de
+  // peregrino era mandada direto de volta para "/gerente-pap" ao tentar
+  // abrir esta página — pensado originalmente (Rodada 9) para uma conta
+  // recém-criada como gerente não cair sem querer no fluxo de peregrino.
+  // Mas isso também fechava a única porta que uma conta só-gerente teria
+  // para se tornar peregrino com a mesma conta: não existe (nem existia)
+  // nenhum "/peregrinacao/cadastro" equivalente ao "/gerente-pap/cadastro"
+  // que já deixa um peregrino virar gerente. Rodada 23, a pedido do
+  // usuário ("ao contrário não acontece, a pessoa tem que logar de novo"):
+  // o redirecionamento foi removido — uma conta só-gerente que chega aqui
+  // (pelo novo link em /gerente-pap, "Quero também fazer minha
+  // peregrinação") cai direto na tela de completar perfil abaixo, iniciando
+  // sua peregrinação com a mesma conta, sem precisar de nenhum cadastro
+  // novo. Continua chegando aqui, como sempre, só por navegação explícita —
+  // o link/atalho de "Meu PAP"/"Área do Gerente de PAP" nunca aponta para
+  // cá sozinho.
   if (!perfil) {
     return (
       <div className="mx-auto max-w-md text-center">
