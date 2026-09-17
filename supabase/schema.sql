@@ -2774,3 +2774,16 @@ alter table public.certificados add column if not exists distancia_km numeric;
 comment on column public.certificados.distancia_km is 'Distância aproximada percorrida (km), calculada como km_aproximado do último ponto de check-in (Aparecida) menos km_aproximado do primeiro ponto (origem escolhida). Nulo em certificados emitidos antes da Rodada 22 ou quando os pontos da rota não têm km_aproximado cadastrado.';
 
 -- FIM DA MIGRATION 27
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 28 — Cidade de origem declarada, separada da cidade de entrada na rota.
+-- ---------------------------------------------------------------------
+alter table public.peregrinacoes add column if not exists cidade_origem text;
+
+comment on column public.peregrinacoes.cidade_origem is 'Cidade de origem declarada pelo peregrino/caravana. Igual a cidade_inicio no caso comum (origem já é uma cidade cadastrada da rota); texto livre, diferente de cidade_inicio, quando a pessoa escolhe "Outra cidade (outro estado)" — nesse caso cidade_inicio guarda separadamente por qual cidade da rota ela vai entrar, para os check-ins.';
+
+alter table public.certificados add column if not exists origem text;
+
+comment on column public.certificados.origem is 'Cópia congelada de peregrinacoes.cidade_origem no momento da emissão do certificado — usada nos textos "de [origem] até Aparecida-SP" do certificado e da Romaria Plus, no lugar da extração por regex de rota_nome (quebrada desde a Rodada 10). Nulo em certificados emitidos antes desta rodada.';
+
+-- FIM DA MIGRATION 28
