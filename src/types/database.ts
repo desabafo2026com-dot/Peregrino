@@ -313,6 +313,13 @@ export interface AjusteOverlayRomariaPlus {
   escala: number;
   fotoPos?: { x: number; y: number };
   fotoEscala?: number;
+  // Frase de título escolhida pelo peregrino (Rodada 28, a pedido do
+  // usuário — antes era sempre "Romaria para Aparecida", fixo) — igual ao
+  // ajuste de foto, independente do modelo escolhido. "peregrinacao" é o
+  // padrão e substitui o texto antigo ("Peregrinação para Aparecida" no
+  // lugar de "Romaria para Aparecida", já que "Romaria" agora é o nome da
+  // funcionalidade de romarias em grupo).
+  frase?: "peregrinacao" | "venci" | "gracas";
 }
 
 // Compra do produto pago "Romaria Plus" (arte personalizada para

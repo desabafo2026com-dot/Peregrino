@@ -21,6 +21,10 @@ const DICAS_GERAIS = [
   "Leve um documento de identificação e o telefone de um contato de emergência sempre visível.",
   "Avise alguém de confiança sobre seu trajeto e horários previstos.",
   "Em caso de mal-estar, procure o PAP mais próximo ou acione a emergência.",
+  // Três dicas adicionadas na Rodada 28, a pedido do usuário.
+  "Não use fones de ouvido, fique atento aos sons!",
+  "Sempre que parar, se afaste ao máximo da pista.",
+  "Sempre que for transpor uma faixa olhe bem para os dois lados e espere poder fazer em segurança.",
 ];
 
 // Só existem 3 níveis (Moderado/Alto/Muito alto) — ver NIVEL_RISCO_LABELS.

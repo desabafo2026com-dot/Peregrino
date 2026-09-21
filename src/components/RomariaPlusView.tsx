@@ -96,6 +96,19 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean }[] = [
   { id: "selo", nome: "Selo de conquista", temAjuste: false },
 ];
 
+// Frase do título (Rodada 28, a pedido do usuário) — antes era sempre
+// "Romaria para Aparecida", fixo em todos os modelos. Agora o peregrino
+// escolhe entre 3 frases, independente do modelo (igual ao ajuste de
+// foto/zoom) — "peregrinacao" é o padrão, no lugar do texto antigo (trocado
+// de "Romaria" para "Peregrinação", já que "Romaria" virou o nome da
+// funcionalidade de romarias em grupo).
+type FraseTitulo = "peregrinacao" | "venci" | "gracas";
+const FRASES_TITULO: { id: FraseTitulo; nome: string; texto: string }[] = [
+  { id: "peregrinacao", nome: "Peregrinação", texto: "Peregrinação para Aparecida" },
+  { id: "venci", nome: "Eu fui e venci!", texto: "Eu fui e venci!" },
+  { id: "gracas", nome: "Graças alcançadas!", texto: "Graças alcançadas!" },
+];
+
 const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   classico: { x: 50, y: 80, escala: 100 },
   destaque: null,
@@ -267,6 +280,122 @@ function FotoAjustavel({
   );
 }
 
+// Foto com pan (arraste) + zoom que funciona nas duas direções, sempre —
+// Rodada 28, corrigindo um bug reportado pelo usuário em vários modelos
+// ("a foto só mexe para cima e para baixo, mesmo dando zoom não consigo ir
+// para o lado" no "Foto em destaque"; "não tem como posicionar, nem
+// dimensionar" no "Itinerário"; "sem ter como ajustar" no "Selo de
+// conquista"). A causa raiz: o código antigo usava `object-fit: cover` +
+// `object-position` (que recorta a foto para caber na caixa ANTES de
+// qualquer zoom) e só depois aplicava um `transform: scale()` puramente
+// visual por cima — como o navegador decide o recorte de cover/posição
+// usando só a caixa já no tamanho final (sem "ver" o scale seguinte), o eixo
+// em que a foto já "bate certinho" na caixa (largura ou altura, dependendo
+// da proporção da própria foto) fica sem nenhuma folga para arrastar, e dar
+// zoom depois não muda isso. Aqui a foto é medida (dimensão real) e
+// posicionada em pixels calculados à mão: o tamanho renderizado já embute o
+// zoom antes do corte ser decidido, então tanto x quanto y sempre ganham
+// folga de arraste assim que há zoom, e a folga natural (quando a foto não é
+// exatamente da mesma proporção da caixa) continua funcionando mesmo sem
+// zoom — igual ao comportamento que já funcionava bem no "Clássico".
+function FotoComPanZoom({
+  src,
+  fotoPos,
+  fotoEscala,
+  editando,
+  onArrastar,
+  onSoltarArraste,
+  className,
+  imgClassName,
+}: {
+  src: string;
+  fotoPos: { x: number; y: number };
+  fotoEscala: number;
+  editando: boolean;
+  onArrastar: (delta: { dx: number; dy: number }) => void;
+  onSoltarArraste: () => void;
+  className?: string;
+  imgClassName?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [tamanhoContainer, setTamanhoContainer] = useState<{ w: number; h: number } | null>(null);
+  const [tamanhoNatural, setTamanhoNatural] = useState<{ w: number; h: number } | null>(null);
+
+  // Zera a medida anterior assim que a foto muda — feito durante a
+  // renderização (padrão do React para "resetar estado quando uma prop
+  // muda"), não dentro do efeito abaixo, pra não disparar setState síncrono
+  // no corpo do efeito (regra react-hooks/set-state-in-effect).
+  const [srcMedido, setSrcMedido] = useState(src);
+  if (srcMedido !== src) {
+    setSrcMedido(src);
+    setTamanhoNatural(null);
+  }
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const medir = () => setTamanhoContainer({ w: el.clientWidth, h: el.clientHeight });
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!src) return;
+    const img = new window.Image();
+    img.onload = () => setTamanhoNatural({ w: img.naturalWidth, h: img.naturalHeight });
+    img.src = src;
+  }, [src]);
+
+  // "cover": a escala mínima que garante que a foto cobre a caixa inteira,
+  // multiplicada pelo zoom escolhido (100% = só cobre, sem folga extra).
+  const escalaBase =
+    tamanhoNatural && tamanhoContainer && tamanhoContainer.w > 0 && tamanhoContainer.h > 0
+      ? Math.max(tamanhoContainer.w / tamanhoNatural.w, tamanhoContainer.h / tamanhoNatural.h)
+      : null;
+  const larguraRenderizada = escalaBase && tamanhoNatural ? tamanhoNatural.w * escalaBase * (fotoEscala / 100) : null;
+  const alturaRenderizada = escalaBase && tamanhoNatural ? tamanhoNatural.h * escalaBase * (fotoEscala / 100) : null;
+  const folgaX = larguraRenderizada && tamanhoContainer ? Math.max(0, larguraRenderizada - tamanhoContainer.w) : 0;
+  const folgaY = alturaRenderizada && tamanhoContainer ? Math.max(0, alturaRenderizada - tamanhoContainer.h) : 0;
+  const esquerda = larguraRenderizada ? -((fotoPos.x / 100) * folgaX) : 0;
+  const topo = alturaRenderizada ? -((fotoPos.y / 100) * folgaY) : 0;
+
+  return (
+    <div ref={containerRef} className={className ?? "absolute inset-0 overflow-hidden"}>
+      {larguraRenderizada != null && alturaRenderizada != null ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          crossOrigin="anonymous"
+          className={imgClassName}
+          style={{
+            position: "absolute",
+            width: `${larguraRenderizada}px`,
+            height: `${alturaRenderizada}px`,
+            maxWidth: "none",
+            left: `${esquerda}px`,
+            top: `${topo}px`,
+          }}
+        />
+      ) : (
+        // Antes de medir a foto/caixa (primeiro instante de carregamento),
+        // usa o "cover" nativo do navegador como aproximação — evita um
+        // flash de foto ausente ou mal posicionada.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          crossOrigin="anonymous"
+          className={`absolute inset-0 h-full w-full object-cover ${imgClassName ?? ""}`}
+        />
+      )}
+      <FotoAjustavel editando={editando} onArrastar={onArrastar} onSoltarArraste={onSoltarArraste} />
+    </div>
+  );
+}
+
 interface Props {
   certificado: Certificado;
   // Presentes só quando a compra já está paga (ver
@@ -365,6 +494,9 @@ export default function RomariaPlusView({
   // pelos modelos "itinerario" (Rodada 27), que mostram de onde a pessoa
   // saiu até Aparecida-SP.
   const origem = c.origem;
+  // Frase do título escolhida (ver FRASES_TITULO acima) — guardada dentro do
+  // próprio ajuste, igual a fotoPos/fotoEscala, independente do modelo.
+  const tituloTexto = FRASES_TITULO.find((f) => f.id === (ajuste.frase ?? "peregrinacao"))!.texto;
 
   // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo e o
   // ajuste de posição/tamanho escolhidos, via a função segura
@@ -431,7 +563,7 @@ export default function RomariaPlusView({
     // daquele modelo — o reposicionamento/zoom da foto (fotoPos/fotoEscala)
     // é independente do modelo e continua do jeito que a pessoa deixou.
     const novoAjuste: AjusteOverlayRomariaPlus = padraoTexto
-      ? { ...padraoTexto, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala }
+      ? { ...padraoTexto, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala, frase: ajuste.frase }
       : ajuste;
     setAjuste(novoAjuste);
     if (fotoUrl) void persistirFoto(m, novoAjuste);
@@ -439,7 +571,16 @@ export default function RomariaPlusView({
 
   function centralizarAjuste() {
     const padrao = AJUSTE_PADRAO[modelo] ?? { x: 50, y: 80, escala: 100 };
-    const novoAjuste = { ...padrao, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala };
+    const novoAjuste = { ...padrao, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala, frase: ajuste.frase };
+    setAjuste(novoAjuste);
+    void persistirFoto(modelo, novoAjuste);
+  }
+
+  // Frase do título (Rodada 28) — independente do modelo, igual ao ajuste
+  // de foto/zoom, por isso persiste do mesmo jeito (sem resetar ao trocar
+  // de modelo — ver escolherModelo/centralizarAjuste acima).
+  function escolherFrase(f: FraseTitulo) {
+    const novoAjuste = { ...ajuste, frase: f };
     setAjuste(novoAjuste);
     void persistirFoto(modelo, novoAjuste);
   }
@@ -593,7 +734,7 @@ export default function RomariaPlusView({
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: "Romaria para Aparecida",
+          title: tituloTexto,
           text: "Minha peregrinação até Aparecida-SP!",
         });
       } else {
@@ -688,6 +829,25 @@ export default function RomariaPlusView({
             </div>
           )}
 
+          {!finalizado && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {FRASES_TITULO.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => escolherFrase(f.id)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                    (ajuste.frase ?? "peregrinacao") === f.id
+                      ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
+                      : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                  }`}
+                >
+                  {f.nome}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div
             ref={ref}
             className="relative mx-auto w-full max-w-sm overflow-hidden rounded-2xl shadow-lg"
@@ -695,18 +855,14 @@ export default function RomariaPlusView({
           >
             {modelo === "classico" && (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <FotoComPanZoom
                   src={fotoUrl}
-                  alt=""
-                  crossOrigin="anonymous"
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{
-                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
-                    transform: `scale(${fotoEscala / 100})`,
-                  }}
+                  fotoPos={fotoPos}
+                  fotoEscala={fotoEscala}
+                  editando={editandoFoto}
+                  onArrastar={moverFoto}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                 />
-                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/40" />
                 <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 pt-[5%] text-white">
                   <Image
@@ -730,9 +886,9 @@ export default function RomariaPlusView({
                   className="flex w-[86%] flex-col items-center gap-[3%] px-[2%] py-[3%] text-center text-white"
                 >
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "7.2cqw", lineHeight: 1.05, textAlign: "center" }}>
-                    Romaria para Aparecida
+                    {tituloTexto}
                   </p>
-                  <p className="font-bold text-stripe-400" style={{ fontSize: "9cqw" }}>
+                  <p className="font-bold text-stripe-400" style={{ fontSize: "9cqw", textAlign: "center" }}>
                     {ano}
                   </p>
                   <div
@@ -764,24 +920,20 @@ export default function RomariaPlusView({
               <div className="absolute inset-0 flex flex-col items-center bg-gradient-to-br from-amber-800 via-amber-900 to-neutral-900 px-[7%] pt-[8%] pb-[6%] text-center text-white">
                 <div className="absolute inset-x-0 top-0 h-[2.2%] bg-stripe-400" />
                 <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.4cqw", lineHeight: 1.15, textAlign: "center" }}>
-                  Romaria para Aparecida
+                  {tituloTexto}
                 </p>
-                <p className="mb-[4%] font-bold text-stripe-400" style={{ fontSize: "8cqw" }}>
+                <p className="mb-[4%] font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
                   {ano}
                 </p>
                 <div className="relative w-[78%] overflow-hidden rounded-2xl ring-4 ring-white/30" style={{ aspectRatio: "1 / 1" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <FotoComPanZoom
                     src={fotoUrl}
-                    alt=""
-                    crossOrigin="anonymous"
-                    className="h-full w-full object-cover"
-                    style={{
-                      objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
-                      transform: `scale(${fotoEscala / 100})`,
-                    }}
+                    fotoPos={fotoPos}
+                    fotoEscala={fotoEscala}
+                    editando={editandoFoto}
+                    onArrastar={moverFoto}
+                    onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   />
-                  <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                 </div>
                 <div
                   className="mt-[6%] flex w-full flex-col gap-[3%] rounded-xl bg-white/10 py-[4%] backdrop-blur-sm"
@@ -811,18 +963,14 @@ export default function RomariaPlusView({
 
             {modelo === "painel" && (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <FotoComPanZoom
                   src={fotoUrl}
-                  alt=""
-                  crossOrigin="anonymous"
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{
-                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
-                    transform: `scale(${fotoEscala / 100})`,
-                  }}
+                  fotoPos={fotoPos}
+                  fotoEscala={fotoEscala}
+                  editando={editandoFoto}
+                  onArrastar={moverFoto}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                 />
-                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                 {/* Vinheta bem sutil, só para garantir contraste nas bordas —
                     diferente do "Clássico", a foto fica quase inteira à
                     vista, sem escurecer o centro da imagem. */}
@@ -845,9 +993,9 @@ export default function RomariaPlusView({
                     className="mt-[1%]"
                     style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}
                   >
-                    Romaria para Aparecida
+                    {tituloTexto}
                   </p>
-                  <p className="mt-[2%] font-bold text-stripe-400" style={{ fontSize: "8.4cqw" }}>
+                  <p className="mt-[2%] font-bold text-stripe-400" style={{ fontSize: "8.4cqw", textAlign: "center" }}>
                     {ano}
                   </p>
                   <div className="mt-[3%] flex items-center justify-center gap-[6%]" style={{ fontSize: "3.2cqw" }}>
@@ -892,24 +1040,20 @@ export default function RomariaPlusView({
                       </span>
                     </div>
                     <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg ring-2 ring-amber-700/40">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <FotoComPanZoom
                         src={fotoUrl}
-                        alt=""
-                        crossOrigin="anonymous"
-                        className="h-full w-full object-cover"
-                        style={{
-                          objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
-                          transform: `scale(${fotoEscala / 100})`,
-                        }}
+                        fotoPos={fotoPos}
+                        fotoEscala={fotoEscala}
+                        editando={editandoFoto}
+                        onArrastar={moverFoto}
+                        onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                       />
-                      <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
                     </div>
                     <div className="mt-[4%] flex flex-col items-center gap-[2%] text-center text-amber-900">
                       <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "5.4cqw", lineHeight: 1.1, textAlign: "center" }}>
-                        Romaria para Aparecida
+                        {tituloTexto}
                       </p>
-                      <p className="font-bold text-amber-700" style={{ fontSize: "6.2cqw" }}>
+                      <p className="font-bold text-amber-700" style={{ fontSize: "6.2cqw", textAlign: "center" }}>
                         {ano}
                       </p>
                       <div className="flex items-center justify-center gap-[5%] whitespace-nowrap text-amber-800" style={{ fontSize: "2.4cqw" }}>
@@ -957,19 +1101,15 @@ export default function RomariaPlusView({
                 de um mapa de verdade. */}
             {modelo === "itinerario" && (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <FotoComPanZoom
                   src={fotoUrl}
-                  alt=""
-                  crossOrigin="anonymous"
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{
-                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
-                    transform: `scale(${fotoEscala / 100})`,
-                  }}
+                  fotoPos={fotoPos}
+                  fotoEscala={fotoEscala}
+                  editando={editandoFoto}
+                  onArrastar={moverFoto}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                 />
-                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/5 to-black/50" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/5 to-black/50 pointer-events-none" />
                 <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 pt-[5%] text-white">
                   <Image
                     src="/icons/logo-emblema.png"
@@ -985,20 +1125,23 @@ export default function RomariaPlusView({
                 </div>
                 <div className="absolute inset-x-0 top-[13%] flex flex-col items-center text-center text-white">
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
-                    Romaria para Aparecida
+                    {tituloTexto}
                   </p>
-                  <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw" }}>
+                  <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
                     {ano}
                   </p>
                 </div>
-                {/* O trajeto em si: uma linha pontilhada única (sem curvas
-                    reais de mapa) ligando um marcador de origem a um de
-                    chegada, desenhada com baixa opacidade — dá para ver a
-                    foto por trás dela o tempo todo. */}
+                {/* O trajeto em si: uma curva pontilhada (Rodada 28 — o
+                    usuário achou a linha reta anterior "muito ruim") ligando
+                    um marcador de origem a um de chegada, desenhada com
+                    baixa opacidade — dá para ver a foto por trás dela o
+                    tempo todo. Ainda esquemática (sem dados reais de mapa),
+                    só com uma curva suave em vez de uma diagonal reta. */}
                 <div className="absolute inset-x-[8%] bottom-[30%] text-white/85">
                   <svg viewBox="0 0 100 26" className="w-full" style={{ opacity: 0.8 }}>
-                    <line
-                      x1="8" y1="20" x2="92" y2="6"
+                    <path
+                      d="M8,20 C32,23 40,4 60,7 C74,9 80,3 92,6"
+                      fill="none"
                       stroke="white"
                       strokeOpacity="0.65"
                       strokeWidth="1.4"
@@ -1048,20 +1191,24 @@ export default function RomariaPlusView({
                 conquista/fé pedida, um troféu mais do que um dado técnico. */}
             {modelo === "selo" && (
               <div className="absolute inset-0 flex flex-col items-center bg-neutral-950">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <FotoComPanZoom
                   src={fotoUrl}
-                  alt=""
-                  crossOrigin="anonymous"
-                  className="absolute inset-0 h-full w-full object-cover opacity-45"
-                  style={{
-                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
-                    transform: `scale(${fotoEscala / 100})`,
-                  }}
+                  fotoPos={fotoPos}
+                  fotoEscala={fotoEscala}
+                  editando={editandoFoto}
+                  onArrastar={moverFoto}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  imgClassName="opacity-45"
                 />
-                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-black/80" />
-                <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-[4%] px-[8%] text-center text-white">
+                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-black/80 pointer-events-none" />
+                {/* pointer-events-none (Rodada 28): este bloco não tem nada
+                    clicável, mas cobre o card inteiro (h-full w-full) com o
+                    mesmo z-10 do arraste de foto — como o z-index empata,
+                    quem vem depois no HTML "ganha" e bloqueava o arraste da
+                    foto por baixo, mesmo nas áreas visualmente vazias entre o
+                    selo e o texto. Era exatamente o bug relatado pelo
+                    usuário ("fica sobre a foto, sem ter como ajustar"). */}
+                <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-[4%] px-[8%] text-center text-white pointer-events-none">
                   <p style={{ fontFamily: FONTE_TITULO, fontStyle: "italic", fontWeight: 700, fontSize: "3.4cqw" }}>
                     O Peregrino apresenta
                   </p>
@@ -1079,7 +1226,7 @@ export default function RomariaPlusView({
                     </div>
                   </div>
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.4cqw", lineHeight: 1.1, textAlign: "center" }}>
-                    Romaria para Aparecida
+                    {tituloTexto}
                   </p>
                   <div
                     className="flex items-center justify-center gap-[6%] rounded-xl bg-white/10 px-[4%] py-[3%] backdrop-blur-sm"

@@ -56,11 +56,28 @@ export default async function AdminDashboardPage() {
   // visibilidade pública já usada em /peregrinacao e /peregrinacao/trajeto
   // desde a Rodada 21 — o admin vê exatamente o que qualquer peregrino veria
   // no mapa, não o que a própria conta de admin tem permissão de enxergar.
-  const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] = await Promise.all([
+  const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoesData }] = await Promise.all([
     supabase.from("pontos_apoio").select("*"),
     supabase.from("pontos_risco").select("*"),
-    supabase.from("localizacoes_ativas").select("user_id, latitude, longitude"),
+    // Rodada 28, corrigindo bug relatado pelo usuário ("já encerrei os que
+    // estavam em teste" mas o mapa continuava mostrando "2 peregrinos em
+    // caminhada"): antes esta consulta trazia TODA linha de
+    // localizacoes_ativas, mesmo peregrinações já concluídas — a limpeza
+    // dependia só da própria tela de "encerrar peregrinação" apagar a linha
+    // na hora, o que não acontece se a pessoa fechar a aba/app sem clicar em
+    // encerrar, deixando um "fantasma" no mapa para sempre. Agora o próprio
+    // filtro exige que a peregrinação vinculada ainda esteja em andamento —
+    // o mapa se corrige sozinho independente de qualquer limpeza manual.
+    supabase
+      .from("localizacoes_ativas")
+      .select("user_id, latitude, longitude, peregrinacoes!inner(status)")
+      .eq("peregrinacoes.status", "em_andamento"),
   ]);
+  const localizacoes = (localizacoesData ?? []).map((l) => ({
+    user_id: l.user_id,
+    latitude: l.latitude,
+    longitude: l.longitude,
+  }));
 
   let peregrinosCadastrados: PeregrinoLinha[] = [];
   let peregrinosAtivos: PeregrinoLinha[] = [];
@@ -70,6 +87,7 @@ export default async function AdminDashboardPage() {
   let peregrinacoesTerminadasHoje: PeregrinacaoLinha[] = [];
   let peregrinacoesConcluidasHoje: PeregrinacaoLinha[] = [];
   let peregrinacoesConcluidasTotal: PeregrinacaoLinha[] = [];
+  let peregrinacoesConcluidasSemSucesso: PeregrinacaoLinha[] = [];
   let papCadastrados: PapLinha[] = [];
   let papAtivos: PapLinha[] = [];
   let papPendentes: PapLinha[] = [];
@@ -279,12 +297,28 @@ export default async function AdminDashboardPage() {
     const todasLinhasPeregrinacao = peregrinacoes.map(linhaDaPeregrinacao);
     peregrinacoesIniciadasHoje = todasLinhasPeregrinacao.filter((p) => ehHoje(p.dataInicio));
     peregrinacoesPlanejadas = todasLinhasPeregrinacao.filter((p) => p.status === "planejada");
-    peregrinacoesPlanejadasHoje = peregrinacoesPlanejadas.filter((p) => ehHoje(p.dataInicioPrevista));
+    // Rodada 28, corrigindo bug relatado pelo usuário: antes este contador
+    // partia de "peregrinacoesPlanejadas" (só quem ainda está com status
+    // "planejada"), então cada pessoa que apertava "iniciar" saía da conta
+    // NO MESMO DIA em que tinha planejado — o número ia diminuindo ao longo
+    // do dia, quando o esperado é mostrar todo mundo que planejou começar
+    // hoje, e esse total não diminuir conforme elas vão de fato começando
+    // (ou até concluindo) a peregrinação no mesmo dia.
+    peregrinacoesPlanejadasHoje = todasLinhasPeregrinacao.filter((p) => ehHoje(p.dataInicioPrevista));
     peregrinacoesTerminadasHoje = todasLinhasPeregrinacao.filter(
       (p) => p.dataFim && ehHoje(p.dataFim)
     );
     peregrinacoesConcluidasHoje = peregrinacoesTerminadasHoje.filter((p) => p.temCertificado);
+    // "Concluídas com sucesso" (Rodada 28, renomeado de "concluídas total" a
+    // pedido do usuário) = terminou E recebeu certificado. Quem terminou mas
+    // NÃO recebeu certificado (ex.: não fez o check-in inicial fora de
+    // Aparecida, ou faltou o check-in final) cai em "concluídas sem
+    // sucesso", um novo módulo para a administração revisar reclamações e,
+    // se fizer sentido, liberar o certificado manualmente.
     peregrinacoesConcluidasTotal = todasLinhasPeregrinacao.filter((p) => p.temCertificado);
+    peregrinacoesConcluidasSemSucesso = todasLinhasPeregrinacao.filter(
+      (p) => p.status === "concluida" && !p.temCertificado
+    );
 
     const papRows = ((pontosApoio ?? []) as PontoApoio[]).map(
       (p): PapLinha => ({
@@ -360,6 +394,7 @@ export default async function AdminDashboardPage() {
           peregrinacoesPlanejadasHoje={peregrinacoesPlanejadasHoje}
           peregrinacoesConcluidasHoje={peregrinacoesConcluidasHoje}
           peregrinacoesConcluidasTotal={peregrinacoesConcluidasTotal}
+          peregrinacoesConcluidasSemSucesso={peregrinacoesConcluidasSemSucesso}
           papCadastrados={papCadastrados}
           papAtivos={papAtivos}
           papPendentes={papPendentes}

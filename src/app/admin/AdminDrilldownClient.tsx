@@ -189,6 +189,7 @@ interface Props {
   peregrinacoesPlanejadasHoje: PeregrinacaoLinha[];
   peregrinacoesConcluidasHoje: PeregrinacaoLinha[];
   peregrinacoesConcluidasTotal: PeregrinacaoLinha[];
+  peregrinacoesConcluidasSemSucesso: PeregrinacaoLinha[];
   papCadastrados: PapLinha[];
   papAtivos: PapLinha[];
   papPendentes: PapLinha[];
@@ -246,6 +247,7 @@ export default function AdminDrilldownClient({
   peregrinacoesPlanejadasHoje,
   peregrinacoesConcluidasHoje,
   peregrinacoesConcluidasTotal,
+  peregrinacoesConcluidasSemSucesso,
   papCadastrados,
   papAtivos,
   papPendentes,
@@ -263,6 +265,9 @@ export default function AdminDrilldownClient({
   const [riscosInformados, setRiscosInformados] = useState(riscosInformadosIniciais);
   const [romariasGrupo, setRomariasGrupo] = useState(romariasGrupoIniciais);
   const [processandoId, setProcessandoId] = useState<string | null>(null);
+  const [erroLiberarCertificado, setErroLiberarCertificado] = useState<{ id: string; mensagem: string } | null>(
+    null
+  );
   const [edicao, setEdicao] = useState<{
     id: string;
     titulo: string;
@@ -410,6 +415,35 @@ export default function AdminDrilldownClient({
     router.refresh();
   }
 
+  // "Liberar certificado" (Rodada 28, pedido do usuário): para uma
+  // peregrinação concluída sem certificado (ex.: faltou o check-in final em
+  // Aparecida) — a administração usa isto só mediante alguma reclamação do
+  // peregrino, depois de avaliar a lista "Concluídas sem sucesso". A função
+  // no banco (liberar_certificado_manualmente) reconstrói os mesmos dados
+  // que o próprio app calcularia ao encerrar normalmente.
+  async function liberarCertificado(id: string) {
+    setProcessandoId(id);
+    setErroLiberarCertificado(null);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("liberar_certificado_manualmente", {
+      p_peregrinacao_id: id,
+    });
+    setProcessandoId(null);
+    if (error) {
+      setErroLiberarCertificado({ id, mensagem: error.message });
+      return;
+    }
+    setErroLiberarCertificado(null);
+    // Remove da lista aberta no momento (se for a de "concluídas sem
+    // sucesso") — o item já tem certificado agora, não pertence mais aqui.
+    setCategoria((atual) =>
+      atual && atual.tipo === "peregrinacao"
+        ? { ...atual, dados: atual.dados.filter((p) => p.id !== id) }
+        : atual
+    );
+    router.refresh();
+  }
+
   function iniciarEdicao(r: RiscoInformadoLinha) {
     setEdicao({
       id: r.id,
@@ -531,10 +565,26 @@ export default function AdminDrilldownClient({
           />
           <Card
             icon={Award}
-            label="Concluídas total"
+            label="Concluídas com sucesso"
             value={peregrinacoesConcluidasTotal.length}
             onClick={() =>
-              abrir({ tipo: "peregrinacao", titulo: "Peregrinações concluídas (total)", dados: peregrinacoesConcluidasTotal })
+              abrir({
+                tipo: "peregrinacao",
+                titulo: "Peregrinações concluídas com sucesso (com certificado)",
+                dados: peregrinacoesConcluidasTotal,
+              })
+            }
+          />
+          <Card
+            icon={AlertTriangle}
+            label="Concluídas sem sucesso"
+            value={peregrinacoesConcluidasSemSucesso.length}
+            onClick={() =>
+              abrir({
+                tipo: "peregrinacao",
+                titulo: "Peregrinações concluídas sem sucesso (sem certificado)",
+                dados: peregrinacoesConcluidasSemSucesso,
+              })
             }
           />
         </div>
@@ -721,6 +771,22 @@ export default function AdminDrilldownClient({
                           {p.checkinsCount} check-in(s)
                           {p.temCertificado ? " — com certificado" : ""}
                         </p>
+                      )}
+                      {p.status === "concluida" && !p.temCertificado && (
+                        <div className="mt-2 flex flex-col items-start gap-1">
+                          <button
+                            type="button"
+                            disabled={processandoId === p.id}
+                            onClick={() => liberarCertificado(p.id)}
+                            className="flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-200 disabled:opacity-60 dark:bg-amber-950/40 dark:text-amber-400"
+                          >
+                            <Award size={13} />
+                            {processandoId === p.id ? "Liberando..." : "Liberar certificado"}
+                          </button>
+                          {erroLiberarCertificado?.id === p.id && (
+                            <p className="text-xs text-red-600">{erroLiberarCertificado.mensagem}</p>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
