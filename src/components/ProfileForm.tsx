@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { SEXO_OPTIONS, RELIGIOES, AVATARES_PEREGRINO } from "@/lib/constants";
+import { SEXO_OPTIONS, RELIGIOES, AVATARES_PEREGRINO, normalizarReligiaoAntiga } from "@/lib/constants";
 import { CIDADES_POR_UF, UF_OPTIONS } from "@/lib/cidades";
 import { validarNomeCompleto } from "@/lib/validation";
 import { Upload, ShieldCheck } from "lucide-react";
@@ -44,9 +44,13 @@ export default function ProfileForm({
     perfilExistente?.data_nascimento ?? ""
   );
   const [sexo, setSexo] = useState(perfilExistente?.sexo ?? "");
-  const [religiao, setReligiao] = useState(perfilExistente?.religiao ?? "");
-  const [religiaoOutra, setReligiaoOutra] = useState(
-    perfilExistente?.religiao_outro_desc ?? ""
+  // Rodada 25: a lista de religiões foi simplificada para 3 opções — ver
+  // normalizarReligiaoAntiga em constants.ts para o mapeamento de um valor
+  // salvo antes dessa mudança (ex.: "evangelica", "ateu") para a opção nova
+  // mais coerente, só para preencher o formulário ao reabrir um perfil já
+  // existente.
+  const [religiao, setReligiao] = useState(
+    normalizarReligiaoAntiga(perfilExistente?.religiao)
   );
   const [avatarUrl, setAvatarUrl] = useState(perfilExistente?.avatar_url ?? "");
 
@@ -119,7 +123,11 @@ export default function ProfileForm({
       data_nascimento: dataNascimento,
       sexo,
       religiao: religiao || null,
-      religiao_outro_desc: religiao === "outros" ? religiaoOutra : null,
+      // Rodada 25: "outras" não pede mais especificação — a coluna
+      // religiao_outro_desc continua existindo no banco (perfis antigos
+      // mantêm o texto que já tinham), só deixou de ser preenchida a
+      // partir de agora.
+      religiao_outro_desc: null,
       aceita_compartilhar_localizacao:
         perfilExistente?.aceita_compartilhar_localizacao ?? aceitaCompartilharInicial,
       avatar_url: avatarUrl || null,
@@ -315,16 +323,6 @@ export default function ProfileForm({
               ))}
             </select>
           </div>
-          {religiao === "outros" && (
-            <div className="sm:col-span-2">
-              <label className="label">Qual?</label>
-              <input
-                className="input"
-                value={religiaoOutra}
-                onChange={(e) => setReligiaoOutra(e.target.value)}
-              />
-            </div>
-          )}
         </div>
       </section>
 

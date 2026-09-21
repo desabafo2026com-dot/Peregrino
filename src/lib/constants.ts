@@ -9,21 +9,35 @@ export const MOTIVOS: { value: string; label: string }[] = [
   { value: "outros", label: "Outros" },
 ];
 
+// Rodada 25: lista simplificada a pedido do usuário — de 13 opções (várias
+// religiões específicas + "Outra" com campo de texto livre) para só 3 + o
+// próprio "Prefiro não informar" (que já era o valor em branco padrão do
+// select, sem precisar virar uma 4ª entrada aqui). "Outras (sem
+// especificar)" substitui tanto as religiões específicas que existiam
+// antes (evangélica, espírita, umbanda/candomblé etc.) quanto o campo de
+// texto livre "Outra: qual?" — deixou de perguntar qual é, só que a pessoa
+// tem uma.
 export const RELIGIOES: { value: string; label: string }[] = [
   { value: "catolica", label: "Católica" },
-  { value: "evangelica", label: "Evangélica" },
-  { value: "espirita", label: "Espírita" },
-  { value: "umbanda_candomble", label: "Umbanda / Candomblé" },
-  { value: "testemunha_de_jeova", label: "Testemunha de Jeová" },
-  { value: "mormon", label: "Mórmon (SUD)" },
-  { value: "judaica", label: "Judaica" },
-  { value: "islamica", label: "Islâmica" },
-  { value: "budista", label: "Budista" },
-  { value: "ateu", label: "Ateu(a)" },
-  { value: "agnostico", label: "Agnóstico(a)" },
-  { value: "outros", label: "Outra" },
-  { value: "prefiro_nao_dizer", label: "Prefiro não dizer" },
+  { value: "outras", label: "Outras (sem especificar)" },
+  { value: "nao_possuo", label: "Não possuo" },
 ];
+
+// Perfis salvos antes da Rodada 25 podem ter um valor das antigas opções
+// específicas (ex.: "evangelica", "testemunha_de_jeova", "outros" com
+// religiao_outro_desc preenchido) ou dos antigos "ateu"/"agnostico" — como
+// esses valores não existem mais na lista acima, o <select> os mostraria
+// em branco. Esta função mapeia o valor salvo antigo para a opção nova
+// mais coerente, só para preencher o formulário ao reabrir um perfil já
+// existente; o que a pessoa vê ao editar seu perfil é sempre uma das 3
+// opções novas (ou branco, para quem tinha "prefiro_nao_dizer" ou nada).
+export function normalizarReligiaoAntiga(valor: string | null | undefined): string {
+  if (!valor) return "";
+  if (valor === "catolica") return "catolica";
+  if (valor === "ateu" || valor === "agnostico") return "nao_possuo";
+  if (valor === "prefiro_nao_dizer") return "";
+  return "outras";
+}
 
 export const AVATARES_PEREGRINO: string[] = [
   "/avatars/peregrino-1.svg",
@@ -44,6 +58,15 @@ export const STATUS_PAP_LABELS: Record<string, string> = {
   pendente: "Aguardando aprovação da administração",
   aprovado: "Publicado no mapa",
   rejeitado: "Não aprovado pela administração",
+};
+
+// Rodada 24 — Romarias em Grupo usa os mesmos 3 status de sempre
+// (pendente/aprovado/rejeitado), mas com rótulos próprios: "aprovado" aqui
+// significa "visível na lista pública da home", não "no mapa".
+export const STATUS_ROMARIA_GRUPO_LABELS: Record<string, string> = {
+  pendente: "Aguardando aprovação da administração",
+  aprovado: "Aprovada — visível na home",
+  rejeitado: "Não aprovada pela administração",
 };
 
 export const SEXO_OPTIONS: { value: string; label: string }[] = [
@@ -319,3 +342,55 @@ export const EMERGENCIAS = [
 // e na função), assim quem já aceitou a versão antiga passa a ver o aviso
 // de novo (ver TermosGate.tsx) até aceitar a nova.
 export const TERMOS_VERSAO_ATUAL = "1.0 (16/09/2026)";
+
+// Rodada 24 — data de hoje em ISO (YYYY-MM-DD), mesmo formato salvo em
+// `datas_funcionamento`. Duplica pequenas funções locais já existentes em
+// MapView.tsx/MapClient.tsx (mantidas como estão, para não arriscar
+// regressão nelas) — esta versão compartilhada é para o código novo desta
+// rodada (contadores do admin, mapa do admin, status do gerente de PAP).
+export function hojeISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Um PAP só conta como "ativo hoje" se tiver datas marcadas no calendário e
+// a data atual estiver entre elas — sem nenhuma data marcada, nunca conta
+// como ativo (mesmo critério já usado no contador da home e no mapa
+// público desde a Rodada 18/20).
+export function papAtivoHoje(datasFuncionamento: string[] | null | undefined): boolean {
+  if (!datasFuncionamento || datasFuncionamento.length === 0) return false;
+  return datasFuncionamento.includes(hojeISO());
+}
+
+// Interpreta o texto salvo em periodo_funcionamento ("Aberto 24h",
+// "08:00–18:00" no formato produzido pelo próprio formulário do PAP, ou
+// texto livre digitado antes desse formulário existir) e diz se o horário
+// atual está dentro dele. Texto livre não reconhecido não restringe por
+// horário (só a data importa) — mais seguro do que arriscar marcar como
+// "fechado" um PAP cujo horário só não bateu com o regex.
+export function dentroDoHorario(periodo: string | null | undefined, agora: Date = new Date()): boolean {
+  if (!periodo) return true;
+  if (periodo.trim().toLowerCase() === "aberto 24h") return true;
+  const m = periodo.match(/^(\d{2}):(\d{2})\s*[–-]\s*(\d{2}):(\d{2})$/);
+  if (!m) return true;
+  const [, h1, min1, h2, min2] = m;
+  const inicio = Number(h1) * 60 + Number(min1);
+  const fim = Number(h2) * 60 + Number(min2);
+  const atual = agora.getHours() * 60 + agora.getMinutes();
+  if (inicio === fim) return true;
+  if (inicio < fim) return atual >= inicio && atual < fim;
+  // Período que cruza a meia-noite (ex.: 22:00–06:00)
+  return atual >= inicio || atual < fim;
+}
+
+// Rodada 24: substitui o antigo botão "Aberto agora — toque para fechar"
+// (alternado manualmente pelo gerente, sem nenhuma relação com o
+// calendário/horário que ele mesmo cadastrou) por um status calculado —
+// "aberto" só quando a data de hoje está no calendário marcado E o horário
+// atual está dentro do período informado.
+export function papAbertoAgora(
+  p: { datas_funcionamento: string[] | null | undefined; periodo_funcionamento: string | null | undefined },
+  agora: Date = new Date()
+): boolean {
+  return papAtivoHoje(p.datas_funcionamento) && dentroDoHorario(p.periodo_funcionamento, agora);
+}
