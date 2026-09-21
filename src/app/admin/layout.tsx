@@ -15,6 +15,7 @@ import {
   Sparkles,
   Ticket,
   Hotel,
+  Megaphone,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -64,6 +65,7 @@ const ADMIN_LINK_GROUPS = [
     titulo: "Suporte e equipe",
     links: [
       { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
+      { href: "/admin/mensagens-conquista", label: "Mensagens de conquista", icon: Megaphone },
       { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
     ],
   },

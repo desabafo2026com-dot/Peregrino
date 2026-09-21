@@ -579,13 +579,13 @@ export default function AdminDrilldownClient({
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Romarias — Grupo</h2>
+        <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Romarias de Peregrinos</h2>
         <div className="flex flex-wrap gap-2">
           <Card
             icon={Users}
             label="Cadastradas"
             value={romariasGrupo.length}
-            onClick={() => abrir({ tipo: "romariaGrupo", titulo: "Romarias em grupo cadastradas", filtro: "todas" })}
+            onClick={() => abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos cadastradas", filtro: "todas" })}
           />
           <Card
             icon={Clock}
@@ -593,7 +593,7 @@ export default function AdminDrilldownClient({
             value={romariasGrupoPendentes.length}
             destaque={romariasGrupoPendentes.length > 0}
             onClick={() =>
-              abrir({ tipo: "romariaGrupo", titulo: "Romarias em grupo pendentes de aprovação", filtro: "pendentes" })
+              abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos pendentes de aprovação", filtro: "pendentes" })
             }
           />
           <Card
@@ -601,7 +601,7 @@ export default function AdminDrilldownClient({
             label="Previstas hoje"
             value={romariasGrupoPrevistasHoje.length}
             onClick={() =>
-              abrir({ tipo: "romariaGrupo", titulo: "Romarias em grupo com início hoje", filtro: "hoje" })
+              abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos com início hoje", filtro: "hoje" })
             }
           />
         </div>

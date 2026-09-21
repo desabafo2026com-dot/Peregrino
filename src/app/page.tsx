@@ -1,10 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, UsersRound } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import DoacaoCard from "@/components/DoacaoCard";
-import type { RomariaGrupo } from "@/types/database";
+import IconePeregrinosFila from "@/components/IconePeregrinosFila";
+import MensagensConquistaCarrossel from "@/components/MensagensConquistaCarrossel";
+import type { RomariaGrupo, MensagemConquista } from "@/types/database";
 
 // Uma romaria em grupo aparece na home enquanto ainda não tiver passado do
 // último dia previsto (data_inicio + previsao_dias - 1) — inclui tanto as
@@ -68,6 +70,19 @@ export default async function Home() {
     .order("data_inicio", { ascending: true });
   const romariasGrupo = ((romariasGrupoData ?? []) as RomariaGrupo[]).filter(romariaAindaAtivaOuFutura);
 
+  // Mensagens públicas de conquista (Rodada 27) — as 30 mais recentes ainda
+  // ativas (a administração pode desativar uma mensagem inadequada sem
+  // apagar o registro). Sem expirar por tempo: o próprio limite de 30 já
+  // garante que a lista se renova sozinha conforme peregrinos vão
+  // concluindo e publicando mensagens novas — pedido explícito do usuário.
+  const { data: mensagensConquistaData } = await supabase
+    .from("mensagens_conquista")
+    .select("*")
+    .eq("ativo", true)
+    .order("criado_em", { ascending: false })
+    .limit(30);
+  const mensagensConquista = (mensagensConquistaData ?? []) as MensagemConquista[];
+
   const cardsAntesCompartilhar = [
     {
       href: "/mapa",
@@ -101,10 +116,15 @@ export default async function Home() {
       desc: "Opções de hospedagem e alimentação ao longo da rodovia, com mapa e filtro por tipo.",
     },
     {
+      // Rodada 27: "Romaria em Grupo" renomeada para "Romaria de
+      // Peregrinos" em todo o app, a pedido do usuário — o card da home
+      // virou a chamada "Sou organizador de Romaria a pé"; o cadastro em si
+      // continua sendo puramente informativo, sem exigir nada além de já
+      // estar logado.
       href: user ? "/romarias-grupo/cadastro" : "/login?tipo=peregrino&redirect=/romarias-grupo/cadastro",
-      icon: UsersRound,
-      title: "Cadastrar Romaria em Grupo",
-      desc: "Vai em caravana ou grupo? Informe para que autoridades e outros peregrinos saibam do seu grupo na estrada.",
+      icon: IconePeregrinosFila,
+      title: "Sou organizador de Romaria a pé",
+      desc: "Cadastre sua Romaria de Peregrinos para que autoridades e outros peregrinos saibam que seu grupo estará na estrada.",
     },
   ];
 
@@ -178,6 +198,8 @@ export default async function Home() {
         </section>
       )}
 
+      {mensagensConquista.length > 0 && <MensagensConquistaCarrossel mensagens={mensagensConquista} />}
+
       <Link
         href={!user ? "/login" : isGerente ? "/gerente-pap" : "/peregrinacao"}
         className="flex items-center justify-center gap-2 rounded-2xl bg-amber-700 py-4 text-lg font-bold text-white shadow-sm hover:bg-amber-800"
@@ -206,7 +228,7 @@ export default async function Home() {
       {romariasGrupo.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
-            <UsersRound size={20} /> Romarias em grupo na estrada
+            <IconePeregrinosFila size={20} /> Romarias de Peregrinos na estrada
           </h2>
           <div className="flex flex-col gap-2">
             {romariasGrupo.map((r) => {

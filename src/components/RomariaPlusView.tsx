@@ -18,6 +18,8 @@ import {
   Check,
   Pencil,
   ZoomIn,
+  Footprints,
+  Medal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
@@ -40,7 +42,7 @@ const FONTE_TITULO = '"Playfair Display", serif';
 const ARTE_LARGURA = 1080;
 const ARTE_ALTURA = 1920;
 
-type Modelo = "classico" | "destaque" | "painel" | "moldura";
+export type Modelo = "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -82,11 +84,16 @@ function formatarTempoCompacto(inicio: string | null, fim: string | null) {
 // tampar rostos/pessoas) — só esses dois ganham o editor de posição/tamanho
 // da Rodada 17. "destaque" e "moldura" já separam foto e texto em áreas
 // próprias por construção do próprio layout, então nunca precisam disso.
+// "itinerario" e "selo" (Rodada 27, fase 1 de uma leva maior de modelos
+// novos) também têm o texto/gráfico numa posição fixa própria do layout —
+// sem editor de posição por enquanto, para entregar o essencial primeiro.
 const MODELOS: { id: Modelo; nome: string; temAjuste: boolean }[] = [
   { id: "classico", nome: "Clássico", temAjuste: true },
   { id: "destaque", nome: "Foto em destaque", temAjuste: false },
   { id: "painel", nome: "Painel flutuante", temAjuste: true },
   { id: "moldura", nome: "Moldura dourada", temAjuste: false },
+  { id: "itinerario", nome: "Itinerário", temAjuste: false },
+  { id: "selo", nome: "Selo de conquista", temAjuste: false },
 ];
 
 const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
@@ -94,6 +101,8 @@ const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   destaque: null,
   painel: { x: 50, y: 78, escala: 100 },
   moldura: null,
+  itinerario: null,
+  selo: null,
 };
 
 // Posição/zoom padrão da FOTO em si dentro do recorte de cada modelo (Rodada
@@ -352,6 +361,10 @@ export default function RomariaPlusView({
   // Distância aproximada percorrida (Rodada 22) — ausente em certificados
   // emitidos antes dessa rodada, então some do layout sem deixar buraco.
   const distancia = c.distancia_km != null ? `≈ ${c.distancia_km} km` : null;
+  // Cidade de origem gravada no próprio certificado (Rodada 23) — usada só
+  // pelos modelos "itinerario" (Rodada 27), que mostram de onde a pessoa
+  // saiu até Aparecida-SP.
+  const origem = c.origem;
 
   // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo e o
   // ajuste de posição/tamanho escolhidos, via a função segura
@@ -928,6 +941,165 @@ export default function RomariaPlusView({
                         <Church size={18} className="text-amber-800" style={{ width: "6.5cqw", height: "6.5cqw" }} />
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* "Itinerário" (Rodada 27) — a foto ocupa o quadro inteiro, e um
+                gráfico do trajeto (linha pontilhada + os dois marcadores,
+                origem e Aparecida-SP) fica desenhado por cima dela, bem
+                transparente, para não esconder a foto por baixo — como
+                pedido pelo usuário ("meio transparente com os dados da
+                peregrinação para sobrepor a foto"). É um traçado
+                estilizado/esquemático (não um mapa real com tiles), pensado
+                especificamente para nunca falhar ao gerar a imagem, diferente
+                de um mapa de verdade. */}
+            {modelo === "itinerario" && (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fotoUrl}
+                  alt=""
+                  crossOrigin="anonymous"
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
+                    transform: `scale(${fotoEscala / 100})`,
+                  }}
+                />
+                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/5 to-black/50" />
+                <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 pt-[5%] text-white">
+                  <Image
+                    src="/icons/logo-emblema.png"
+                    alt=""
+                    width={64}
+                    height={64}
+                    style={{ width: "9%", height: "auto" }}
+                    className="rounded-lg ring-1 ring-white/40"
+                  />
+                  <span className="font-semibold tracking-[0.15em]" style={{ fontSize: "2.6cqw" }}>
+                    O PEREGRINO
+                  </span>
+                </div>
+                <div className="absolute inset-x-0 top-[13%] flex flex-col items-center text-center text-white">
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
+                    Romaria para Aparecida
+                  </p>
+                  <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw" }}>
+                    {ano}
+                  </p>
+                </div>
+                {/* O trajeto em si: uma linha pontilhada única (sem curvas
+                    reais de mapa) ligando um marcador de origem a um de
+                    chegada, desenhada com baixa opacidade — dá para ver a
+                    foto por trás dela o tempo todo. */}
+                <div className="absolute inset-x-[8%] bottom-[30%] text-white/85">
+                  <svg viewBox="0 0 100 26" className="w-full" style={{ opacity: 0.8 }}>
+                    <line
+                      x1="8" y1="20" x2="92" y2="6"
+                      stroke="white"
+                      strokeOpacity="0.65"
+                      strokeWidth="1.4"
+                      strokeDasharray="3,3.2"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="8" cy="20" r="3" fill="white" fillOpacity="0.9" />
+                    <circle cx="92" cy="6" r="3.4" fill="#fbbf24" fillOpacity="0.95" />
+                  </svg>
+                  <div className="mt-[1%] flex items-start justify-between" style={{ fontSize: "2.9cqw" }}>
+                    <span className="flex max-w-[45%] items-center gap-1 text-left">
+                      <Footprints size={14} className="mt-0.5 shrink-0" />
+                      {origem ?? "Início"}
+                    </span>
+                    <span className="flex max-w-[45%] items-center gap-1 text-right text-stripe-400">
+                      <Church size={14} className="mt-0.5 shrink-0" /> Aparecida-SP
+                    </span>
+                  </div>
+                </div>
+                <div
+                  className="absolute inset-x-[8%] bottom-[10%] flex items-center justify-center gap-[6%] rounded-xl bg-black/45 py-[3%] text-white backdrop-blur-sm"
+                  style={{ fontSize: "3.2cqw" }}
+                >
+                  {periodo && (
+                    <span className="flex items-center gap-1">
+                      <CalendarDays size={16} className="shrink-0" /> {periodo}
+                    </span>
+                  )}
+                  {tempo && (
+                    <span className="flex items-center gap-1">
+                      <Clock size={16} className="shrink-0" /> {tempo}
+                    </span>
+                  )}
+                  {distancia && (
+                    <span className="flex items-center gap-1">
+                      <Route size={16} className="shrink-0" /> {distancia}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* "Selo de conquista" (Rodada 27) — inspirado nos cartões de
+                "medalha de chegada" de apps de corrida: a foto ao fundo, bem
+                escurecida, com um selo circular dourado no centro (emblema do
+                app + faixa "CONCLUÍDO") — o objetivo é a sensação de
+                conquista/fé pedida, um troféu mais do que um dado técnico. */}
+            {modelo === "selo" && (
+              <div className="absolute inset-0 flex flex-col items-center bg-neutral-950">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fotoUrl}
+                  alt=""
+                  crossOrigin="anonymous"
+                  className="absolute inset-0 h-full w-full object-cover opacity-45"
+                  style={{
+                    objectPosition: `${fotoPos.x}% ${fotoPos.y}%`,
+                    transform: `scale(${fotoEscala / 100})`,
+                  }}
+                />
+                <FotoAjustavel editando={editandoFoto} onArrastar={moverFoto} onSoltarArraste={() => agendarPersistirAjuste(ajuste)} />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-black/80" />
+                <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-[4%] px-[8%] text-center text-white">
+                  <p style={{ fontFamily: FONTE_TITULO, fontStyle: "italic", fontWeight: 700, fontSize: "3.4cqw" }}>
+                    O Peregrino apresenta
+                  </p>
+                  <div className="relative flex items-center justify-center" style={{ width: "48%", aspectRatio: "1 / 1" }}>
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-stripe-300 via-amber-500 to-amber-700 shadow-2xl" />
+                    <div className="absolute inset-[6%] rounded-full border-2 border-white/70" />
+                    <div className="absolute inset-[10%] flex flex-col items-center justify-center gap-[6%] rounded-full bg-gradient-to-br from-amber-800 to-amber-950 text-white">
+                      <Medal size={28} style={{ width: "22%", height: "22%" }} />
+                      <span className="font-bold tracking-[0.1em]" style={{ fontSize: "5.5cqw" }}>
+                        CONCLUÍDO
+                      </span>
+                      <span className="font-bold text-stripe-400" style={{ fontSize: "7.5cqw" }}>
+                        {ano}
+                      </span>
+                    </div>
+                  </div>
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.4cqw", lineHeight: 1.1, textAlign: "center" }}>
+                    Romaria para Aparecida
+                  </p>
+                  <div
+                    className="flex items-center justify-center gap-[6%] rounded-xl bg-white/10 px-[4%] py-[3%] backdrop-blur-sm"
+                    style={{ fontSize: "3.2cqw" }}
+                  >
+                    {periodo && (
+                      <span className="flex items-center gap-1">
+                        <CalendarDays size={16} className="shrink-0" /> {periodo}
+                      </span>
+                    )}
+                    {tempo && (
+                      <span className="flex items-center gap-1">
+                        <Clock size={16} className="shrink-0" /> {tempo}
+                      </span>
+                    )}
+                    {distancia && (
+                      <span className="flex items-center gap-1">
+                        <Route size={16} className="shrink-0" /> {distancia}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

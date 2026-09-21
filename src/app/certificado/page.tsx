@@ -4,8 +4,9 @@ import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
 import RomariaPlusCompra from "@/components/RomariaPlusCompra";
+import MensagemConquistaForm from "@/components/MensagemConquistaForm";
 import VoltarButton from "@/components/VoltarButton";
-import type { Certificado, CompraRomariaPlus } from "@/types/database";
+import type { Certificado, CompraRomariaPlus, MensagemConquista } from "@/types/database";
 
 export default async function CertificadoPage() {
   const supabase = await createClient();
@@ -59,6 +60,21 @@ export default async function CertificadoPage() {
     }
   });
 
+  // Mensagens de conquista (Rodada 27) já publicadas para os certificados
+  // deste peregrino, se houver — usadas para mostrar "sua mensagem já está
+  // publicada" em vez do formulário em branco de novo.
+  const { data: mensagensConquista } = await supabase
+    .from("mensagens_conquista")
+    .select("*")
+    .in(
+      "certificado_id",
+      certificadosLista.map((c) => c.id)
+    );
+  const mensagemPorCertificado = new Map<string, MensagemConquista>();
+  ((mensagensConquista ?? []) as MensagemConquista[]).forEach((m) => {
+    mensagemPorCertificado.set(m.certificado_id, m);
+  });
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
       <VoltarButton href="/peregrinacao" />
@@ -78,6 +94,14 @@ export default async function CertificadoPage() {
                 sem a arte de pergaminho, que agora é exclusiva de quem compra
                 a Romaria Plus (ver "Certificado Plus" abaixo). */}
             <CertificadoGratuitoView certificado={c} />
+
+            <MensagemConquistaForm
+              certificadoId={c.id}
+              userId={user.id}
+              nome={c.nome_peregrino.trim().split(/\s+/)[0]}
+              cidade={c.origem}
+              mensagemInicial={mensagemPorCertificado.get(c.id) ?? null}
+            />
 
             <div id={`romaria-plus-${c.id}`} className="mt-2 flex scroll-mt-6 flex-col gap-4 border-t border-dashed border-amber-200 pt-6 dark:border-amber-900">
               <h2 className="text-center text-lg font-bold text-amber-800 dark:text-amber-500">Certificado Plus</h2>

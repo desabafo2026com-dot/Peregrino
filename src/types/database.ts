@@ -346,7 +346,8 @@ export interface CompraRomariaPlus {
   // romaria_plus_fotos (até 5 por compra) — estes três campos continuam
   // aqui só para compras antigas que ainda não foram migradas na tela
   // (a migration 24 já copia o que existir para a foto de índice 1).
-  modelo: "classico" | "destaque" | "painel" | "moldura" | null;
+  // "itinerario" e "selo" são os dois modelos novos da Rodada 27.
+  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | null;
   // Posição/tamanho customizados do texto, só relevante para "classico" e
   // "painel" (Rodada 17) — null usa a posição padrão do modelo.
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
@@ -361,7 +362,8 @@ export interface RomariaPlusFoto {
   user_id: string;
   indice: number;
   foto_url: string;
-  modelo: "classico" | "destaque" | "painel" | "moldura";
+  // "itinerario" e "selo" são os dois modelos novos da Rodada 27.
+  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo";
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
   contador_downloads: number;
   contador_compartilhamentos: number;
@@ -422,6 +424,22 @@ export interface RomariaGrupo {
   observacao_admin: string | null;
   criado_em: string;
   aprovado_em: string | null;
+}
+
+// Mensagem pública de conquista (Rodada 27) — deixada opcionalmente pelo
+// peregrino ao concluir a peregrinação, para quem ainda não terminou ou não
+// começou. Nome (primeiro nome) e cidade (origem da peregrinação) ficam
+// congelados no momento da publicação. Mostrada uma a uma no carrossel da
+// home, com "ativo=false" usado pela administração para ocultar sem apagar.
+export interface MensagemConquista {
+  id: string;
+  user_id: string;
+  certificado_id: string;
+  nome: string;
+  cidade: string | null;
+  mensagem: string;
+  ativo: boolean;
+  criado_em: string;
 }
 
 export type StatusMensagemContato = "novo" | "lida" | "respondida";

@@ -155,6 +155,22 @@ p {
   border-color: rgb(66 66 66);
 }
 
+/* Transição suave do carrossel de mensagens de conquista da home (Rodada
+   27) — cada troca de mensagem remonta o elemento (key={id}), e esta
+   animação faz o texto novo entrar com um leve fade em vez de trocar
+   abruptamente. */
+@keyframes mensagem-conquista-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.mensagem-conquista-fade {
+  animation: mensagem-conquista-fade 0.5s ease-out;
+}
+
 /* Impressão do certificado: ao imprimir, some com o resto da página e
    deixa só o elemento marcado com .print-alvo visível, ocupando a folha. */
 @media print {

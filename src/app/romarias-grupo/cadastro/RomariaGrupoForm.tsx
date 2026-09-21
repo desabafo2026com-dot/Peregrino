@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { UsersRound, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Clock, CheckCircle2, XCircle } from "lucide-react";
+import IconePeregrinosFila from "@/components/IconePeregrinosFila";
 import { STATUS_ROMARIA_GRUPO_LABELS, MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
 import type { RomariaGrupo, MeioTransporte } from "@/types/database";
 
@@ -102,7 +103,7 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
 
       <form onSubmit={handleSubmit} className="card flex flex-col gap-4">
         <h2 className="flex items-center gap-2 text-base font-bold text-amber-800 dark:text-amber-500">
-          <UsersRound size={18} /> Dados da romaria em grupo
+          <IconePeregrinosFila size={18} /> Dados da minha Romaria de Peregrinos
         </h2>
         <div>
           <label className="label">Nome do grupo/caravana</label>
@@ -229,7 +230,7 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
       {minhasRomarias.length > 0 && (
         <div>
           <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
-            Minhas romarias em grupo cadastradas
+            Minhas Romarias de Peregrinos cadastradas
           </h2>
           <div className="flex flex-col gap-2">
             {minhasRomarias.map((r) => (

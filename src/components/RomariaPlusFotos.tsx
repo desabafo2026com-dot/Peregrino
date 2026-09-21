@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
-import RomariaPlusView from "@/components/RomariaPlusView";
+import RomariaPlusView, { type Modelo } from "@/components/RomariaPlusView";
 import type { Certificado, RomariaPlusFoto } from "@/types/database";
 
 interface Props {
@@ -41,7 +41,7 @@ export default function RomariaPlusFotos({ certificado, compraId, userId, fotosI
   const abas = [...indicesExistentes];
   if (podeAdicionarNova && !abas.includes(proximoIndiceLivre)) abas.push(proximoIndiceLivre);
 
-  function aoSalvar(dados: { indice: number; foto_url: string; modelo: "classico" | "destaque" | "painel" | "moldura"; ajuste_overlay: RomariaPlusFoto["ajuste_overlay"] }) {
+  function aoSalvar(dados: { indice: number; foto_url: string; modelo: Modelo; ajuste_overlay: RomariaPlusFoto["ajuste_overlay"] }) {
     setFotos((prev) => ({
       ...prev,
       [dados.indice]: {
