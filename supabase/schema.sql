@@ -2865,3 +2865,85 @@ alter table public.romarias_grupo add column if not exists meio_deslocamento_out
 comment on column public.romarias_grupo.meio_deslocamento is 'Meio de deslocamento da caravana/grupo (Rodada 26) — mesmas opções usadas em "planejar peregrinação" (a_pe / bicicleta / moto / outros).';
 
 -- FIM DA MIGRATION 30
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 31 (Rodada 27) — dois modelos novos da Romaria Plus
+-- ("Itinerário" e "Selo de conquista") e mensagens públicas de conquista.
+-- ---------------------------------------------------------------------
+
+-- Dois modelos novos, fase 1 de uma leva maior pedida pelo usuário.
+alter table public.romaria_plus_fotos
+  drop constraint if exists romaria_plus_fotos_modelo_check;
+alter table public.romaria_plus_fotos
+  add constraint romaria_plus_fotos_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo'));
+
+-- Mantido em sincronia só por consistência — compras_romaria_plus.modelo é
+-- a coluna legada (Rodada 15), mantida apenas para compras anteriores à
+-- Rodada 18, que já não recebe fotos novas.
+alter table public.compras_romaria_plus
+  drop constraint if exists compras_romaria_plus_modelo_check;
+alter table public.compras_romaria_plus
+  add constraint compras_romaria_plus_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo'));
+
+-- Mensagem pública opcional oferecida ao peregrino ao concluir a
+-- peregrinação ("Deixe sua mensagem pública sobre sua conquista para outros
+-- peregrinos!") — nome (primeiro nome) e cidade (origem da peregrinação,
+-- gravada no próprio certificado) ficam congelados no momento da
+-- publicação, e não mudam se o perfil for editado depois. Uma mensagem por
+-- certificado (reenviar atualiza a mesma linha, via upsert no app).
+create table if not exists public.mensagens_conquista (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  certificado_id uuid not null references public.certificados(id) on delete cascade,
+  nome text not null,
+  cidade text,
+  mensagem text not null check (char_length(mensagem) between 1 and 220),
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  unique (certificado_id)
+);
+
+comment on table public.mensagens_conquista is 'Mensagem pública opcional deixada pelo peregrino ao concluir a peregrinação (Rodada 27), para quem ainda não terminou/começou — mostrada uma a uma no carrossel da home. "ativo=false" é usado pela administração para ocultar uma mensagem sem apagar o registro.';
+
+create index if not exists idx_mensagens_conquista_ativo_criado on public.mensagens_conquista(ativo, criado_em desc);
+
+alter table public.mensagens_conquista enable row level security;
+
+drop policy if exists mensagens_conquista_select_publico on public.mensagens_conquista;
+create policy mensagens_conquista_select_publico on public.mensagens_conquista for select to anon, authenticated
+  using (ativo = true);
+
+drop policy if exists mensagens_conquista_select_own on public.mensagens_conquista;
+create policy mensagens_conquista_select_own on public.mensagens_conquista for select to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists mensagens_conquista_select_admin on public.mensagens_conquista;
+create policy mensagens_conquista_select_admin on public.mensagens_conquista for select to authenticated
+  using (public.is_admin());
+
+drop policy if exists mensagens_conquista_insert_own on public.mensagens_conquista;
+create policy mensagens_conquista_insert_own on public.mensagens_conquista for insert to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (select 1 from public.certificados c where c.id = certificado_id and c.user_id = auth.uid())
+  );
+
+drop policy if exists mensagens_conquista_update_own on public.mensagens_conquista;
+create policy mensagens_conquista_update_own on public.mensagens_conquista for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists mensagens_conquista_update_admin on public.mensagens_conquista;
+create policy mensagens_conquista_update_admin on public.mensagens_conquista for update to authenticated
+  using (public.is_admin());
+
+drop policy if exists mensagens_conquista_delete_admin on public.mensagens_conquista;
+create policy mensagens_conquista_delete_admin on public.mensagens_conquista for delete to authenticated
+  using (public.is_admin());
+
+grant select, insert, update, delete on public.mensagens_conquista to authenticated;
+grant select on public.mensagens_conquista to anon;
+
+-- FIM DA MIGRATION 31
