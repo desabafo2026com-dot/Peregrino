@@ -398,6 +398,30 @@ export interface Doacao {
   pago_em: string | null;
 }
 
+export type StatusRomariaGrupo = "pendente" | "aprovado" | "rejeitado";
+
+// Cadastro público de caravana/grupo de romaria (Rodada 24) — puramente
+// informativo, para autoridades e outros peregrinos saberem de um grupo em
+// trânsito. Precisa de aprovação da administração antes de aparecer na
+// lista pública da home.
+export interface RomariaGrupo {
+  id: string;
+  user_id: string;
+  nome: string;
+  cidade_origem: string;
+  quantidade: number;
+  data_inicio: string;
+  previsao_dias: number;
+  organizador_nome: string | null;
+  exibir_organizador: boolean;
+  organizador_telefone: string | null;
+  exibir_telefone: boolean;
+  status: StatusRomariaGrupo;
+  observacao_admin: string | null;
+  criado_em: string;
+  aprovado_em: string | null;
+}
+
 export type StatusMensagemContato = "novo" | "lida" | "respondida";
 
 // "Falar com o desenvolvedor" (Rodada 7) — canal simples dentro do app,

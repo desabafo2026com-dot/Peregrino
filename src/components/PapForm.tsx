@@ -387,7 +387,11 @@ export default function PapForm({
               checked={exibirTelefone}
               onChange={(e) => setExibirTelefone(e.target.checked)}
             />
-            Autorizo exibir o telefone de contato publicamente no mapa
+            {/* Rodada 24: uma única autorização cobrindo os dois dados —
+                antes só existia para o telefone; agora também libera
+                mostrar o nome do responsável, sempre por último no popup,
+                logo antes do telefone (ver MapView.tsx). */}
+            Autorizo divulgar o nome do responsável e o telefone de contato publicamente no mapa
           </label>
         </div>
       </div>

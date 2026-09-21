@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon, Pencil } from "lucide-react";
-import { STATUS_PAP_LABELS } from "@/lib/constants";
+import { STATUS_PAP_LABELS, papAbertoAgora } from "@/lib/constants";
 import PapForm, { type PapFormDados } from "@/components/PapForm";
 import PapPreCadastroBusca from "@/components/PapPreCadastroBusca";
 import PapQrCode from "@/components/PapQrCode";
@@ -28,6 +28,17 @@ export default function GerentePapClient({
   const router = useRouter();
   const [pontos, setPontos] = useState(pontosIniciais);
   const [preCadastro, setPreCadastro] = useState<PapPreCadastro | null | undefined>(undefined);
+  // Rodada 24: o status "Aberto/Fechado" deixou de ser um botão que o
+  // gerente alternava manualmente (podia ficar "aberto" mesmo fora do
+  // calendário/horário cadastrado, ou vice-versa) — agora é só um selo
+  // calculado a partir do que ele já preencheu no cadastro (calendário +
+  // horário). `agora` é reatualizado a cada minuto para o selo trocar
+  // sozinho no exato horário de abrir/fechar, sem precisar recarregar.
+  const [agora, setAgora] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setAgora(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
   // Depois de cadastrar (ou vincular) o primeiro PAP, mostramos uma tela de
   // sucesso com o QR code para imprimir antes de ir para a lista normal —
   // "vinculado" só quando os dados vieram da base pública (preCadastro).
@@ -74,18 +85,6 @@ export default function GerentePapClient({
     if (!confirm("Excluir este PAP?")) return;
     const { error } = await supabase.from("pontos_apoio").delete().eq("id", id);
     if (!error) setPontos((prev) => prev.filter((p) => p.id !== id));
-  }
-
-  async function alternarAberto(id: string, abertoAtual: boolean) {
-    const { error } = await supabase
-      .from("pontos_apoio")
-      .update({ aberto_agora: !abertoAtual })
-      .eq("id", id);
-    if (!error) {
-      setPontos((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, aberto_agora: !abertoAtual } : p))
-      );
-    }
   }
 
   if (gerente.status === "rejeitado") {
@@ -206,17 +205,21 @@ export default function GerentePapClient({
                 </button>
               </div>
             </div>
-            <button
-              onClick={() => alternarAberto(p.id, p.aberto_agora)}
-              className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium ${
-                p.aberto_agora
-                  ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300"
-                  : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
-              }`}
-            >
-              {p.aberto_agora ? <Sun size={16} /> : <Moon size={16} />}
-              {p.aberto_agora ? "Aberto agora — toque para fechar" : "Fechado agora — toque para abrir"}
-            </button>
+            {(() => {
+              const aberto = papAbertoAgora(p, agora);
+              return (
+                <div
+                  className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium ${
+                    aberto
+                      ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300"
+                      : "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+                  }`}
+                >
+                  {aberto ? <Sun size={16} /> : <Moon size={16} />}
+                  {aberto ? "Aberto agora" : "Fechado agora"}
+                </div>
+              );
+            })()}
           </div>
         ))}
       </div>

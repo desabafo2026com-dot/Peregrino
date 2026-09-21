@@ -5,6 +5,7 @@ import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS, NIVEL_RISCO_LABELS, TIPO_COMERCIO_LABELS } from "@/lib/constants";
+import { comDesvioMinimoPap } from "@/lib/geo";
 import { createClient } from "@/lib/supabase/client";
 import type { PontoApoio, PontoRisco, RiscoInformado, PontoComercial } from "@/types/database";
 
@@ -176,7 +177,14 @@ export default function MapView({
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
+    // Rodada 24: pequeno desvio determinístico só para PAP cujas
+    // coordenadas caem praticamente coincidentes com outro (ver
+    // comDesvioMinimoPap em lib/geo.ts) — evita dois marcadores aprovados
+    // se sobreporem exatamente e parecerem um só no mapa.
+    const posicoesPap = comDesvioMinimoPap(pontosApoio);
+
     pontosApoio.forEach((p) => {
+      const posicao = posicoesPap.get(p.id) ?? { lat: p.latitude, lng: p.longitude };
       // PAP marcado com uma barraca (tenda) verde — mais fácil de
       // reconhecer de relance no mapa do que o antigo losango marrom.
       const el = document.createElement("div");
@@ -190,28 +198,29 @@ export default function MapView({
           <path d="M2 21h20"/>
         </svg>`;
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-        .setLngLat([p.longitude, p.latitude])
+        .setLngLat([posicao.lng, posicao.lat])
         .setPopup(
-          // Conteúdo do popup simplificado na Rodada 20, a pedido do
-          // usuário: uma informação por linha, sempre nesta ordem — foto (se
-          // houver), nome, telefone (se autorizado a exibir), cidade, km e
-          // sentido, horário de funcionamento, serviços e, por último, se
-          // aceita doações (e quais). Linhas sem dado disponível não
-          // aparecem, em vez de mostrar "—".
+          // Conteúdo do popup — uma informação por linha. Rodada 20: nome,
+          // cidade, km/sentido, horário, serviços e doações. Rodada 24, a
+          // pedido do usuário: telefone (se autorizado) foi para o final,
+          // antecedido do nome do responsável (mesma autorização, ver
+          // PapForm.tsx) — antes o telefone vinha logo depois do nome.
+          // Linhas sem dado disponível não aparecem, em vez de mostrar "—".
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               ${p.foto_url ? `<img src="${p.foto_url}" alt="Foto do PAP" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
               <strong>${p.nome}</strong><br/>
-              ${p.telefone && p.exibir_telefone !== false ? `Telefone: ${p.telefone}<br/>` : ""}
               ${p.cidade ? `Cidade: ${p.cidade}<br/>` : ""}
               ${kmSentidoLabel(p.km_referencia, p.sentido_pista) ? `${kmSentidoLabel(p.km_referencia, p.sentido_pista)}<br/>` : ""}
               ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
               Serviços: ${servicosLabel(p.servicos)}<br/>
               ${
                 p.aceita_doacoes
-                  ? `<span style="color:#92400e;font-weight:600">Aceita doações: ${p.doacao_necessidade || "não especificado o quê"}</span>`
+                  ? `<span style="color:#92400e;font-weight:600">Aceita doações: ${p.doacao_necessidade || "não especificado o quê"}</span><br/>`
                   : ""
               }
+              ${p.responsavel && p.exibir_telefone !== false ? `Responsável: ${p.responsavel}<br/>` : ""}
+              ${p.telefone && p.exibir_telefone !== false ? `Telefone: ${p.telefone}` : ""}
             </div>
           `)
         )
@@ -534,11 +543,18 @@ export default function MapView({
 
   // Mapa de calor de peregrinos ativos — intensidade conforme a
   // concentração de peregrinos naquele ponto do trajeto (uso administrativo).
+  // Rodada 24: passou a poder ser ligado/desligado em tempo real por um
+  // filtro no mapa do admin — antes só existia como "sempre ligado" (a
+  // camada, uma vez criada, nunca era escondida de novo). Agora, em vez de
+  // só não criar a camada quando calorPeregrinos é falso, ela é criada uma
+  // única vez e depois só tem a visibilidade alternada — assim desmarcar o
+  // filtro realmente some com o calor do mapa, em vez de deixá-lo "preso"
+  // ligado para sempre a partir da primeira vez que apareceu.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    function desenharCalor() {
+    function aplicar() {
       const geojson: GeoJSON.FeatureCollection<GeoJSON.Point> = {
         type: "FeatureCollection",
         features: peregrinos.map((p) => ({
@@ -551,6 +567,13 @@ export default function MapView({
       const source = map!.getSource("peregrinos-calor") as maplibregl.GeoJSONSource | undefined;
       if (source) {
         source.setData(geojson);
+        if (map!.getLayer("peregrinos-calor-layer")) {
+          map!.setLayoutProperty(
+            "peregrinos-calor-layer",
+            "visibility",
+            calorPeregrinos ? "visible" : "none"
+          );
+        }
         return;
       }
       if (!calorPeregrinos) return;
@@ -586,11 +609,10 @@ export default function MapView({
       });
     }
 
-    if (!calorPeregrinos) return;
     if (map.isStyleLoaded()) {
-      desenharCalor();
+      aplicar();
     } else {
-      map.once("load", desenharCalor);
+      map.once("load", aplicar);
     }
   }, [peregrinos, calorPeregrinos]);
 

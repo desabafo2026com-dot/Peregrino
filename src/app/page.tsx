@@ -1,9 +1,22 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, UsersRound } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import DoacaoCard from "@/components/DoacaoCard";
+import type { RomariaGrupo } from "@/types/database";
+
+// Uma romaria em grupo aparece na home enquanto ainda não tiver passado do
+// último dia previsto (data_inicio + previsao_dias - 1) — inclui tanto as
+// que já estão em andamento quanto as que ainda vão começar, nunca as já
+// encerradas.
+function romariaAindaAtivaOuFutura(r: RomariaGrupo): boolean {
+  const fim = new Date(r.data_inicio + "T00:00:00");
+  fim.setDate(fim.getDate() + r.previsao_dias - 1);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return fim >= hoje;
+}
 
 export default async function Home() {
   const supabase = await createClient();
@@ -44,6 +57,17 @@ export default async function Home() {
     } | null;
   };
 
+  // Romarias em grupo já aprovadas pela administração, ordenadas da data de
+  // início mais próxima para a mais distante — RLS já garante que só vêm
+  // as aprovadas (romarias_grupo_select_publico), o filtro por data abaixo
+  // decide quais ainda valem a pena mostrar (ver romariaAindaAtivaOuFutura).
+  const { data: romariasGrupoData } = await supabase
+    .from("romarias_grupo")
+    .select("*")
+    .eq("status", "aprovado")
+    .order("data_inicio", { ascending: true });
+  const romariasGrupo = ((romariasGrupoData ?? []) as RomariaGrupo[]).filter(romariaAindaAtivaOuFutura);
+
   const cardsAntesCompartilhar = [
     {
       href: "/mapa",
@@ -75,6 +99,12 @@ export default async function Home() {
       icon: Hotel,
       title: "Hotéis e Restaurantes",
       desc: "Opções de hospedagem e alimentação ao longo da rodovia, com mapa e filtro por tipo.",
+    },
+    {
+      href: user ? "/romarias-grupo/cadastro" : "/login?tipo=peregrino&redirect=/romarias-grupo/cadastro",
+      icon: UsersRound,
+      title: "Cadastrar Romaria em Grupo",
+      desc: "Vai em caravana ou grupo? Informe para que autoridades e outros peregrinos saibam do seu grupo na estrada.",
     },
   ];
 
@@ -108,25 +138,42 @@ export default async function Home() {
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Users size={20} /> {stats.peregrinos_ativos}
             </p>
-            <p className="text-xs text-neutral-500">peregrinos ativos</p>
+            {/* Rodada 24: texto centralizado com style inline, não só a
+                classe text-center herdada da section — a regra global
+                `p { text-align: justify }` (Rodada 13) vence qualquer
+                text-align herdado por cascata assim que o texto quebra em
+                duas linhas (só não vencia uma classe .text-center direto no
+                próprio <p>, como já corrigido em outros lugares desde a
+                Rodada 17). "peregrinações concluídas", o rótulo mais
+                comprido, é o mais propenso a quebrar em telas estreitas de
+                iPhone — por isso o bug só aparecia nesse card. */}
+            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+              peregrinos ativos
+            </p>
           </div>
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <CheckCircle2 size={20} /> {stats.checkins_total}
             </p>
-            <p className="text-xs text-neutral-500">check-ins realizados</p>
+            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+              check-ins realizados
+            </p>
           </div>
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <MapPin size={20} /> {stats.pontos_apoio_ativos}
             </p>
-            <p className="text-xs text-neutral-500">PAP ativos</p>
+            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+              PAP ativos
+            </p>
           </div>
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Award size={20} /> {stats.peregrinacoes_concluidas}
             </p>
-            <p className="text-xs text-neutral-500">peregrinações concluídas</p>
+            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+              peregrinações concluídas
+            </p>
           </div>
         </section>
       )}
@@ -155,6 +202,33 @@ export default async function Home() {
         ))}
         <CompartilharInstalarCard />
       </section>
+
+      {romariasGrupo.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+            <UsersRound size={20} /> Romarias em grupo na estrada
+          </h2>
+          <div className="flex flex-col gap-2">
+            {romariasGrupo.map((r) => {
+              const inicio = new Date(r.data_inicio + "T00:00:00");
+              const fim = new Date(inicio);
+              fim.setDate(fim.getDate() + r.previsao_dias - 1);
+              return (
+                <div key={r.id} className="card">
+                  <p className="font-semibold">{r.nome}</p>
+                  <p className="text-xs text-neutral-500">
+                    Origem: {r.cidade_origem} — {r.quantidade} pessoa(s) —{" "}
+                    {inicio.toLocaleDateString("pt-BR")}
+                    {fim.getTime() !== inicio.getTime() ? ` a ${fim.toLocaleDateString("pt-BR")}` : ""}
+                    {r.exibir_organizador && r.organizador_nome ? ` — Organizador: ${r.organizador_nome}` : ""}
+                    {r.exibir_telefone && r.organizador_telefone ? ` — Tel: ${r.organizador_telefone}` : ""}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <p className="text-center text-xs text-neutral-400">
         Em caso de emergência, use o botão vermelho no canto da tela para

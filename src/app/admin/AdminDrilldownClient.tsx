@@ -40,8 +40,24 @@ import {
   CATEGORIAS_SINISTRO,
   TIPOS_POR_CATEGORIA,
   NIVEL_RISCO_LABELS,
+  papAtivoHoje,
 } from "@/lib/constants";
-import type { StatusRiscoInformado } from "@/types/database";
+import type { StatusRiscoInformado, StatusRomariaGrupo } from "@/types/database";
+
+export interface RomariaGrupoLinha {
+  id: string;
+  nome: string;
+  cidadeOrigem: string;
+  quantidade: number;
+  dataInicio: string;
+  previsaoDias: number;
+  organizadorNome: string | null;
+  exibirOrganizador: boolean;
+  organizadorTelefone: string | null;
+  exibirTelefone: boolean;
+  status: StatusRomariaGrupo;
+  criadoEm: string;
+}
 
 export interface PeregrinoLinha {
   id: string;
@@ -78,7 +94,8 @@ export interface PapLinha {
   kmReferencia: number | null;
   sentidoPista: string | null;
   statusAprovacao: string;
-  abertoAgora: boolean;
+  ativo: boolean;
+  datasFuncionamento: string[];
   gerenteNome: string | null;
   vinculadoPreCadastro: boolean;
   criadoEm: string;
@@ -159,7 +176,8 @@ type Categoria =
   | { tipo: "gerente"; titulo: string; dados: GerenteLinha[] }
   // "filtro" em vez de uma lista fixa: assim a lista aberta no modal
   // reflete confirmações/edições feitas sem precisar fechar e reabrir.
-  | { tipo: "riscoInformado"; titulo: string; filtro: "todos" | "semRevisao" };
+  | { tipo: "riscoInformado"; titulo: string; filtro: "todos" | "semRevisao" }
+  | { tipo: "romariaGrupo"; titulo: string; filtro: "todas" | "pendentes" | "hoje" };
 
 interface Props {
   peregrinosCadastrados: PeregrinoLinha[];
@@ -176,7 +194,13 @@ interface Props {
   riscosCadastrados: RiscoLinha[];
   riscosInformados: RiscoInformadoLinha[];
   gerentesCadastrados: GerenteLinha[];
+  romariasGrupo: RomariaGrupoLinha[];
   mensagensNovas: number;
+}
+
+function hojeISOLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 // flex-1 (em vez de largura fixa) faz cada card crescer para preencher
@@ -227,6 +251,7 @@ export default function AdminDrilldownClient({
   riscosCadastrados,
   riscosInformados: riscosInformadosIniciais,
   gerentesCadastrados,
+  romariasGrupo: romariasGrupoIniciais,
   mensagensNovas,
 }: Props) {
   const router = useRouter();
@@ -234,6 +259,7 @@ export default function AdminDrilldownClient({
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
   const [riscosInformados, setRiscosInformados] = useState(riscosInformadosIniciais);
+  const [romariasGrupo, setRomariasGrupo] = useState(romariasGrupoIniciais);
   const [processandoId, setProcessandoId] = useState<string | null>(null);
   const [edicao, setEdicao] = useState<{
     id: string;
@@ -258,6 +284,15 @@ export default function AdminDrilldownClient({
     [riscosInformados, agora]
   );
 
+  const romariasGrupoPendentes = useMemo(
+    () => romariasGrupo.filter((r) => r.status === "pendente"),
+    [romariasGrupo]
+  );
+  const romariasGrupoPrevistasHoje = useMemo(
+    () => romariasGrupo.filter((r) => r.dataInicio === hojeISOLocal()),
+    [romariasGrupo]
+  );
+
   function abrir(cat: Categoria) {
     setCategoria(cat);
     setBusca("");
@@ -273,8 +308,13 @@ export default function AdminDrilldownClient({
     if (categoria.tipo === "riscoInformado") {
       return categoria.filtro === "semRevisao" ? publicadosSemRevisao : riscosInformados;
     }
+    if (categoria.tipo === "romariaGrupo") {
+      if (categoria.filtro === "pendentes") return romariasGrupoPendentes;
+      if (categoria.filtro === "hoje") return romariasGrupoPrevistasHoje;
+      return romariasGrupo;
+    }
     return categoria.dados;
-  }, [categoria, riscosInformados, publicadosSemRevisao]);
+  }, [categoria, riscosInformados, publicadosSemRevisao, romariasGrupo, romariasGrupoPendentes, romariasGrupoPrevistasHoje]);
 
   const dadosFiltrados = useMemo(() => {
     if (!categoria) return [];
@@ -282,8 +322,8 @@ export default function AdminDrilldownClient({
     if (!termo) return dadosBase;
     return (dadosBase as unknown as Array<Record<string, unknown>>).filter((d) => {
       const nome = (d.nome as string) ?? (d.titulo as string) ?? "";
-      const local = (d.local as string) ?? (d.cidade as string) ?? "";
-      const telefone = (d.telefone as string) ?? "";
+      const local = (d.local as string) ?? (d.cidade as string) ?? (d.cidadeOrigem as string) ?? "";
+      const telefone = (d.telefone as string) ?? (d.organizadorTelefone as string) ?? "";
       const papNomes = ((d.papNomes as string[]) ?? []).join(" ");
       return (
         nome.toLowerCase().includes(termo) ||
@@ -335,6 +375,35 @@ export default function AdminDrilldownClient({
     setRiscosInformados((prev) =>
       prev.map((x) => (x.id === id ? { ...x, status: "rejeitado" as const } : x))
     );
+    setProcessandoId(null);
+    router.refresh();
+  }
+
+  async function aprovarRomariaGrupo(id: string) {
+    setProcessandoId(id);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("romarias_grupo")
+      .update({ status: "aprovado", aprovado_em: new Date().toISOString() })
+      .eq("id", id);
+    if (!error) {
+      setRomariasGrupo((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "aprovado" as const } : r))
+      );
+    }
+    setProcessandoId(null);
+    router.refresh();
+  }
+
+  async function rejeitarRomariaGrupo(id: string) {
+    setProcessandoId(id);
+    const supabase = createClient();
+    const { error } = await supabase.from("romarias_grupo").update({ status: "rejeitado" }).eq("id", id);
+    if (!error) {
+      setRomariasGrupo((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "rejeitado" as const } : r))
+      );
+    }
     setProcessandoId(null);
     router.refresh();
   }
@@ -508,6 +577,35 @@ export default function AdminDrilldownClient({
       </section>
 
       <section>
+        <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Romarias — Grupo</h2>
+        <div className="flex flex-wrap gap-2">
+          <Card
+            icon={Users}
+            label="Cadastradas"
+            value={romariasGrupo.length}
+            onClick={() => abrir({ tipo: "romariaGrupo", titulo: "Romarias em grupo cadastradas", filtro: "todas" })}
+          />
+          <Card
+            icon={Clock}
+            label="Pendentes"
+            value={romariasGrupoPendentes.length}
+            destaque={romariasGrupoPendentes.length > 0}
+            onClick={() =>
+              abrir({ tipo: "romariaGrupo", titulo: "Romarias em grupo pendentes de aprovação", filtro: "pendentes" })
+            }
+          />
+          <Card
+            icon={CalendarClock}
+            label="Previstas hoje"
+            value={romariasGrupoPrevistasHoje.length}
+            onClick={() =>
+              abrir({ tipo: "romariaGrupo", titulo: "Romarias em grupo com início hoje", filtro: "hoje" })
+            }
+          />
+        </div>
+      </section>
+
+      <section>
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Riscos</h2>
         <div className="flex flex-wrap gap-2">
           <Card
@@ -650,7 +748,7 @@ export default function AdminDrilldownClient({
                         {" — "}
                         {STATUS_PAP_LABELS[p.statusAprovacao] ?? p.statusAprovacao}
                         {" — "}
-                        {p.abertoAgora ? "aberto agora" : "fechado agora"}
+                        {p.ativo && papAtivoHoje(p.datasFuncionamento) ? "ativo hoje" : "inativo hoje"}
                       </p>
                     </div>
                   ))}
@@ -671,6 +769,58 @@ export default function AdminDrilldownClient({
                       </p>
                     </div>
                   ))}
+
+                {categoria.tipo === "romariaGrupo" &&
+                  (dadosPagina as RomariaGrupoLinha[]).map((r) => {
+                    const fim = new Date(r.dataInicio + "T00:00:00");
+                    fim.setDate(fim.getDate() + r.previsaoDias - 1);
+                    return (
+                      <div key={r.id} className="card">
+                        <p className="flex items-center gap-2 font-semibold">
+                          <Users size={16} className="text-amber-700" />
+                          {r.nome}
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          Origem: {r.cidadeOrigem} — {r.quantidade} pessoa(s)
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {new Date(r.dataInicio + "T00:00:00").toLocaleDateString("pt-BR")} até{" "}
+                          {fim.toLocaleDateString("pt-BR")} ({r.previsaoDias} dia(s) previsto(s))
+                        </p>
+                        {(r.organizadorNome || r.organizadorTelefone) && (
+                          <p className="text-xs text-neutral-500">
+                            {r.organizadorNome ? `Organizador: ${r.organizadorNome}` : ""}
+                            {r.organizadorNome && r.organizadorTelefone ? " — " : ""}
+                            {r.organizadorTelefone ? `Tel: ${r.organizadorTelefone}` : ""}
+                            {!r.exibirOrganizador && !r.exibirTelefone ? " (não autorizado para divulgação pública)" : ""}
+                          </p>
+                        )}
+                        <p className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-neutral-500">
+                            {r.status === "pendente" ? "Pendente" : r.status === "aprovado" ? "Aprovada" : "Rejeitada"}
+                          </span>
+                          {r.status === "pendente" && (
+                            <span className="flex gap-2">
+                              <button
+                                disabled={processandoId === r.id}
+                                onClick={() => aprovarRomariaGrupo(r.id)}
+                                className="flex items-center gap-1 rounded-lg bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 hover:bg-green-200 dark:bg-green-950/40 dark:text-green-300"
+                              >
+                                <Check size={14} /> Aprovar
+                              </button>
+                              <button
+                                disabled={processandoId === r.id}
+                                onClick={() => rejeitarRomariaGrupo(r.id)}
+                                className="flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-950/40 dark:text-red-400"
+                              >
+                                <Ban size={14} /> Rejeitar
+                              </button>
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    );
+                  })}
 
                 {categoria.tipo === "risco" &&
                   (dadosPagina as RiscoLinha[]).map((r) => (

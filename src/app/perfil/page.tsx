@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/ProfileForm";
 import AlterarSenhaForm from "@/components/AlterarSenhaForm";
 import ContatoDesenvolvedorForm from "@/components/ContatoDesenvolvedorForm";
+import ExcluirContaForm from "@/components/ExcluirContaForm";
 import VoltarButton from "@/components/VoltarButton";
 import Link from "next/link";
 import type { Profile, MensagemContato } from "@/types/database";
@@ -74,6 +75,9 @@ export default async function PerfilPage() {
           userId={user.id}
           mensagensIniciais={(mensagens ?? []) as MensagemContato[]}
         />
+      </div>
+      <div className="mt-6">
+        <ExcluirContaForm />
       </div>
       <p className="mt-8 text-center text-xs text-neutral-400">
         <Link href="/termos" className="underline">

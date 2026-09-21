@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { nomeRota, avisoVisivelPublicamente } from "@/lib/constants";
+import { nomeRota, avisoVisivelPublicamente, papAtivoHoje } from "@/lib/constants";
 import AdminMapClient from "./AdminMapClient";
 import AdminDrilldownClient, {
   type PeregrinoLinha,
@@ -8,6 +8,7 @@ import AdminDrilldownClient, {
   type RiscoLinha,
   type RiscoInformadoLinha,
   type GerenteLinha,
+  type RomariaGrupoLinha,
 } from "./AdminDrilldownClient";
 import VoltarButton from "@/components/VoltarButton";
 import type {
@@ -17,6 +18,7 @@ import type {
   MeioTransporte,
   Peregrinacao,
   RiscoInformado,
+  RomariaGrupo,
 } from "@/types/database";
 
 function ehHoje(iso: string | null) {
@@ -43,15 +45,19 @@ export default async function AdminDashboardPage() {
     .maybeSingle();
   const isAdmin = !!perfil?.is_admin;
 
-  // Rodada 23: o mapa geral só mostra PAP realmente ativos (aprovados e
-  // divulgados) — antes vinha sem nenhum filtro de aprovação, misturando
-  // PAP pendente/rejeitado com o resto. Os avisos de peregrinos (abaixo)
-  // também passaram a aparecer aqui, filtrados pela mesma regra de
+  // Rodada 24: busca TODOS os PAP (não só aprovados) — a Rodada 23 tinha
+  // filtrado só por "aprovado" aqui, mas esta mesma lista também alimenta os
+  // contadores do módulo "PAP" abaixo (Cadastrados/Pendentes), então esse
+  // filtro escondia por completo os PAP pendentes dos contadores (bug
+  // relatado pelo usuário: "não estava contando pendentes de aprovação").
+  // O mapa (AdminMapClient, mais abaixo) filtra por conta própria os que
+  // realmente devem aparecer na camada "PAP ativos". Os avisos de
+  // peregrinos também aparecem aqui, filtrados pela mesma regra de
   // visibilidade pública já usada em /peregrinacao e /peregrinacao/trajeto
   // desde a Rodada 21 — o admin vê exatamente o que qualquer peregrino veria
   // no mapa, não o que a própria conta de admin tem permissão de enxergar.
   const [{ data: pontosApoio }, { data: pontosRisco }, { data: localizacoes }] = await Promise.all([
-    supabase.from("pontos_apoio").select("*").eq("status_aprovacao", "aprovado"),
+    supabase.from("pontos_apoio").select("*"),
     supabase.from("pontos_risco").select("*"),
     supabase.from("localizacoes_ativas").select("user_id, latitude, longitude"),
   ]);
@@ -71,6 +77,7 @@ export default async function AdminDashboardPage() {
   let riscosCadastrados: RiscoLinha[] = [];
   let riscosInformados: RiscoInformadoLinha[] = [];
   let gerentesCadastrados: GerenteLinha[] = [];
+  let romariasGrupo: RomariaGrupoLinha[] = [];
   let mensagensNovas = 0;
   let avisos: RiscoInformado[] = [];
 
@@ -82,31 +89,56 @@ export default async function AdminDashboardPage() {
       { data: rotas },
       { data: certificados },
       { data: informados },
+      { data: romariasGrupoData },
       { count: contagemMensagensNovas },
     ] = await Promise.all([
-      supabase.from("profiles").select("id, nome_completo, cidade, uf"),
+      supabase.from("profiles").select("id, nome_completo, cidade, uf, is_admin, is_agente"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
       supabase.from("peregrinacoes").select("*").order("criado_em", { ascending: false }),
       supabase.from("rotas").select("*"),
       supabase.from("certificados").select("peregrinacao_id"),
       supabase.from("riscos_informados").select("*").order("criado_em", { ascending: false }),
+      supabase.from("romarias_grupo").select("*").order("data_inicio", { ascending: true }),
       supabase.from("mensagens_contato").select("id", { count: "exact", head: true }).eq("status", "novo"),
     ]);
 
     mensagensNovas = contagemMensagensNovas ?? 0;
     avisos = ((informados ?? []) as RiscoInformado[]).filter(avisoVisivelPublicamente);
 
+    romariasGrupo = ((romariasGrupoData ?? []) as RomariaGrupo[]).map(
+      (r): RomariaGrupoLinha => ({
+        id: r.id,
+        nome: r.nome,
+        cidadeOrigem: r.cidade_origem,
+        quantidade: r.quantidade,
+        dataInicio: r.data_inicio,
+        previsaoDias: r.previsao_dias,
+        organizadorNome: r.organizador_nome,
+        exibirOrganizador: r.exibir_organizador,
+        organizadorTelefone: r.organizador_telefone,
+        exibirTelefone: r.exibir_telefone,
+        status: r.status,
+        criadoEm: r.criado_em,
+      })
+    );
+
     interface PerfilBasico {
       id: string;
       nome_completo: string;
       cidade: string | null;
       uf: string | null;
+      is_admin: boolean;
+      is_agente: boolean;
     }
 
-    const idsGerentes = new Set((gerentes ?? []).map((g) => g.id as string));
     const perfilPorId = new Map(((todosPerfis ?? []) as PerfilBasico[]).map((p) => [p.id, p]));
+    // Rodada 24: antes excluía daqui qualquer conta que também fosse
+    // gerente de PAP ("peregrino OU gerente+peregrino", nas palavras do
+    // usuário — as duas contam como cadastradas). Continua excluindo só
+    // quem é administrador/agente da própria equipe, que não é "um
+    // peregrino cadastrado" nesse sentido.
     const peregrinoProfiles = ((todosPerfis ?? []) as PerfilBasico[]).filter(
-      (p) => !idsGerentes.has(p.id)
+      (p) => !p.is_admin && !p.is_agente
     );
 
     const nomeDaRota = new Map(((rotas ?? []) as Rota[]).map((r) => [r.id, nomeRota(r)]));
@@ -238,7 +270,8 @@ export default async function AdminDashboardPage() {
         kmReferencia: p.km_referencia,
         sentidoPista: p.sentido_pista,
         statusAprovacao: p.status_aprovacao,
-        abertoAgora: p.aberto_agora,
+        ativo: p.ativo,
+        datasFuncionamento: p.datas_funcionamento,
         gerenteNome: p.gerente_id ? nomeDoGerente.get(p.gerente_id) ?? null : null,
         vinculadoPreCadastro: p.pre_cadastro_id != null,
         criadoEm: p.criado_em,
@@ -246,7 +279,14 @@ export default async function AdminDashboardPage() {
     );
 
     papCadastrados = papRows;
-    papAtivos = papRows.filter((p) => p.abertoAgora && p.statusAprovacao === "aprovado");
+    // Rodada 24: "Ativos" usava aberto_agora (alternado manualmente pelo
+    // gerente, sem relação com o calendário) — por isso um PAP com a data de
+    // hoje removida do calendário continuava contando como ativo aqui,
+    // mesmo já tendo sumido do filtro "PAP ativos agora" do mapa público
+    // (bug relatado pelo usuário). Agora usa o mesmo critério por data.
+    papAtivos = papRows.filter(
+      (p) => p.ativo && p.statusAprovacao === "aprovado" && papAtivoHoje(p.datasFuncionamento)
+    );
     papPendentes = papRows.filter((p) => p.statusAprovacao === "pendente");
     papVinculados = papRows.filter((p) => p.vinculadoPreCadastro);
 
@@ -303,6 +343,7 @@ export default async function AdminDashboardPage() {
           riscosCadastrados={riscosCadastrados}
           riscosInformados={riscosInformados}
           gerentesCadastrados={gerentesCadastrados}
+          romariasGrupo={romariasGrupo}
           mensagensNovas={mensagensNovas}
         />
       )}
