@@ -25,24 +25,14 @@ export default function PoliticaDePrivacidadePage() {
         .
       </p>
 
-      <div className="rounded-lg border border-dashed border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-        <strong>Aviso para quem administra o app (não é parte do texto legal):</strong>{" "}
-        os campos <code>[NOME COMPLETO OU RAZÃO SOCIAL]</code>,{" "}
-        <code>[CPF OU CNPJ]</code> e <code>[E-MAIL DE CONTATO/PRIVACIDADE]</code>{" "}
-        abaixo são placeholders — substitua pelos dados reais antes de
-        divulgar o app publicamente. Este texto foi redigido com cuidado
-        seguindo a LGPD (Lei 13.709/2018), mas não substitui a revisão de um
-        advogado antes do lançamento.
-      </div>
-
+     
       <div className="prose-app mt-6 flex flex-col gap-5 text-sm leading-relaxed text-neutral-700 dark:text-neutral-200">
         <section>
           <h2 className="mb-1 text-base font-bold text-neutral-900 dark:text-neutral-50">
             1. Quem trata seus dados (controlador)
           </h2>
           <p>
-            <strong>[NOME COMPLETO OU RAZÃO SOCIAL]</strong>, inscrito(a) no{" "}
-            <strong>[CPF OU CNPJ]</strong>, é quem decide como e por que os
+            O DESENVOLVEDOR é quem decide como e por que os
             dados pessoais tratados neste App são usados (o
             &quot;controlador&quot;, na linguagem da Lei Geral de Proteção
             de Dados — LGPD). Dúvidas ou pedidos sobre seus dados podem ser
