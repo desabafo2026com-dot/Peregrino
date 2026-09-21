@@ -2947,3 +2947,127 @@ grant select, insert, update, delete on public.mensagens_conquista to authentica
 grant select on public.mensagens_conquista to anon;
 
 -- FIM DA MIGRATION 31
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 32 (Rodada 28) — liberar certificado manualmente para
+-- peregrinações concluídas sem sucesso (sem certificado).
+-- ---------------------------------------------------------------------
+
+-- Função segura, chamada só pela administração: reconstrói os mesmos
+-- dados que o próprio app calcula ao encerrar a peregrinação (ver
+-- PeregrinacaoClient.tsx) e emite o certificado que faltou — usada quando
+-- um peregrino reclama de não ter recebido o certificado (ex.: esqueceu o
+-- check-in final em Aparecida) e a administração decide liberar mesmo
+-- assim. SECURITY DEFINER porque a política de insert em "certificados" só
+-- permite ao próprio dono (auth.uid() = user_id) — sem isso a
+-- administração não conseguiria inserir em nome de outra pessoa.
+create or replace function public.liberar_certificado_manualmente(p_peregrinacao_id uuid)
+returns public.certificados
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_pereg public.peregrinacoes%rowtype;
+  v_nome_completo text;
+  v_rota public.rotas%rowtype;
+  v_rota_nome text;
+  v_total_checkins int;
+  v_km_primeiro numeric;
+  v_km_ultimo numeric;
+  v_distancia numeric;
+  v_dias int;
+  v_segundos numeric;
+  v_dias_dur int;
+  v_horas_dur int;
+  v_minutos_dur int;
+  v_duracao_texto text;
+  v_codigo text;
+  v_novo public.certificados%rowtype;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem liberar certificados manualmente.';
+  end if;
+
+  select * into v_pereg from public.peregrinacoes where id = p_peregrinacao_id;
+  if not found then
+    raise exception 'Peregrinação não encontrada.';
+  end if;
+  if v_pereg.status <> 'concluida' then
+    raise exception 'Só é possível liberar certificado para uma peregrinação já concluída.';
+  end if;
+  if exists (select 1 from public.certificados where peregrinacao_id = p_peregrinacao_id) then
+    raise exception 'Esta peregrinação já tem um certificado emitido.';
+  end if;
+
+  select nome_completo into v_nome_completo from public.profiles where id = v_pereg.user_id;
+
+  v_total_checkins := (select count(*) from public.checkins where peregrinacao_id = p_peregrinacao_id);
+
+  v_rota_nome := null;
+  if v_pereg.rota_id is not null then
+    select * into v_rota from public.rotas where id = v_pereg.rota_id;
+    if found then
+      v_rota_nome := case v_rota.slug
+        when 'norte' then 'São Paulo - Aparecida'
+        when 'sul' then 'Rio de Janeiro - Aparecida'
+        else v_rota.nome
+      end;
+    end if;
+  end if;
+
+  select pc.km_aproximado into v_km_primeiro
+    from public.checkins c
+    join public.pontos_checkin pc on pc.id = c.ponto_checkin_id
+    where c.peregrinacao_id = p_peregrinacao_id
+    order by pc.ordem asc
+    limit 1;
+
+  select pc.km_aproximado into v_km_ultimo
+    from public.checkins c
+    join public.pontos_checkin pc on pc.id = c.ponto_checkin_id
+    where c.peregrinacao_id = p_peregrinacao_id
+    order by pc.ordem desc
+    limit 1;
+
+  v_distancia := case
+    when v_km_primeiro is not null and v_km_ultimo is not null then round(abs(v_km_ultimo - v_km_primeiro))
+    else null
+  end;
+
+  v_dias := greatest(1, ceil(extract(epoch from (coalesce(v_pereg.data_fim, now()) - v_pereg.data_inicio)) / 86400))::int;
+
+  v_segundos := extract(epoch from (coalesce(v_pereg.data_fim, now()) - v_pereg.data_inicio));
+  v_dias_dur := floor(v_segundos / 86400);
+  v_horas_dur := floor((v_segundos - v_dias_dur * 86400) / 3600);
+  v_minutos_dur := floor((v_segundos - v_dias_dur * 86400 - v_horas_dur * 3600) / 60);
+
+  v_duracao_texto := trim(both ' ' from concat_ws(' ',
+    case when v_dias_dur > 0 then v_dias_dur || case when v_dias_dur = 1 then ' dia' else ' dias' end end,
+    case when v_horas_dur > 0 then v_horas_dur || case when v_horas_dur = 1 then ' hora' else ' horas' end end,
+    case when v_minutos_dur > 0 then v_minutos_dur || case when v_minutos_dur = 1 then ' minuto' else ' minutos' end end
+  ));
+  if v_duracao_texto is null or v_duracao_texto = '' then
+    v_duracao_texto := 'menos de 1 minuto';
+  end if;
+
+  v_codigo := 'PGR-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+
+  insert into public.certificados (
+    peregrinacao_id, user_id, codigo, nome_peregrino, dias_caminhada,
+    data_inicio, data_fim, total_checkins, rota_nome, origem,
+    meio_transporte, meio_transporte_outro_desc, duracao_texto, distancia_km
+  ) values (
+    p_peregrinacao_id, v_pereg.user_id, v_codigo, coalesce(v_nome_completo, 'Peregrino'), v_dias,
+    v_pereg.data_inicio, coalesce(v_pereg.data_fim, now()), v_total_checkins, v_rota_nome,
+    coalesce(v_pereg.cidade_origem, v_pereg.cidade_inicio),
+    v_pereg.meio_transporte, v_pereg.meio_transporte_outro_desc, v_duracao_texto, v_distancia
+  ) returning * into v_novo;
+
+  return v_novo;
+end;
+$$;
+
+grant execute on function public.liberar_certificado_manualmente(uuid) to authenticated;
+
+-- FIM DA MIGRATION 32
