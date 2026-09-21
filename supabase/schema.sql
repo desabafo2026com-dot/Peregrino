@@ -2787,3 +2787,68 @@ alter table public.certificados add column if not exists origem text;
 comment on column public.certificados.origem is 'Cópia congelada de peregrinacoes.cidade_origem no momento da emissão do certificado — usada nos textos "de [origem] até Aparecida-SP" do certificado e da Romaria Plus, no lugar da extração por regex de rota_nome (quebrada desde a Rodada 10). Nulo em certificados emitidos antes desta rodada.';
 
 -- FIM DA MIGRATION 28
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 29 (Rodada 24) — Romarias em Grupo (cadastro público de
+-- caravanas, com aprovação da administração) e ajuste do consentimento de
+-- divulgação do PAP.
+-- ---------------------------------------------------------------------
+create table if not exists public.romarias_grupo (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  nome text not null,
+  cidade_origem text not null,
+  quantidade integer not null check (quantidade > 0),
+  data_inicio date not null,
+  previsao_dias integer not null check (previsao_dias > 0),
+  organizador_nome text,
+  exibir_organizador boolean not null default false,
+  organizador_telefone text,
+  exibir_telefone boolean not null default false,
+  status text not null default 'pendente' check (status in ('pendente', 'aprovado', 'rejeitado')),
+  observacao_admin text,
+  criado_em timestamptz not null default now(),
+  aprovado_em timestamptz
+);
+
+comment on table public.romarias_grupo is 'Cadastro público de caravanas/grupos de romaria (Rodada 24) — puramente informativo, para autoridades e outros peregrinos saberem de um grupo em trânsito. Precisa de aprovação da administração antes de aparecer na lista pública da home. Fica "ativa" (visível na home) enquanto hoje estiver entre data_inicio e data_inicio + previsao_dias - 1.';
+comment on column public.romarias_grupo.cidade_origem is 'Texto livre — não é uma cidade da rota nem exige escolher rota/sentido, a pedido do usuário ("nao precisa escolher a rota"). Puramente informativo.';
+comment on column public.romarias_grupo.exibir_organizador is 'Autorização separada do cadastrador para publicar o nome do organizador (padrão: não exibir).';
+comment on column public.romarias_grupo.exibir_telefone is 'Autorização separada do cadastrador para publicar o telefone do organizador (padrão: não exibir).';
+
+alter table public.romarias_grupo enable row level security;
+
+drop policy if exists "romarias_grupo_select_own_ou_admin" on public.romarias_grupo;
+create policy "romarias_grupo_select_own_ou_admin" on public.romarias_grupo for select to authenticated
+  using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "romarias_grupo_select_publico" on public.romarias_grupo;
+create policy "romarias_grupo_select_publico" on public.romarias_grupo for select to anon, authenticated
+  using (status = 'aprovado');
+
+drop policy if exists "romarias_grupo_insert_own" on public.romarias_grupo;
+create policy "romarias_grupo_insert_own" on public.romarias_grupo for insert to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "romarias_grupo_update_own" on public.romarias_grupo;
+create policy "romarias_grupo_update_own" on public.romarias_grupo for update to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "romarias_grupo_update_admin" on public.romarias_grupo;
+create policy "romarias_grupo_update_admin" on public.romarias_grupo for update to authenticated
+  using (public.is_admin());
+
+drop policy if exists "romarias_grupo_delete_own_ou_admin" on public.romarias_grupo;
+create policy "romarias_grupo_delete_own_ou_admin" on public.romarias_grupo for delete to authenticated
+  using (auth.uid() = user_id or public.is_admin());
+
+grant select, insert, update, delete on public.romarias_grupo to authenticated;
+grant select on public.romarias_grupo to anon;
+
+-- Rodada 24: o cadastro do PAP passa a ter uma única autorização cobrindo
+-- nome do responsável + telefone ("autorizo divulgar nome e telefone"),
+-- reaproveitando a coluna que já existia só para o telefone — sem migração
+-- de dado nenhuma, só o significado (e o rótulo no formulário) muda.
+comment on column public.pontos_apoio.exibir_telefone is 'Se falso, nem o telefone nem o nome do responsável do PAP são exibidos publicamente no mapa (Rodada 24: uma única autorização cobre os dois — antes só controlava o telefone).';
+
+-- FIM DA MIGRATION 29
