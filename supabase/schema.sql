@@ -2852,3 +2852,16 @@ grant select on public.romarias_grupo to anon;
 comment on column public.pontos_apoio.exibir_telefone is 'Se falso, nem o telefone nem o nome do responsável do PAP são exibidos publicamente no mapa (Rodada 24: uma única autorização cobre os dois — antes só controlava o telefone).';
 
 -- FIM DA MIGRATION 29
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 30 (Rodada 26) — Meio de deslocamento "Moto" (também para
+-- planejar peregrinação e para o cadastro de Romarias em Grupo).
+-- ---------------------------------------------------------------------
+alter type meio_transporte_enum add value if not exists 'moto';
+
+alter table public.romarias_grupo add column if not exists meio_deslocamento meio_transporte_enum not null default 'a_pe';
+alter table public.romarias_grupo add column if not exists meio_deslocamento_outro_desc text;
+
+comment on column public.romarias_grupo.meio_deslocamento is 'Meio de deslocamento da caravana/grupo (Rodada 26) — mesmas opções usadas em "planejar peregrinação" (a_pe / bicicleta / moto / outros).';
+
+-- FIM DA MIGRATION 30
