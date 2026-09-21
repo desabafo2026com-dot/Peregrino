@@ -24,24 +24,15 @@ export default function TermosDeUsoPage() {
         , que trata especificamente do uso dos seus dados.
       </p>
 
-      <div className="rounded-lg border border-dashed border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-        <strong>Aviso para quem administra o app (não é parte do texto legal):</strong>{" "}
-        os campos <code>[NOME COMPLETO OU RAZÃO SOCIAL]</code>,{" "}
-        <code>[CPF OU CNPJ]</code> e <code>[E-MAIL DE CONTATO]</code> abaixo são
-        placeholders — substitua pelos dados reais antes de divulgar o app
-        publicamente. Este texto foi redigido com cuidado, mas não substitui a
-        revisão de um advogado antes do lançamento.
-      </div>
-
+      
       <div className="prose-app mt-6 flex flex-col gap-5 text-sm leading-relaxed text-neutral-700 dark:text-neutral-200">
         <section>
           <h2 className="mb-1 text-base font-bold text-neutral-900 dark:text-neutral-50">
             1. Quem oferece este serviço
           </h2>
           <p>
-            O aplicativo <strong>O Peregrino</strong> (&quot;o App&quot;) é oferecido por{" "}
-            <strong>[NOME COMPLETO OU RAZÃO SOCIAL]</strong>, inscrito(a) no{" "}
-            <strong>[CPF OU CNPJ]</strong> (&quot;nós&quot;). Estes Termos de Uso
+            O aplicativo <strong>O Peregrino</strong> (&quot;o App&quot;) é oferecido pelo 
+            desenvolvedor. Estes Termos de Uso
             regulam o uso do App por qualquer pessoa que crie uma conta ou
             utilize suas funcionalidades públicas (&quot;você&quot;).
           </p>
