@@ -173,7 +173,7 @@ export default function TermosDeUsoPage() {
             tiver sido gerada, baixada ou compartilhada — antes disso, ou em
             caso de cobrança indevida/duplicada, entre em contato pelo canal
             &quot;Falar com o desenvolvedor&quot; no seu perfil, ou pelo
-            e-mail <strong>[E-MAIL DE CONTATO]</strong>, para pedir o
+            e-mail <strong>[contato.operegrino116@gmail.com]</strong>, para pedir o
             estorno.
           </p>
           <p>
@@ -243,7 +243,7 @@ export default function TermosDeUsoPage() {
             Estes Termos são regidos pela lei brasileira. Dúvidas, dicas ou
             reclamações podem ser enviadas pelo canal &quot;Falar com o
             desenvolvedor&quot; no seu perfil, ou pelo e-mail{" "}
-            <strong>[E-MAIL DE CONTATO]</strong>.
+            <strong>[contato.operegrino116@gmail.com]</strong>.
           </p>
         </section>
       </div>
