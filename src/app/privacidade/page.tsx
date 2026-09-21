@@ -38,7 +38,7 @@ export default function PoliticaDePrivacidadePage() {
             de Dados — LGPD). Dúvidas ou pedidos sobre seus dados podem ser
             enviados pelo canal &quot;Falar com o desenvolvedor&quot; no seu
             perfil, ou pelo e-mail{" "}
-            <strong>[E-MAIL DE CONTATO/PRIVACIDADE]</strong>.
+            <strong>[contato.operegrino116@gmail.com]</strong>.
           </p>
         </section>
 
@@ -193,7 +193,7 @@ export default function PoliticaDePrivacidadePage() {
           <p>
             Hoje, esses pedidos são feitos pelo canal &quot;Falar com o
             desenvolvedor&quot; no seu perfil, ou pelo e-mail{" "}
-            <strong>[E-MAIL DE CONTATO/PRIVACIDADE]</strong>, e são
+            <strong>[contato.operegrino116@gmail.com]</strong>, e são
             atendidos manualmente enquanto o App não tem uma função de
             autoatendimento para isso (previsto para uma próxima
             atualização).
