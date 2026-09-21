@@ -117,6 +117,8 @@ export default async function AdminDashboardPage() {
         exibirOrganizador: r.exibir_organizador,
         organizadorTelefone: r.organizador_telefone,
         exibirTelefone: r.exibir_telefone,
+        meioDeslocamento: r.meio_deslocamento,
+        meioDeslocamentoOutroDesc: r.meio_deslocamento_outro_desc,
         status: r.status,
         criadoEm: r.criado_em,
       })
@@ -226,7 +228,29 @@ export default async function AdminDashboardPage() {
       };
     }
 
-    peregrinosCadastrados = peregrinoProfiles.map(linhaDoPerfil);
+    // Rodada 26: "Cadastrados" precisa contar TODOS os usuários cadastrados
+    // no app em geral — antes ficava restrito a quem tem uma linha em
+    // "profiles" com o papel de peregrino, o que deixava de fora contas de
+    // gerente de PAP que nunca chegaram a criar um perfil de peregrino.
+    // "Ativos" continua sendo só quem já deu início a uma peregrinação
+    // (status em_andamento) — isso já estava correto desde a Rodada 24.
+    const idsComPerfilPeregrino = new Set(peregrinoProfiles.map((p) => p.id));
+    const gerentesSemPerfilPeregrino = ((gerentes ?? []) as GerenteBasico[]).filter(
+      (g) => !idsComPerfilPeregrino.has(g.id)
+    );
+    const linhasGerentesSemPerfil: PeregrinoLinha[] = gerentesSemPerfilPeregrino.map((g) => ({
+      id: g.id,
+      nome: g.nome_completo,
+      status: "sem_peregrinacao",
+      local: "Gerente de PAP (sem perfil de peregrino)",
+      meioTransporte: null,
+      rotaNome: null,
+      dataInicio: null,
+      dataFim: null,
+      checkinsCount: 0,
+    }));
+
+    peregrinosCadastrados = [...peregrinoProfiles.map(linhaDoPerfil), ...linhasGerentesSemPerfil];
     peregrinosAtivos = peregrinosCadastrados.filter((l) => l.status === "em_andamento");
 
     // Grupo "Peregrinações" — visão por jornada (uma pessoa pode ter mais

@@ -90,12 +90,14 @@ export const SERVICOS_PONTO_APOIO: { value: string; label: string }[] = [
 export const MEIO_TRANSPORTE_OPTIONS: { value: string; label: string }[] = [
   { value: "a_pe", label: "A pé" },
   { value: "bicicleta", label: "Bicicleta" },
+  { value: "moto", label: "Moto" },
   { value: "outros", label: "Outros" },
 ];
 
 export const MEIO_TRANSPORTE_LABELS: Record<string, string> = {
   a_pe: "a pé",
   bicicleta: "de bicicleta",
+  moto: "de moto",
   outros: "outro meio de transporte",
 };
 

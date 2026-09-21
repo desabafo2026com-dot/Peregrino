@@ -314,7 +314,7 @@ export default function PeregrinacaoClient({
       return;
     }
     if (meioTransporte === "outros" && !meioTransporteOutro.trim()) {
-      setErro("Especifique o meio de transporte.");
+      setErro("Especifique o meio de deslocamento.");
       return;
     }
     if (!origemSelecionada) {
@@ -725,7 +725,7 @@ export default function PeregrinacaoClient({
             />
           </div>
           <div>
-            <label className="label">Meio de transporte</label>
+            <label className="label">Meio de deslocamento</label>
             <select
               className="input"
               value={meioTransporte}
@@ -740,13 +740,13 @@ export default function PeregrinacaoClient({
           </div>
           {meioTransporte === "outros" && (
             <div>
-              <label className="label">Especifique o meio de transporte</label>
+              <label className="label">Especifique o meio de deslocamento</label>
               <input
                 required
                 className="input"
                 value={meioTransporteOutro}
                 onChange={(e) => setMeioTransporteOutro(e.target.value)}
-                placeholder="Ex: cavalo, moto..."
+                placeholder="Ex: cavalo, trator..."
               />
             </div>
           )}

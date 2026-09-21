@@ -25,26 +25,65 @@ import {
 // "Cadastrar hotel/restaurante" (Rodada 22) foi movido para cá, ao lado de
 // "Cadastrar PAP", a pedido do usuário — antes só existia lá embaixo, na
 // seção "Hotéis e Restaurantes" do painel, e passava despercebido.
-const ADMIN_LINKS = [
-  { href: "/admin", label: "Painel", icon: LayoutDashboard },
-  { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
-  { href: "/admin/hospedagem", label: "Cadastrar hotel/restaurante", icon: Hotel },
-  { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
-  { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
-  { href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert },
-  { href: "/admin/romaria-plus", label: "Romaria Plus", icon: Sparkles },
-  { href: "/admin/cupons-romaria-plus", label: "Cupons Romaria Plus", icon: Ticket },
-  { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
-  { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
+// Rodada 26: menu reorganizado em linhas por assunto (pedido do usuário:
+// "organizar melhor o menu do adm em linha e por assunto") — antes era uma
+// única lista corrida sem nenhum agrupamento visual. Os botões avulsos de
+// "Cadastrar local de risco" / "Editar/excluir locais de risco" que ficavam
+// dentro do painel (seção Riscos) foram removidos dali nesta mesma rodada,
+// já que "Locais de risco" aqui no menu principal cobre exatamente as
+// mesmas ações (cadastrar, editar e excluir), uma seção logo abaixo.
+const ADMIN_LINK_GROUPS = [
+  {
+    titulo: "Geral",
+    links: [{ href: "/admin", label: "Painel", icon: LayoutDashboard }],
+  },
+  {
+    titulo: "Pontos de apoio",
+    links: [
+      { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
+      { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
+      { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
+    ],
+  },
+  {
+    titulo: "Hospedagem",
+    links: [{ href: "/admin/hospedagem", label: "Cadastrar hotel/restaurante", icon: Hotel }],
+  },
+  {
+    titulo: "Riscos",
+    links: [{ href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert }],
+  },
+  {
+    titulo: "Romaria Plus",
+    links: [
+      { href: "/admin/romaria-plus", label: "Romaria Plus", icon: Sparkles },
+      { href: "/admin/cupons-romaria-plus", label: "Cupons Romaria Plus", icon: Ticket },
+    ],
+  },
+  {
+    titulo: "Suporte e equipe",
+    links: [
+      { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
+      { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
+    ],
+  },
 ];
 
 // Agentes só têm acesso ao painel (leitura) e à inserção de trechos/locais
 // de risco — as demais páginas administrativas continuam exclusivas do
 // administrador (cada página confere isso de novo por segurança).
-const LINKS_AGENTE = [
-  { href: "/admin", label: "Painel", icon: LayoutDashboard },
-  { href: "/admin/riscos/novo", label: "Locais de risco", icon: TriangleAlert },
-  { href: "/admin/rotas", label: "Trechos de risco", icon: Route },
+const LINK_GROUPS_AGENTE = [
+  {
+    titulo: "Geral",
+    links: [{ href: "/admin", label: "Painel", icon: LayoutDashboard }],
+  },
+  {
+    titulo: "Riscos",
+    links: [
+      { href: "/admin/riscos/novo", label: "Locais de risco", icon: TriangleAlert },
+      { href: "/admin/rotas", label: "Trechos de risco", icon: Route },
+    ],
+  },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -79,7 +118,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
-  const links = perfil.is_admin ? ADMIN_LINKS : LINKS_AGENTE;
+  const grupos = perfil.is_admin ? ADMIN_LINK_GROUPS : LINK_GROUPS_AGENTE;
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,15 +133,24 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             : " — você pode visualizar o painel e o mapa, e cadastrar trechos e locais de risco."}
         </p>
       </div>
-      <nav className="flex flex-wrap gap-2">
-        {links.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-          >
-            <l.icon size={16} /> {l.label}
-          </Link>
+      <nav className="flex flex-col gap-3">
+        {grupos.map((grupo) => (
+          <div key={grupo.titulo}>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+              {grupo.titulo}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {grupo.links.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                >
+                  <l.icon size={16} /> {l.label}
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
       {children}

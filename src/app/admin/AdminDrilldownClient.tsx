@@ -55,6 +55,8 @@ export interface RomariaGrupoLinha {
   exibirOrganizador: boolean;
   organizadorTelefone: string | null;
   exibirTelefone: boolean;
+  meioDeslocamento: string;
+  meioDeslocamentoOutroDesc: string | null;
   status: StatusRomariaGrupo;
   criadoEm: string;
 }
@@ -642,14 +644,6 @@ export default function AdminDrilldownClient({
           demais peregrinos (chuva na hora; os demais, depois de 30 minutos) mesmo
           sem confirmação — vale priorizar a revisão desses.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link href="/admin/riscos/novo" className="btn-secondary inline-block w-fit text-sm">
-            Cadastrar local de risco
-          </Link>
-          <Link href="/admin/riscos" className="btn-secondary inline-block w-fit text-sm">
-            Editar / excluir locais de risco
-          </Link>
-        </div>
       </section>
 
       {categoria && (
@@ -786,6 +780,9 @@ export default function AdminDrilldownClient({
                         <p className="text-xs text-neutral-500">
                           {new Date(r.dataInicio + "T00:00:00").toLocaleDateString("pt-BR")} até{" "}
                           {fim.toLocaleDateString("pt-BR")} ({r.previsaoDias} dia(s) previsto(s))
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          Deslocamento: {meioLabel(r.meioDeslocamento, r.meioDeslocamentoOutroDesc)}
                         </p>
                         {(r.organizadorNome || r.organizadorTelefone) && (
                           <p className="text-xs text-neutral-500">

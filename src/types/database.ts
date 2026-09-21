@@ -11,7 +11,7 @@ export type Motivo =
 export type StatusPeregrinacao = "planejada" | "em_andamento" | "concluida" | "cancelada";
 export type StatusGerentePap = "pendente" | "aprovado" | "rejeitado";
 export type StatusAprovacaoPap = "pendente" | "aprovado" | "rejeitado";
-export type MeioTransporte = "a_pe" | "bicicleta" | "outros";
+export type MeioTransporte = "a_pe" | "bicicleta" | "moto" | "outros";
 export type SentidoPista = "sp" | "rj";
 export type Br = "116" | "488";
 export type LadoRodovia =
@@ -416,6 +416,8 @@ export interface RomariaGrupo {
   exibir_organizador: boolean;
   organizador_telefone: string | null;
   exibir_telefone: boolean;
+  meio_deslocamento: MeioTransporte;
+  meio_deslocamento_outro_desc: string | null;
   status: StatusRomariaGrupo;
   observacao_admin: string | null;
   criado_em: string;

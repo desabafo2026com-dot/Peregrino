@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { UsersRound, Clock, CheckCircle2, XCircle } from "lucide-react";
-import { STATUS_ROMARIA_GRUPO_LABELS } from "@/lib/constants";
-import type { RomariaGrupo } from "@/types/database";
+import { STATUS_ROMARIA_GRUPO_LABELS, MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
+import type { RomariaGrupo, MeioTransporte } from "@/types/database";
 
 interface Props {
   userId: string;
@@ -26,6 +26,8 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
   const [quantidade, setQuantidade] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [previsaoDias, setPrevisaoDias] = useState("1");
+  const [meioDeslocamento, setMeioDeslocamento] = useState<MeioTransporte>("a_pe");
+  const [meioDeslocamentoOutro, setMeioDeslocamentoOutro] = useState("");
   const [organizadorNome, setOrganizadorNome] = useState("");
   const [exibirOrganizador, setExibirOrganizador] = useState(false);
   const [organizadorTelefone, setOrganizadorTelefone] = useState("");
@@ -41,6 +43,10 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
       setErro("Preencha nome, cidade de origem, quantidade, data de início e previsão de dias.");
       return;
     }
+    if (meioDeslocamento === "outros" && !meioDeslocamentoOutro.trim()) {
+      setErro("Especifique o meio de deslocamento.");
+      return;
+    }
     setLoading(true);
     const supabase = createClient();
     const { data, error } = await supabase
@@ -52,6 +58,8 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
         quantidade: Number(quantidade),
         data_inicio: dataInicio,
         previsao_dias: Number(previsaoDias),
+        meio_deslocamento: meioDeslocamento,
+        meio_deslocamento_outro_desc: meioDeslocamento === "outros" ? meioDeslocamentoOutro.trim() || null : null,
         organizador_nome: organizadorNome.trim() || null,
         exibir_organizador: exibirOrganizador,
         organizador_telefone: organizadorTelefone.trim() || null,
@@ -71,6 +79,8 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
     setQuantidade("");
     setDataInicio("");
     setPrevisaoDias("1");
+    setMeioDeslocamento("a_pe");
+    setMeioDeslocamentoOutro("");
     setOrganizadorNome("");
     setExibirOrganizador(false);
     setOrganizadorTelefone("");
@@ -141,6 +151,32 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
               onChange={(e) => setPrevisaoDias(e.target.value)}
             />
           </div>
+          <div>
+            <label className="label">Meio de deslocamento</label>
+            <select
+              className="input"
+              value={meioDeslocamento}
+              onChange={(e) => setMeioDeslocamento(e.target.value as MeioTransporte)}
+            >
+              {MEIO_TRANSPORTE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {meioDeslocamento === "outros" && (
+            <div>
+              <label className="label">Especifique o meio de deslocamento</label>
+              <input
+                required
+                className="input"
+                value={meioDeslocamentoOutro}
+                onChange={(e) => setMeioDeslocamentoOutro(e.target.value)}
+                placeholder="Ex: cavalo, trator..."
+              />
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
@@ -208,6 +244,12 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
                   {r.cidade_origem} — {r.quantidade} pessoa(s) —{" "}
                   {new Date(r.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")} ({r.previsao_dias}{" "}
                   dia(s))
+                </p>
+                <p className="text-xs text-neutral-500">
+                  Deslocamento:{" "}
+                  {r.meio_deslocamento === "outros"
+                    ? r.meio_deslocamento_outro_desc || "outro meio de deslocamento"
+                    : MEIO_TRANSPORTE_LABELS[r.meio_deslocamento] ?? r.meio_deslocamento}
                 </p>
                 <p className={`text-xs font-medium ${STATUS_COLOR[r.status]}`}>
                   {STATUS_ROMARIA_GRUPO_LABELS[r.status] ?? r.status}

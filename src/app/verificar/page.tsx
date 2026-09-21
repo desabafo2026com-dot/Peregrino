@@ -19,7 +19,7 @@ interface Resultado {
   valido: boolean;
 }
 
-const MEIO_LABEL: Record<string, string> = { a_pe: "a pé", bicicleta: "de bicicleta", outros: "outro meio de transporte" };
+const MEIO_LABEL: Record<string, string> = { a_pe: "a pé", bicicleta: "de bicicleta", moto: "de moto", outros: "outro meio de transporte" };
 
 export default function VerificarPage() {
   const [codigo, setCodigo] = useState("");
