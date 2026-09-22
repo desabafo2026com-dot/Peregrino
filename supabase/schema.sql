@@ -3071,3 +3071,84 @@ $$;
 grant execute on function public.liberar_certificado_manualmente(uuid) to authenticated;
 
 -- FIM DA MIGRATION 32
+
+-- ---------------------------------------------------------------------
+-- MIGRATION 33 (Rodada 30) — pacote extra de +5 fotos da Romaria Plus.
+-- A pedido do usuário: "criar uma opção de compra de +5 artes de fotos por
+-- R$ 9,90 mas a opção só fica disponível após o usuário completar as 5 que
+-- ele adquiriu junto ao certificado plus". Reaproveita a mesma compra
+-- "inicial" (compras_romaria_plus) e a mesma galeria (romaria_plus_fotos) —
+-- uma compra "extra" só destrava mais índices na mesma galeria, em vez de
+-- criar uma compra/galeria paralela.
+-- ---------------------------------------------------------------------
+
+alter table public.compras_romaria_plus add column if not exists tipo text not null default 'inicial';
+alter table public.compras_romaria_plus
+  drop constraint if exists compras_romaria_plus_tipo_check;
+alter table public.compras_romaria_plus
+  add constraint compras_romaria_plus_tipo_check check (tipo in ('inicial', 'extra'));
+
+alter table public.compras_romaria_plus
+  add column if not exists compra_pai_id uuid references public.compras_romaria_plus(id);
+
+comment on column public.compras_romaria_plus.tipo is 'Rodada 30: "inicial" é a compra do Certificado Plus (5 fotos); "extra" é um pacote avulso de +5 fotos comprado depois, sempre vinculado a uma "inicial" já paga via compra_pai_id.';
+comment on column public.compras_romaria_plus.compra_pai_id is 'Só preenchido quando tipo=''extra'' — aponta para a compra "inicial" cuja galeria de fotos este pacote extra está ampliando.';
+
+-- O índice de uma foto não fica mais travado em 1-5 — o teto de verdade
+-- (5 + 5 por pacote extra pago) é aplicado dentro de
+-- salvar_foto_romaria_plus_slot abaixo, que consegue consultar quantos
+-- pacotes extra já foram pagos (uma CHECK constraint sozinha não consegue
+-- fazer essa subconsulta).
+alter table public.romaria_plus_fotos
+  drop constraint if exists romaria_plus_fotos_indice_check;
+alter table public.romaria_plus_fotos
+  add constraint romaria_plus_fotos_indice_check check (indice >= 1);
+
+create or replace function public.salvar_foto_romaria_plus_slot(
+  p_compra_id uuid,
+  p_indice int,
+  p_foto_url text,
+  p_modelo text,
+  p_ajuste_overlay jsonb default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_pacotes_extra int;
+  v_max_permitido int;
+begin
+  select user_id into v_user_id
+  from public.compras_romaria_plus
+  where id = p_compra_id and user_id = auth.uid() and status = 'pago' and tipo = 'inicial';
+
+  if v_user_id is null then
+    raise exception 'compra não encontrada, não paga, ou não pertence a este usuário';
+  end if;
+
+  select count(*) into v_pacotes_extra
+  from public.compras_romaria_plus
+  where compra_pai_id = p_compra_id and status = 'pago' and tipo = 'extra';
+
+  v_max_permitido := 5 + 5 * v_pacotes_extra;
+
+  if p_indice < 1 or p_indice > v_max_permitido then
+    raise exception 'índice % fora do limite permitido para esta compra (máximo %)', p_indice, v_max_permitido;
+  end if;
+
+  insert into public.romaria_plus_fotos (compra_id, user_id, indice, foto_url, modelo, ajuste_overlay)
+  values (p_compra_id, v_user_id, p_indice, p_foto_url, p_modelo, p_ajuste_overlay)
+  on conflict (compra_id, indice) do update
+    set foto_url = excluded.foto_url,
+        modelo = excluded.modelo,
+        ajuste_overlay = excluded.ajuste_overlay,
+        atualizado_em = now();
+end;
+$$;
+
+grant execute on function public.salvar_foto_romaria_plus_slot(uuid, int, text, text, jsonb) to authenticated;
+
+-- FIM DA MIGRATION 33
