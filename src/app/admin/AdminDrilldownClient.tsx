@@ -234,7 +234,14 @@ function Card({
     >
       <Icon className="text-amber-700" size={20} />
       <p className="text-2xl font-bold text-amber-800 dark:text-amber-500">{value}</p>
-      <p className="text-xs text-neutral-500">{label}</p>
+      {/* textAlign inline (Rodada 29): mesmo bug de CSS da Rodada 28 (regra
+          global "p { text-align: justify }" sem @layer, que vence qualquer
+          utilitário Tailwind) — só ficava visível nos rótulos mais longos
+          ("Concluídas com sucesso"/"Concluídas sem sucesso"), que quebram em
+          duas linhas dentro do card. */}
+      <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+        {label}
+      </p>
     </button>
   );
 }

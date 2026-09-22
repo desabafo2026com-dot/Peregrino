@@ -98,16 +98,24 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean }[] = [
 
 // Frase do título (Rodada 28, a pedido do usuário) — antes era sempre
 // "Romaria para Aparecida", fixo em todos os modelos. Agora o peregrino
-// escolhe entre 3 frases, independente do modelo (igual ao ajuste de
-// foto/zoom) — "peregrinacao" é o padrão, no lugar do texto antigo (trocado
-// de "Romaria" para "Peregrinação", já que "Romaria" virou o nome da
-// funcionalidade de romarias em grupo).
-type FraseTitulo = "peregrinacao" | "venci" | "gracas";
-const FRASES_TITULO: { id: FraseTitulo; nome: string; texto: string }[] = [
-  { id: "peregrinacao", nome: "Peregrinação", texto: "Peregrinação para Aparecida" },
+// escolhe a frase, independente do modelo (igual ao ajuste de foto/zoom) —
+// "peregrinacao" é o padrão, no lugar do texto antigo (trocado de "Romaria"
+// para "Peregrinação", já que "Romaria" virou o nome da funcionalidade de
+// romarias em grupo). Rodada 29: duas frases novas ("comigo"/"obrigado") e
+// uma opção "personalizada" (texto == null aqui; o texto real digitado fica
+// em ajuste.fraseCustom — ver tituloTexto abaixo). O ano ao lado da frase
+// continua sempre fixo (o da conclusão), sem opção de mudar, em qualquer
+// escolha.
+type FraseTitulo = "peregrinacao" | "venci" | "gracas" | "comigo" | "obrigado" | "personalizada";
+const FRASES_TITULO: { id: FraseTitulo; nome: string; texto: string | null }[] = [
+  { id: "peregrinacao", nome: "Peregrinação para Aparecida", texto: "Peregrinação para Aparecida" },
   { id: "venci", nome: "Eu fui e venci!", texto: "Eu fui e venci!" },
   { id: "gracas", nome: "Graças alcançadas!", texto: "Graças alcançadas!" },
+  { id: "comigo", nome: "Ela caminhou comigo!", texto: "Ela caminhou comigo!" },
+  { id: "obrigado", nome: "Obrigado, Nossa Senhora Aparecida!", texto: "Obrigado, Nossa Senhora Aparecida!" },
+  { id: "personalizada", nome: "Digitar minha frase...", texto: null },
 ];
+const FRASE_CUSTOM_MAX = 42;
 
 const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   classico: { x: 50, y: 80, escala: 100 },
@@ -495,8 +503,13 @@ export default function RomariaPlusView({
   // saiu até Aparecida-SP.
   const origem = c.origem;
   // Frase do título escolhida (ver FRASES_TITULO acima) — guardada dentro do
-  // próprio ajuste, igual a fotoPos/fotoEscala, independente do modelo.
-  const tituloTexto = FRASES_TITULO.find((f) => f.id === (ajuste.frase ?? "peregrinacao"))!.texto;
+  // próprio ajuste, igual a fotoPos/fotoEscala, independente do modelo. Na
+  // opção "personalizada" o texto de verdade vem de ajuste.fraseCustom (com
+  // uma frase padrão de reserva caso a pessoa ainda não tenha digitado nada).
+  const fraseSelecionada =
+    FRASES_TITULO.find((f) => f.id === (ajuste.frase ?? "peregrinacao")) ?? FRASES_TITULO[0];
+  const tituloTexto =
+    fraseSelecionada.texto ?? (ajuste.fraseCustom?.trim() || FRASES_TITULO[0].texto!);
 
   // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo e o
   // ajuste de posição/tamanho escolhidos, via a função segura
@@ -563,7 +576,13 @@ export default function RomariaPlusView({
     // daquele modelo — o reposicionamento/zoom da foto (fotoPos/fotoEscala)
     // é independente do modelo e continua do jeito que a pessoa deixou.
     const novoAjuste: AjusteOverlayRomariaPlus = padraoTexto
-      ? { ...padraoTexto, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala, frase: ajuste.frase }
+      ? {
+          ...padraoTexto,
+          fotoPos: ajuste.fotoPos,
+          fotoEscala: ajuste.fotoEscala,
+          frase: ajuste.frase,
+          fraseCustom: ajuste.fraseCustom,
+        }
       : ajuste;
     setAjuste(novoAjuste);
     if (fotoUrl) void persistirFoto(m, novoAjuste);
@@ -571,7 +590,13 @@ export default function RomariaPlusView({
 
   function centralizarAjuste() {
     const padrao = AJUSTE_PADRAO[modelo] ?? { x: 50, y: 80, escala: 100 };
-    const novoAjuste = { ...padrao, fotoPos: ajuste.fotoPos, fotoEscala: ajuste.fotoEscala, frase: ajuste.frase };
+    const novoAjuste = {
+      ...padrao,
+      fotoPos: ajuste.fotoPos,
+      fotoEscala: ajuste.fotoEscala,
+      frase: ajuste.frase,
+      fraseCustom: ajuste.fraseCustom,
+    };
     setAjuste(novoAjuste);
     void persistirFoto(modelo, novoAjuste);
   }
@@ -583,6 +608,15 @@ export default function RomariaPlusView({
     const novoAjuste = { ...ajuste, frase: f };
     setAjuste(novoAjuste);
     void persistirFoto(modelo, novoAjuste);
+  }
+
+  // Frase digitada livremente (Rodada 29, a pedido do usuário) — debounce
+  // igual ao arraste de foto/texto, pra não mandar uma chamada ao servidor a
+  // cada letra digitada.
+  function digitarFraseCustom(texto: string) {
+    const novoAjuste = { ...ajuste, frase: "personalizada" as FraseTitulo, fraseCustom: texto };
+    setAjuste(novoAjuste);
+    agendarPersistirAjuste(novoAjuste);
   }
 
   // Reposicionamento/zoom da FOTO (Rodada 23) — independente do painel de
@@ -810,41 +844,57 @@ export default function RomariaPlusView({
         </div>
       ) : (
         <>
+          {/* Rodada 29: os seletores de modelo e de frase eram fileiras de
+              botões (um por opção) — com 6 modelos e 6 frases isso ficava
+              poluído e ocupava muito espaço vertical. A pedido do usuário,
+              viraram duas listas suspensas ("cortina"), lado a lado. */}
           {!finalizado && (
-            <div className="flex flex-wrap justify-center gap-2">
-              {MODELOS.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => escolherModelo(m.id)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
-                    modelo === m.id
-                      ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
-                      : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-                  }`}
+            <div className="flex flex-wrap items-start justify-center gap-3">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="modelo-romaria-plus" className="text-xs font-medium text-neutral-500">
+                  Modelo da arte
+                </label>
+                <select
+                  id="modelo-romaria-plus"
+                  value={modelo}
+                  onChange={(e) => escolherModelo(e.target.value as Modelo)}
+                  className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
                 >
-                  {m.nome}
-                </button>
-              ))}
-            </div>
-          )}
+                  {MODELOS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          {!finalizado && (
-            <div className="flex flex-wrap justify-center gap-2">
-              {FRASES_TITULO.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => escolherFrase(f.id)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
-                    (ajuste.frase ?? "peregrinacao") === f.id
-                      ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
-                      : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-                  }`}
+              <div className="flex flex-col gap-1">
+                <label htmlFor="frase-romaria-plus" className="text-xs font-medium text-neutral-500">
+                  Frase do título
+                </label>
+                <select
+                  id="frase-romaria-plus"
+                  value={ajuste.frase ?? "peregrinacao"}
+                  onChange={(e) => escolherFrase(e.target.value as FraseTitulo)}
+                  className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
                 >
-                  {f.nome}
-                </button>
-              ))}
+                  {FRASES_TITULO.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+                {(ajuste.frase ?? "peregrinacao") === "personalizada" && (
+                  <input
+                    type="text"
+                    value={ajuste.fraseCustom ?? ""}
+                    onChange={(e) => digitarFraseCustom(e.target.value)}
+                    maxLength={FRASE_CUSTOM_MAX}
+                    placeholder="Digite sua frase"
+                    className="mt-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+                  />
+                )}
+              </div>
             </div>
           )}
 
@@ -935,8 +985,36 @@ export default function RomariaPlusView({
                     onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   />
                 </div>
+                {/* Trajeto do "Itinerário" (Rodada 27) repetido aqui, logo
+                    abaixo da foto — a pedido do usuário na Rodada 29
+                    ("o itinerário pode colocar também no modelo foto em
+                    destaque, logo abaixo"). Mesma curva esquemática, só que
+                    reduzida pra caber no espaço já ocupado pela foto/dados. */}
+                <div className="mt-[3%] w-[85%] text-white/85">
+                  <svg viewBox="0 0 100 22" className="w-full" style={{ opacity: 0.85 }}>
+                    <path
+                      d="M8,17 C32,20 40,3 60,6 C74,8 80,2 92,5"
+                      fill="none"
+                      stroke="white"
+                      strokeOpacity="0.65"
+                      strokeWidth="1.6"
+                      strokeDasharray="3,3.2"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="8" cy="17" r="3.2" fill="white" fillOpacity="0.9" />
+                    <circle cx="92" cy="5" r="3.6" fill="#fbbf24" fillOpacity="0.95" />
+                  </svg>
+                  <div className="mt-[1%] flex items-start justify-between" style={{ fontSize: "2.6cqw" }}>
+                    <span className="flex max-w-[45%] items-center gap-1 text-left">
+                      <Footprints size={13} className="mt-0.5 shrink-0" /> {origem ?? "Início"}
+                    </span>
+                    <span className="flex max-w-[45%] items-center gap-1 text-right text-stripe-400">
+                      <Church size={13} className="mt-0.5 shrink-0" /> Aparecida-SP
+                    </span>
+                  </div>
+                </div>
                 <div
-                  className="mt-[6%] flex w-full flex-col gap-[3%] rounded-xl bg-white/10 py-[4%] backdrop-blur-sm"
+                  className="mt-[3%] flex w-full flex-col gap-[3%] rounded-xl bg-white/10 py-[4%] backdrop-blur-sm"
                   style={{ fontSize: "3.4cqw" }}
                 >
                   <div className="flex items-center justify-center gap-[6%]">
@@ -957,7 +1035,7 @@ export default function RomariaPlusView({
                     )}
                   </div>
                 </div>
-                <div className="mt-auto flex w-full items-center justify-center gap-[10%] pt-[6%]">{simbolos}</div>
+                <div className="mt-auto flex w-full items-center justify-center gap-[10%] pt-[4%]">{simbolos}</div>
               </div>
             )}
 

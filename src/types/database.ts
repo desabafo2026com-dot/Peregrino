@@ -318,8 +318,12 @@ export interface AjusteOverlayRomariaPlus {
   // ajuste de foto, independente do modelo escolhido. "peregrinacao" é o
   // padrão e substitui o texto antigo ("Peregrinação para Aparecida" no
   // lugar de "Romaria para Aparecida", já que "Romaria" agora é o nome da
-  // funcionalidade de romarias em grupo).
-  frase?: "peregrinacao" | "venci" | "gracas";
+  // funcionalidade de romarias em grupo). Rodada 29: mais duas frases prontas
+  // ("comigo"/"obrigado") e uma opção "personalizada" (texto livre digitado
+  // pelo peregrino, guardado em fraseCustom) — o ano exibido continua sempre
+  // fixo (o da conclusão), sem opção de mudar, em qualquer frase.
+  frase?: "peregrinacao" | "venci" | "gracas" | "comigo" | "obrigado" | "personalizada";
+  fraseCustom?: string;
 }
 
 // Compra do produto pago "Romaria Plus" (arte personalizada para
