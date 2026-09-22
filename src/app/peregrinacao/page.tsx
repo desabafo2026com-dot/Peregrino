@@ -50,25 +50,56 @@ export default async function PeregrinacaoPage() {
     );
   }
 
-  const { data: peregrinacao } = await supabase
-    .from("peregrinacoes")
-    .select("*")
-    .eq("user_id", user.id)
-    .in("status", ["planejada", "em_andamento"])
-    .order("criado_em", { ascending: false })
-    .maybeSingle();
-
-  const { data: concluidasData } = await supabase
-    .from("peregrinacoes")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("status", "concluida")
-    .order("data_fim", { ascending: false });
-
-  const { data: certificadosData } = await supabase
-    .from("certificados")
-    .select("id, peregrinacao_id")
-    .eq("user_id", user.id);
+  // As seis consultas abaixo são todas independentes entre si (nenhuma usa
+  // o resultado de outra) — antes rodavam uma de cada vez, em sequência,
+  // e cada ida-e-volta ao banco soma seu tempo de rede ao carregamento
+  // desta página, que é a mais visitada do app. Rodando juntas num só
+  // Promise.all elas saem ao mesmo tempo (Rodada 30, a pedido do usuário
+  // sobre o site/iPhone estarem "meio lentos" — sem mudar nenhum dado
+  // retornado, só o tempo até ele chegar).
+  const hoje = new Date();
+  const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(
+    hoje.getDate()
+  ).padStart(2, "0")}`;
+  const [
+    { data: peregrinacao },
+    { data: concluidasData },
+    { data: certificadosData },
+    { data: pontosApoio },
+    { data: rotas },
+    { data: todosPontosCheckinData },
+  ] = await Promise.all([
+    supabase
+      .from("peregrinacoes")
+      .select("*")
+      .eq("user_id", user.id)
+      .in("status", ["planejada", "em_andamento"])
+      .order("criado_em", { ascending: false })
+      .maybeSingle(),
+    supabase
+      .from("peregrinacoes")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "concluida")
+      .order("data_fim", { ascending: false }),
+    supabase.from("certificados").select("id, peregrinacao_id").eq("user_id", user.id),
+    // PAPs ativos hoje (para o módulo de mapa em "Minha peregrinação") — só
+    // entram os que estão marcados como ativos, aprovados e com a data de
+    // hoje no calendário de funcionamento.
+    supabase
+      .from("pontos_apoio")
+      .select("*")
+      .eq("ativo", true)
+      .eq("status_aprovacao", "aprovado")
+      .contains("datas_funcionamento", [hojeISO]),
+    supabase.from("rotas").select("*").order("ordem"),
+    // Todos os pontos de check-in de todas as rotas — usados tanto para a
+    // lista "Cidade de início na Dutra" do formulário de planejamento
+    // quanto, já filtrados pela cidade de início escolhida, para a
+    // caminhada ativa.
+    supabase.from("pontos_checkin").select("*").order("ordem"),
+  ]);
+  const todosPontosCheckin = (todosPontosCheckinData ?? []) as PontoCheckin[];
 
   // Mapa peregrinacao_id -> certificado_id — usado tanto para "Ver
   // certificado" quanto para o link do Certificado Plus (Rodada 16, movido
@@ -100,31 +131,6 @@ export default async function PeregrinacaoPage() {
       : false,
   }));
 
-  // PAPs ativos hoje (para o módulo de mapa em "Minha peregrinação") — só
-  // entram os que estão marcados como ativos, aprovados e com a data de
-  // hoje no calendário de funcionamento.
-  const hoje = new Date();
-  const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(
-    hoje.getDate()
-  ).padStart(2, "0")}`;
-  const { data: pontosApoio } = await supabase
-    .from("pontos_apoio")
-    .select("*")
-    .eq("ativo", true)
-    .eq("status_aprovacao", "aprovado")
-    .contains("datas_funcionamento", [hojeISO]);
-
-  const { data: rotas } = await supabase.from("rotas").select("*").order("ordem");
-
-  // Todos os pontos de check-in de todas as rotas — usados tanto para a
-  // lista "Cidade de início na Dutra" do formulário de planejamento quanto,
-  // já filtrados pela cidade de início escolhida, para a caminhada ativa.
-  const { data: todosPontosCheckinData } = await supabase
-    .from("pontos_checkin")
-    .select("*")
-    .order("ordem");
-  const todosPontosCheckin = (todosPontosCheckinData ?? []) as PontoCheckin[];
-
   let checkinsCount = 0;
   let pontosCheckin: PontoCheckin[] = [];
   let checkinsFeitosIds: string[] = [];
@@ -138,11 +144,9 @@ export default async function PeregrinacaoPage() {
   let avisos: RiscoInformado[] = [];
 
   if (peregrinacao) {
-    const { count } = await supabase
-      .from("checkins")
-      .select("id", { count: "exact", head: true })
-      .eq("peregrinacao_id", peregrinacao.id);
-    checkinsCount = count ?? 0;
+    const rotaAtual = peregrinacao.rota_id
+      ? ((rotas ?? []) as Rota[]).find((r) => r.id === peregrinacao.rota_id)
+      : undefined;
 
     if (peregrinacao.rota_id) {
       const pontosRota = todosPontosCheckin.filter((p) => p.rota_id === peregrinacao.rota_id);
@@ -150,25 +154,47 @@ export default async function PeregrinacaoPage() {
         ? (pontosRota.find((p) => p.cidade === peregrinacao.cidade_inicio)?.ordem ?? 1)
         : 1;
       pontosCheckin = pontosRota.filter((p) => p.ordem >= ordemInicio);
+    }
 
-      const rotaAtual = ((rotas ?? []) as Rota[]).find((r) => r.id === peregrinacao.rota_id);
-      const [{ data: todosRiscos }, { data: avisosData }] = await Promise.all([
-        supabase.from("pontos_risco").select("*"),
-        // A RLS sozinha não basta para filtrar isto: além da política
-        // pública por tempo (migration 17/26), existe uma política separada
-        // que dá acesso irrestrito a quem enviou o relato e a
-        // administradores — então uma conta de admin, ou a própria autora
-        // de um aviso antigo, receberia de volta linhas que já deveriam ter
-        // expirado para o público. `avisoVisivelPublicamente` reaplica a
-        // mesma regra de visibilidade aqui no app (Rodada 21) para este
-        // mapa mostrar sempre o que qualquer peregrino veria, não o que a
-        // conta logada tem permissão de enxergar por outro motivo.
-        supabase
-          .from("riscos_informados")
-          .select("*")
-          .or(`rota_id.eq.${peregrinacao.rota_id},rota_id.is.null`)
-          .order("criado_em", { ascending: false }),
-      ]);
+    // De novo, três consultas independentes entre si (a contagem de
+    // check-ins, os riscos/avisos da rota atual, e a lista de check-ins já
+    // feitos) — juntas num só Promise.all em vez de uma atrás da outra
+    // (Rodada 30).
+    const [{ count }, riscosResultado, { data: feitos }] = await Promise.all([
+      supabase
+        .from("checkins")
+        .select("id", { count: "exact", head: true })
+        .eq("peregrinacao_id", peregrinacao.id),
+      peregrinacao.rota_id
+        ? Promise.all([
+            supabase.from("pontos_risco").select("*"),
+            // A RLS sozinha não basta para filtrar isto: além da política
+            // pública por tempo (migration 17/26), existe uma política
+            // separada que dá acesso irrestrito a quem enviou o relato e a
+            // administradores — então uma conta de admin, ou a própria
+            // autora de um aviso antigo, receberia de volta linhas que já
+            // deveriam ter expirado para o público. `avisoVisivelPublicamente`
+            // reaplica a mesma regra de visibilidade aqui no app (Rodada 21)
+            // para este mapa mostrar sempre o que qualquer peregrino veria,
+            // não o que a conta logada tem permissão de enxergar por outro
+            // motivo.
+            supabase
+              .from("riscos_informados")
+              .select("*")
+              .or(`rota_id.eq.${peregrinacao.rota_id},rota_id.is.null`)
+              .order("criado_em", { ascending: false }),
+          ])
+        : Promise.resolve(null),
+      supabase
+        .from("checkins")
+        .select("ponto_checkin_id")
+        .eq("peregrinacao_id", peregrinacao.id)
+        .not("ponto_checkin_id", "is", null),
+    ]);
+    checkinsCount = count ?? 0;
+
+    if (riscosResultado) {
+      const [{ data: todosRiscos }, { data: avisosData }] = riscosResultado;
       pontosRisco = rotaAtual
         ? ((todosRiscos ?? []) as PontoRisco[]).filter((r) =>
             r.km_referencia != null
@@ -179,11 +205,6 @@ export default async function PeregrinacaoPage() {
       avisos = ((avisosData ?? []) as RiscoInformado[]).filter(avisoVisivelPublicamente);
     }
 
-    const { data: feitos } = await supabase
-      .from("checkins")
-      .select("ponto_checkin_id")
-      .eq("peregrinacao_id", peregrinacao.id)
-      .not("ponto_checkin_id", "is", null);
     checkinsFeitosIds = (feitos ?? [])
       .map((f) => f.ponto_checkin_id as string | null)
       .filter((v): v is string => !!v);

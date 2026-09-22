@@ -324,6 +324,9 @@ export interface AjusteOverlayRomariaPlus {
   // fixo (o da conclusão), sem opção de mudar, em qualquer frase.
   frase?: "peregrinacao" | "venci" | "gracas" | "comigo" | "obrigado" | "personalizada";
   fraseCustom?: string;
+  // Transparência do fundo escurecido do "Selo de conquista" (Rodada 30) —
+  // 0 a 100, quanto maior mais a foto aparece por trás do selo/texto.
+  transparencia?: number;
 }
 
 // Compra do produto pago "Romaria Plus" (arte personalizada para
@@ -362,6 +365,13 @@ export interface CompraRomariaPlus {
   // Posição/tamanho customizados do texto, só relevante para "classico" e
   // "painel" (Rodada 17) — null usa a posição padrão do modelo.
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
+  // Rodada 30: "inicial" é a compra do Certificado Plus (5 fotos, como
+  // sempre foi); "extra" é um pacote de +5 fotos comprado depois, avulso,
+  // sempre vinculado a uma compra "inicial" já paga (compra_pai_id). O
+  // limite de fotos de uma compra "inicial" é 5 + 5 × (pacotes extra pagos
+  // vinculados a ela) — ver salvar_foto_romaria_plus_slot no banco.
+  tipo: "inicial" | "extra";
+  compra_pai_id: string | null;
 }
 
 // Uma das até 5 artes/fotos que um peregrino com Romaria Plus pode criar

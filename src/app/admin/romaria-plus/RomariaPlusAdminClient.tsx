@@ -8,6 +8,9 @@ export interface CompraComCertificado
   extends Pick<CompraRomariaPlus, "id" | "criado_em" | "pago_em"> {
   certificados: { nome_peregrino: string; codigo: string } | null;
   quantidadeFotos?: number;
+  // Quantos pacotes extra de +5 fotos (Rodada 30) esta compra já tem pagos
+  // — muda o "de quantas" no card (5, 10, 15...).
+  pacotesExtra?: number;
 }
 
 // Lista de admin com o registro de quem adquiriu o Certificado Plus + arte
@@ -17,7 +20,7 @@ export interface CompraComCertificado
 export default function RomariaPlusAdminClient({
   comprasIniciais,
 }: {
-  comprasIniciais: (CompraComCertificado & { quantidadeFotos: number })[];
+  comprasIniciais: (CompraComCertificado & { quantidadeFotos: number; pacotesExtra: number })[];
 }) {
   const [busca, setBusca] = useState("");
 
@@ -54,8 +57,14 @@ export default function RomariaPlusAdminClient({
               Pago em: {c.pago_em ? new Date(c.pago_em).toLocaleDateString("pt-BR") : "-"}
             </p>
             <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-500">
-              <Images size={13} /> {c.quantidadeFotos ?? 0} de 5 fotos criadas
+              <Images size={13} /> {c.quantidadeFotos ?? 0} de {5 + 5 * (c.pacotesExtra ?? 0)} fotos criadas
             </p>
+            {c.pacotesExtra > 0 && (
+              <p className="text-xs text-neutral-500">
+                + {c.pacotesExtra} pacote{c.pacotesExtra > 1 ? "s" : ""} extra de fotos comprado
+                {c.pacotesExtra > 1 ? "s" : ""}
+              </p>
+            )}
           </div>
         ))}
         {filtradas.length === 0 && <p className="text-sm text-neutral-400">Nenhum resultado.</p>}

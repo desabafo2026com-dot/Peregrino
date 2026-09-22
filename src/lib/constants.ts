@@ -309,6 +309,12 @@ export const NIVEL_RISCO_LABELS: Record<number, string> = {
 
 export const ROMARIA_PLUS_VALOR_CENTAVOS = 1490;
 
+// Pacote de +5 fotos extras (Rodada 30, a pedido do usuário) — só fica
+// disponível depois que o peregrino já usou as 5 fotos da compra inicial
+// (ver ROMARIA_PLUS_FOTOS_POR_PACOTE e a lógica em RomariaPlusFotos.tsx).
+export const ROMARIA_PLUS_EXTRA_FOTOS_VALOR_CENTAVOS = 990;
+export const ROMARIA_PLUS_FOTOS_POR_PACOTE = 5;
+
 export const STATUS_COMPRA_ROMARIA_PLUS_LABELS: Record<string, string> = {
   pendente: "Pagamento em processamento",
   pago: "Pago",

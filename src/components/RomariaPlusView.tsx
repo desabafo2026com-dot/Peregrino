@@ -87,14 +87,24 @@ function formatarTempoCompacto(inicio: string | null, fim: string | null) {
 // "itinerario" e "selo" (Rodada 27, fase 1 de uma leva maior de modelos
 // novos) também têm o texto/gráfico numa posição fixa própria do layout —
 // sem editor de posição por enquanto, para entregar o essencial primeiro.
+// Rodada 30: "itinerario" e "selo" ganharam temAjuste=true (a pedido do
+// usuário — "tem que ter como movimentar e dimensionar") e agora usam o
+// mesmo PainelAjustavel de classico/painel para o bloco de texto/gráfico.
 const MODELOS: { id: Modelo; nome: string; temAjuste: boolean }[] = [
   { id: "classico", nome: "Clássico", temAjuste: true },
   { id: "destaque", nome: "Foto em destaque", temAjuste: false },
   { id: "painel", nome: "Painel flutuante", temAjuste: true },
   { id: "moldura", nome: "Moldura dourada", temAjuste: false },
-  { id: "itinerario", nome: "Itinerário", temAjuste: false },
-  { id: "selo", nome: "Selo de conquista", temAjuste: false },
+  { id: "itinerario", nome: "Itinerário", temAjuste: true },
+  { id: "selo", nome: "Selo de conquista", temAjuste: true },
 ];
+
+// Transparência do fundo escurecido do "Selo de conquista" (Rodada 30, a
+// pedido do usuário — "tem que... deixar mais transparente"): 0 = bem
+// escuro (como era fixo antes), 100 = foto bem visível. Controla tanto a
+// opacidade da própria foto quanto a intensidade do gradiente escuro por
+// cima dela, já que os dois juntos é que determinam quanto da foto aparece.
+const TRANSPARENCIA_SELO_PADRAO = 40;
 
 // Frase do título (Rodada 28, a pedido do usuário) — antes era sempre
 // "Romaria para Aparecida", fixo em todos os modelos. Agora o peregrino
@@ -122,8 +132,10 @@ const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   destaque: null,
   painel: { x: 50, y: 78, escala: 100 },
   moldura: null,
-  itinerario: null,
-  selo: null,
+  // itinerario/selo (Rodada 30): título+gráfico/medalha+dados agora são um
+  // bloco único arrastável/redimensionável, centralizado por padrão.
+  itinerario: { x: 50, y: 55, escala: 100 },
+  selo: { x: 50, y: 56, escala: 100 },
 };
 
 // Posição/zoom padrão da FOTO em si dentro do recorte de cada modelo (Rodada
@@ -202,7 +214,16 @@ function PainelAjustavel({
 
   return (
     <div
-      className={`absolute ${editando ? "cursor-grab rounded-2xl outline-dashed outline-2 outline-white/80 active:cursor-grabbing" : ""} ${className ?? ""}`}
+      // pointer-events-none quando !editando (Rodada 30): sem isso, este
+      // painel — mesmo sem nada clicável quando não está em modo de
+      // edição — ainda fica por cima da camada de arraste da FOTO
+      // (FotoAjustavel, mais cedo no DOM) em toda a área que ocupa,
+      // bloqueando o gesto de arrastar a foto sempre que o dedo/cursor
+      // passa por cima do texto. Era exatamente o bug do "Selo de
+      // conquista" na Rodada 28 (ali corrigido manualmente); aqui vira a
+      // regra geral do componente, já que agora "Itinerário" e "Selo"
+      // também usam este mesmo painel arrastável/redimensionável.
+      className={`absolute ${editando ? "cursor-grab rounded-2xl outline-dashed outline-2 outline-white/80 active:cursor-grabbing" : "pointer-events-none"} ${className ?? ""}`}
       style={{
         left: `${ajuste.x}%`,
         top: `${ajuste.y}%`,
@@ -315,6 +336,7 @@ function FotoComPanZoom({
   onSoltarArraste,
   className,
   imgClassName,
+  imgOpacidade,
 }: {
   src: string;
   fotoPos: { x: number; y: number };
@@ -324,6 +346,13 @@ function FotoComPanZoom({
   onSoltarArraste: () => void;
   className?: string;
   imgClassName?: string;
+  // Opacidade numérica (0 a 1) aplicada via inline style, não via classe
+  // Tailwind (Rodada 30, controle de transparência do "Selo de conquista")
+  // — como o valor varia continuamente conforme o slider da pessoa, uma
+  // classe como `opacity-[0.53]` não funcionaria: o Tailwind só gera CSS
+  // para classes que aparecem literalmente no código-fonte, não para
+  // strings montadas em tempo de execução.
+  imgOpacidade?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tamanhoContainer, setTamanhoContainer] = useState<{ w: number; h: number } | null>(null);
@@ -385,6 +414,7 @@ function FotoComPanZoom({
             maxWidth: "none",
             left: `${esquerda}px`,
             top: `${topo}px`,
+            opacity: imgOpacidade,
           }}
         />
       ) : (
@@ -397,6 +427,7 @@ function FotoComPanZoom({
           alt=""
           crossOrigin="anonymous"
           className={`absolute inset-0 h-full w-full object-cover ${imgClassName ?? ""}`}
+          style={{ opacity: imgOpacidade }}
         />
       )}
       <FotoAjustavel editando={editando} onArrastar={onArrastar} onSoltarArraste={onSoltarArraste} />
@@ -511,6 +542,15 @@ export default function RomariaPlusView({
   const tituloTexto =
     fraseSelecionada.texto ?? (ajuste.fraseCustom?.trim() || FRASES_TITULO[0].texto!);
 
+  // Transparência do "Selo de conquista" (Rodada 30) — um só controle que
+  // afeta tanto a opacidade da foto em si quanto a intensidade do gradiente
+  // escuro por cima dela: os dois juntos que determinam quanto da foto
+  // aparece por trás do selo/texto. 0 = como era fixo antes (bem escuro),
+  // 100 = foto bem visível.
+  const transparenciaSelo = ajuste.transparencia ?? TRANSPARENCIA_SELO_PADRAO;
+  const fotoOpacidadeSelo = 0.2 + (transparenciaSelo / 100) * 0.7;
+  const fatorEscuridaoSelo = 1 - (transparenciaSelo / 100) * 0.65;
+
   // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo e o
   // ajuste de posição/tamanho escolhidos, via a função segura
   // "salvar_foto_romaria_plus_slot" (só funciona para a própria compra, já
@@ -582,6 +622,7 @@ export default function RomariaPlusView({
           fotoEscala: ajuste.fotoEscala,
           frase: ajuste.frase,
           fraseCustom: ajuste.fraseCustom,
+          transparencia: ajuste.transparencia,
         }
       : ajuste;
     setAjuste(novoAjuste);
@@ -596,6 +637,7 @@ export default function RomariaPlusView({
       fotoEscala: ajuste.fotoEscala,
       frase: ajuste.frase,
       fraseCustom: ajuste.fraseCustom,
+      transparencia: ajuste.transparencia,
     };
     setAjuste(novoAjuste);
     void persistirFoto(modelo, novoAjuste);
@@ -1053,6 +1095,23 @@ export default function RomariaPlusView({
                     diferente do "Clássico", a foto fica quase inteira à
                     vista, sem escurecer o centro da imagem. */}
                 <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/30" />
+                {/* Rodada 30: "O Peregrino apresenta" tirado daqui — a pedido
+                    do usuário, todos os modelos usam a mesma barra fixa "O
+                    PEREGRINO" + símbolo do app no topo, como classico/
+                    destaque/itinerario já tinham. */}
+                <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 pt-[5%] text-white">
+                  <Image
+                    src="/icons/logo-emblema.png"
+                    alt=""
+                    width={64}
+                    height={64}
+                    style={{ width: "9%", height: "auto" }}
+                    className="rounded-lg ring-1 ring-white/40"
+                  />
+                  <span className="font-semibold tracking-[0.15em]" style={{ fontSize: "2.6cqw" }}>
+                    O PEREGRINO
+                  </span>
+                </div>
                 <PainelAjustavel
                   ajuste={ajuste}
                   editando={editando}
@@ -1061,12 +1120,6 @@ export default function RomariaPlusView({
                   onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   className="w-[82%] rounded-3xl bg-gradient-to-br from-amber-900/95 via-amber-950/95 to-neutral-900/95 px-[6%] py-[5%] text-center text-white shadow-2xl ring-1 ring-white/25"
                 >
-                  <p
-                    className="text-stripe-300"
-                    style={{ fontFamily: FONTE_TITULO, fontStyle: "italic", fontWeight: 700, fontSize: "3.4cqw", textAlign: "center" }}
-                  >
-                    O Peregrino apresenta
-                  </p>
                   <p
                     className="mt-[1%]"
                     style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}
@@ -1201,64 +1254,77 @@ export default function RomariaPlusView({
                     O PEREGRINO
                   </span>
                 </div>
-                <div className="absolute inset-x-0 top-[13%] flex flex-col items-center text-center text-white">
+                {/* Rodada 30: título, trajeto e dados agora são UM bloco só,
+                    dentro do mesmo PainelAjustavel de classico/painel — a
+                    pedido do usuário ("o itinerário também tem que poder ser
+                    movimentado e redimensionado"). Antes eram 3 blocos com
+                    posição fixa (top-13%/bottom-30%/bottom-10%), sem nenhum
+                    jeito de ajustar. */}
+                <PainelAjustavel
+                  ajuste={ajuste}
+                  editando={editando}
+                  containerRef={ref}
+                  onArrastar={setAjuste}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  className="flex w-[84%] flex-col items-center gap-[4%] text-center text-white"
+                >
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
                     {tituloTexto}
                   </p>
                   <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
                     {ano}
                   </p>
-                </div>
-                {/* O trajeto em si: uma curva pontilhada (Rodada 28 — o
-                    usuário achou a linha reta anterior "muito ruim") ligando
-                    um marcador de origem a um de chegada, desenhada com
-                    baixa opacidade — dá para ver a foto por trás dela o
-                    tempo todo. Ainda esquemática (sem dados reais de mapa),
-                    só com uma curva suave em vez de uma diagonal reta. */}
-                <div className="absolute inset-x-[8%] bottom-[30%] text-white/85">
-                  <svg viewBox="0 0 100 26" className="w-full" style={{ opacity: 0.8 }}>
-                    <path
-                      d="M8,20 C32,23 40,4 60,7 C74,9 80,3 92,6"
-                      fill="none"
-                      stroke="white"
-                      strokeOpacity="0.65"
-                      strokeWidth="1.4"
-                      strokeDasharray="3,3.2"
-                      strokeLinecap="round"
-                    />
-                    <circle cx="8" cy="20" r="3" fill="white" fillOpacity="0.9" />
-                    <circle cx="92" cy="6" r="3.4" fill="#fbbf24" fillOpacity="0.95" />
-                  </svg>
-                  <div className="mt-[1%] flex items-start justify-between" style={{ fontSize: "2.9cqw" }}>
-                    <span className="flex max-w-[45%] items-center gap-1 text-left">
-                      <Footprints size={14} className="mt-0.5 shrink-0" />
-                      {origem ?? "Início"}
-                    </span>
-                    <span className="flex max-w-[45%] items-center gap-1 text-right text-stripe-400">
-                      <Church size={14} className="mt-0.5 shrink-0" /> Aparecida-SP
-                    </span>
+                  {/* O trajeto em si: uma curva pontilhada (Rodada 28 — o
+                      usuário achou a linha reta anterior "muito ruim") ligando
+                      um marcador de origem a um de chegada, desenhada com
+                      baixa opacidade — dá para ver a foto por trás dela o
+                      tempo todo. Ainda esquemática (sem dados reais de mapa),
+                      só com uma curva suave em vez de uma diagonal reta. */}
+                  <div className="w-full text-white/85">
+                    <svg viewBox="0 0 100 26" className="w-full" style={{ opacity: 0.8 }}>
+                      <path
+                        d="M8,20 C32,23 40,4 60,7 C74,9 80,3 92,6"
+                        fill="none"
+                        stroke="white"
+                        strokeOpacity="0.65"
+                        strokeWidth="1.4"
+                        strokeDasharray="3,3.2"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="8" cy="20" r="3" fill="white" fillOpacity="0.9" />
+                      <circle cx="92" cy="6" r="3.4" fill="#fbbf24" fillOpacity="0.95" />
+                    </svg>
+                    <div className="mt-[1%] flex items-start justify-between" style={{ fontSize: "2.9cqw" }}>
+                      <span className="flex max-w-[45%] items-center gap-1 text-left">
+                        <Footprints size={14} className="mt-0.5 shrink-0" />
+                        {origem ?? "Início"}
+                      </span>
+                      <span className="flex max-w-[45%] items-center gap-1 text-right text-stripe-400">
+                        <Church size={14} className="mt-0.5 shrink-0" /> Aparecida-SP
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div
-                  className="absolute inset-x-[8%] bottom-[10%] flex items-center justify-center gap-[6%] rounded-xl bg-black/45 py-[3%] text-white backdrop-blur-sm"
-                  style={{ fontSize: "3.2cqw" }}
-                >
-                  {periodo && (
-                    <span className="flex items-center gap-1">
-                      <CalendarDays size={16} className="shrink-0" /> {periodo}
-                    </span>
-                  )}
-                  {tempo && (
-                    <span className="flex items-center gap-1">
-                      <Clock size={16} className="shrink-0" /> {tempo}
-                    </span>
-                  )}
-                  {distancia && (
-                    <span className="flex items-center gap-1">
-                      <Route size={16} className="shrink-0" /> {distancia}
-                    </span>
-                  )}
-                </div>
+                  <div
+                    className="flex w-full items-center justify-center gap-[6%] rounded-xl bg-black/45 py-[3%] text-white backdrop-blur-sm"
+                    style={{ fontSize: "3.2cqw" }}
+                  >
+                    {periodo && (
+                      <span className="flex items-center gap-1">
+                        <CalendarDays size={16} className="shrink-0" /> {periodo}
+                      </span>
+                    )}
+                    {tempo && (
+                      <span className="flex items-center gap-1">
+                        <Clock size={16} className="shrink-0" /> {tempo}
+                      </span>
+                    )}
+                    {distancia && (
+                      <span className="flex items-center gap-1">
+                        <Route size={16} className="shrink-0" /> {distancia}
+                      </span>
+                    )}
+                  </div>
+                </PainelAjustavel>
               </>
             )}
 
@@ -1276,20 +1342,50 @@ export default function RomariaPlusView({
                   editando={editandoFoto}
                   onArrastar={moverFoto}
                   onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
-                  imgClassName="opacity-45"
+                  imgOpacidade={fotoOpacidadeSelo}
                 />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-black/80 pointer-events-none" />
-                {/* pointer-events-none (Rodada 28): este bloco não tem nada
-                    clicável, mas cobre o card inteiro (h-full w-full) com o
-                    mesmo z-10 do arraste de foto — como o z-index empata,
-                    quem vem depois no HTML "ganha" e bloqueava o arraste da
-                    foto por baixo, mesmo nas áreas visualmente vazias entre o
-                    selo e o texto. Era exatamente o bug relatado pelo
-                    usuário ("fica sobre a foto, sem ter como ajustar"). */}
-                <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-[4%] px-[8%] text-center text-white pointer-events-none">
-                  <p style={{ fontFamily: FONTE_TITULO, fontStyle: "italic", fontWeight: 700, fontSize: "3.4cqw" }}>
-                    O Peregrino apresenta
-                  </p>
+                {/* Antes fixo (from-black/70 via-black/40 to-black/80) — Rodada
+                    30: intensidade agora controlada pelo slider de
+                    transparência (fatorEscuridaoSelo), a pedido do usuário
+                    ("tem que... deixar mais transparente"). */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: `linear-gradient(to bottom, rgba(0,0,0,${0.7 * fatorEscuridaoSelo}) 0%, rgba(0,0,0,${0.4 * fatorEscuridaoSelo}) 45%, rgba(0,0,0,${0.8 * fatorEscuridaoSelo}) 100%)`,
+                  }}
+                />
+                {/* Rodada 30: barra fixa "O PEREGRINO" + símbolo, igual aos
+                    outros modelos, no lugar do texto "O Peregrino apresenta"
+                    que ficava dentro do bloco móvel abaixo. */}
+                <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 pt-[5%] text-white">
+                  <Image
+                    src="/icons/logo-emblema.png"
+                    alt=""
+                    width={64}
+                    height={64}
+                    style={{ width: "9%", height: "auto" }}
+                    className="rounded-lg ring-1 ring-white/40"
+                  />
+                  <span className="font-semibold tracking-[0.15em]" style={{ fontSize: "2.6cqw" }}>
+                    O PEREGRINO
+                  </span>
+                </div>
+                {/* Medalha + título + dados agora são um bloco só, dentro do
+                    mesmo PainelAjustavel de classico/painel/itinerario
+                    (Rodada 30 — "não tem condições do selo ficar assim, tem
+                    que ter como movimentar e dimensionar"). O
+                    pointer-events-none que soltava o bloco antigo fixo agora
+                    é tratado dentro do próprio PainelAjustavel (só ativo
+                    enquanto "editando" está true), então não precisa mais
+                    ser feito manualmente aqui. */}
+                <PainelAjustavel
+                  ajuste={ajuste}
+                  editando={editando}
+                  containerRef={ref}
+                  onArrastar={setAjuste}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  className="flex w-[84%] flex-col items-center gap-[4%] px-[4%] text-center text-white"
+                >
                   <div className="relative flex items-center justify-center" style={{ width: "48%", aspectRatio: "1 / 1" }}>
                     <div className="absolute inset-0 rounded-full bg-gradient-to-br from-stripe-300 via-amber-500 to-amber-700 shadow-2xl" />
                     <div className="absolute inset-[6%] rounded-full border-2 border-white/70" />
@@ -1326,7 +1422,7 @@ export default function RomariaPlusView({
                       </span>
                     )}
                   </div>
-                </div>
+                </PainelAjustavel>
               </div>
             )}
           </div>
@@ -1377,6 +1473,30 @@ export default function RomariaPlusView({
                     >
                       Centralizar de novo
                     </button>
+                    {/* Transparência do fundo (Rodada 30, só no "Selo de
+                        conquista" — a pedido do usuário: "tem que...
+                        deixar mais transparente"). */}
+                    {modelo === "selo" && (
+                      <>
+                        <label htmlFor="transparencia-selo-romaria" className="mt-1 text-xs font-medium text-neutral-500">
+                          Transparência do fundo
+                        </label>
+                        <input
+                          id="transparencia-selo-romaria"
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={10}
+                          value={transparenciaSelo}
+                          onChange={(e) => {
+                            const novo = { ...ajuste, transparencia: Number(e.target.value) };
+                            setAjuste(novo);
+                            agendarPersistirAjuste(novo);
+                          }}
+                          className="w-full accent-amber-700"
+                        />
+                      </>
+                    )}
                   </div>
                 )}
               </div>

@@ -34,24 +34,30 @@ export default async function CertificadoPage() {
   }
 
   const certificadosLista = certificados as Certificado[];
+  const idsCertificados = certificadosLista.map((c) => c.id);
 
-  const { data: perfil } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .maybeSingle();
+  // As três consultas abaixo são independentes entre si — juntas num só
+  // Promise.all em vez de uma atrás da outra (Rodada 30, mesma otimização
+  // aplicada em /peregrinacao).
+  const [{ data: perfil }, { data: compras }, { data: mensagensConquista }] = await Promise.all([
+    supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
+    // Última compra de Romaria Plus conhecida por certificado (se houver
+    // mais de uma tentativa, a mais recente é a que importa). tipo="inicial"
+    // (Rodada 30): uma compra de PACOTE EXTRA de fotos não deve aparecer
+    // aqui — este card é só sobre o Certificado Plus em si (a compra
+    // inicial).
+    supabase
+      .from("compras_romaria_plus")
+      .select("*")
+      .in("certificado_id", idsCertificados)
+      .eq("tipo", "inicial")
+      .order("criado_em", { ascending: false }),
+    // Mensagens de conquista (Rodada 27) já publicadas para os certificados
+    // deste peregrino, se houver — usadas para mostrar "sua mensagem já
+    // está publicada" em vez do formulário em branco de novo.
+    supabase.from("mensagens_conquista").select("*").in("certificado_id", idsCertificados),
+  ]);
   const isAdmin = !!perfil?.is_admin;
-
-  // Última compra de Romaria Plus conhecida por certificado (se houver
-  // mais de uma tentativa, a mais recente é a que importa).
-  const { data: compras } = await supabase
-    .from("compras_romaria_plus")
-    .select("*")
-    .in(
-      "certificado_id",
-      certificadosLista.map((c) => c.id)
-    )
-    .order("criado_em", { ascending: false });
 
   const compraPorCertificado = new Map<string, CompraRomariaPlus>();
   ((compras ?? []) as CompraRomariaPlus[]).forEach((compra) => {
@@ -60,16 +66,6 @@ export default async function CertificadoPage() {
     }
   });
 
-  // Mensagens de conquista (Rodada 27) já publicadas para os certificados
-  // deste peregrino, se houver — usadas para mostrar "sua mensagem já está
-  // publicada" em vez do formulário em branco de novo.
-  const { data: mensagensConquista } = await supabase
-    .from("mensagens_conquista")
-    .select("*")
-    .in(
-      "certificado_id",
-      certificadosLista.map((c) => c.id)
-    );
   const mensagemPorCertificado = new Map<string, MensagemConquista>();
   ((mensagensConquista ?? []) as MensagemConquista[]).forEach((m) => {
     mensagemPorCertificado.set(m.certificado_id, m);

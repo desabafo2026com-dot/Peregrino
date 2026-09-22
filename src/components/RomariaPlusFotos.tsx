@@ -3,16 +3,23 @@
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import RomariaPlusView, { type Modelo } from "@/components/RomariaPlusView";
-import type { Certificado, RomariaPlusFoto } from "@/types/database";
+import RomariaPlusComprarExtra from "@/components/RomariaPlusComprarExtra";
+import { ROMARIA_PLUS_FOTOS_POR_PACOTE } from "@/lib/constants";
+import type { Certificado, CompraRomariaPlus, RomariaPlusFoto } from "@/types/database";
 
 interface Props {
   certificado: Certificado;
   compraId: string;
   userId: string;
   fotosIniciais: RomariaPlusFoto[];
+  // Pacotes extra de +5 fotos (Rodada 30) já pagos para esta compra — cada
+  // um libera mais 5 índices na MESMA galeria (ver MAX_FOTOS abaixo).
+  pacotesExtraPagos: number;
+  // Pacote extra mais recente ainda pendente (voltando do Mercado Pago).
+  pacoteExtraPendente: CompraRomariaPlus | null;
 }
 
-const MAX_FOTOS = 5;
+const MAX_FOTOS_INICIAL = 5;
 
 // Galeria de até 5 fotos/artes independentes por compra da Romaria Plus
 // (Rodada 18 — antes só existia uma foto por compra). A pessoa trabalha
@@ -20,8 +27,18 @@ const MAX_FOTOS = 5;
 // pode abrir um slot novo depois de já ter uma foto salva no anterior (ou
 // se ainda não usou nenhum dos 5). O componente de edição em si
 // (RomariaPlusView) não muda de comportamento, só passa a operar sobre um
-// índice específico em vez de "a" foto da compra.
-export default function RomariaPlusFotos({ certificado, compraId, userId, fotosIniciais }: Props) {
+// índice específico em vez de "a" foto da compra. Rodada 30: o teto de 5
+// deixou de ser fixo — cada pacote extra pago soma mais
+// ROMARIA_PLUS_FOTOS_POR_PACOTE ao limite (ver MAX_FOTOS).
+export default function RomariaPlusFotos({
+  certificado,
+  compraId,
+  userId,
+  fotosIniciais,
+  pacotesExtraPagos,
+  pacoteExtraPendente,
+}: Props) {
+  const MAX_FOTOS = MAX_FOTOS_INICIAL + ROMARIA_PLUS_FOTOS_POR_PACOTE * pacotesExtraPagos;
   const [fotos, setFotos] = useState<Record<number, RomariaPlusFoto>>(() => {
     const mapa: Record<number, RomariaPlusFoto> = {};
     fotosIniciais.forEach((f) => {
@@ -105,6 +122,14 @@ export default function RomariaPlusFotos({ certificado, compraId, userId, fotosI
         contadorCompartilhamentosInicial={fotoDoSlotAtivo?.contador_compartilhamentos ?? 0}
         onSalvo={aoSalvar}
       />
+
+      {/* Pacote extra de +5 fotos (Rodada 30) — só aparece depois que todos
+          os slots liberados até agora já foram usados, exatamente como
+          pedido pelo usuário ("a opção só fica disponível após o usuário
+          completar as 5 que ele adquiriu"). */}
+      {(!podeAdicionarNova || pacoteExtraPendente) && (
+        <RomariaPlusComprarExtra compraId={compraId} pacoteExtraPendenteInicial={pacoteExtraPendente} />
+      )}
     </div>
   );
 }
