@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, Smartphone } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import DoacaoCard from "@/components/DoacaoCard";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
@@ -148,12 +148,18 @@ export default async function Home() {
       </section>
 
       {stats && (
-        // Grid de 2 colunas (4 no celular maior/tablet+) em vez do
-        // flex-wrap anterior — com 4 cards, o flex-wrap deixava o último
-        // sozinho numa segunda linha e esticado (flex-1) em várias larguras
-        // de tela intermediárias, ficando desalinhado com os de cima. Um
-        // grid de colunas fixas sempre fecha as linhas por igual.
-        <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+        // Grid de 2 colunas (5 no celular maior/tablet+, os 4 módulos de
+        // estatística mais o botão de instalar) em vez do flex-wrap
+        // anterior — com um número par de cards, o flex-wrap deixava o
+        // último sozinho numa segunda linha e esticado (flex-1) em várias
+        // larguras de tela intermediárias, ficando desalinhado com os de
+        // cima. Um grid de colunas fixas sempre fecha as linhas por igual.
+        // Rodada 31: o botão "Instalar no telefone" entra bem no meio dos 4
+        // módulos (a pedido do usuário) — no celular (2 colunas) ele ocupa
+        // a linha inteira sozinho, ficando visualmente entre o par de cima
+        // e o par de baixo; a partir do tablet (5 colunas) ele cai
+        // exatamente na coluna central.
+        <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-5">
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Users size={20} /> {stats.peregrinos_ativos}
@@ -179,6 +185,15 @@ export default async function Home() {
               check-ins realizados
             </p>
           </div>
+          <Link
+            href="/instalar"
+            className="col-span-2 flex flex-col items-center justify-center gap-1 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-2 py-3 text-white shadow-sm transition hover:from-amber-700 hover:to-amber-900 sm:col-span-1 dark:from-amber-700 dark:to-amber-900"
+          >
+            <Smartphone size={22} />
+            <span className="text-sm leading-tight font-bold" style={{ textAlign: "center" }}>
+              Instalar no telefone
+            </span>
+          </Link>
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <MapPin size={20} /> {stats.pontos_apoio_ativos}
