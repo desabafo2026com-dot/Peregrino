@@ -7,6 +7,9 @@ export type Motivo =
   | "fe"
   | "aventura"
   | "religiosidade"
+  | "autoconhecimento"
+  | "pedido"
+  | "reflexao"
   | "outros";
 export type StatusPeregrinacao = "planejada" | "em_andamento" | "concluida" | "cancelada";
 export type StatusGerentePap = "pendente" | "aprovado" | "rejeitado";

@@ -1,11 +1,17 @@
+// Rodada 32: acrescentadas Autoconhecimento, Pedido e Momento de Reflexão
+// (a pedido do usuário); Curiosidade e Aventura foram movidas para o fim da
+// lista, logo antes de "Outros" (também a pedido).
 export const MOTIVOS: { value: string; label: string }[] = [
   { value: "fe", label: "Fé" },
   { value: "promessa", label: "Promessa" },
   { value: "religiosidade", label: "Religiosidade" },
-  { value: "aventura", label: "Aventura" },
-  { value: "curiosidade", label: "Curiosidade" },
+  { value: "autoconhecimento", label: "Autoconhecimento" },
+  { value: "pedido", label: "Pedido" },
+  { value: "reflexao", label: "Momento de reflexão" },
   { value: "desafio", label: "Desafio pessoal" },
   { value: "companhia", label: "Companhia (amigo/família)" },
+  { value: "curiosidade", label: "Curiosidade" },
+  { value: "aventura", label: "Aventura" },
   { value: "outros", label: "Outros" },
 ];
 

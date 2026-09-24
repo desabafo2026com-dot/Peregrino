@@ -222,7 +222,11 @@ export default function PeregrinacaoClient({
   const [emGrupo, setEmGrupo] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
   const [tamanhoGrupo, setTamanhoGrupo] = useState("");
-  const [jaFezTrajeto, setJaFezTrajeto] = useState(perfil.ja_fez_trajeto ?? false);
+  // Sempre em branco (Rodada 32, mesmo motivo do "motivo" logo abaixo): não
+  // reaproveita o valor salvo no perfil de uma peregrinação anterior — cada
+  // peregrinação nova começa com a pergunta em aberto, mesmo que a pessoa já
+  // tenha marcado "sim" da última vez.
+  const [jaFezTrajeto, setJaFezTrajeto] = useState(false);
 
   const OUTRA_ORIGEM = "__outra__";
 
@@ -279,7 +283,8 @@ export default function PeregrinacaoClient({
   // reaproveitado de um valor salvo anteriormente no perfil.
   const [motivo, setMotivo] = useState<Motivo | "">("");
   const [motivoOutro, setMotivoOutro] = useState(perfil.motivo_outro_desc ?? "");
-  const [carroApoio, setCarroApoio] = useState(perfil.tem_acompanhamento_carro_apoio ?? false);
+  // Mesma lógica: sempre em branco, não herda de uma peregrinação anterior.
+  const [carroApoio, setCarroApoio] = useState(false);
   const [compartilhando, setCompartilhando] = useState(
     peregrinacaoInicial?.compartilhar_localizacao ?? false
   );

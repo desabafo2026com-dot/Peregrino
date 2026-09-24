@@ -5,6 +5,7 @@ import VoltarButton from "@/components/VoltarButton";
 import {
   ShieldAlert,
   LayoutDashboard,
+  BarChart3,
   MapPinPlus,
   MapPinned,
   TriangleAlert,
@@ -36,7 +37,10 @@ import {
 const ADMIN_LINK_GROUPS = [
   {
     titulo: "Geral",
-    links: [{ href: "/admin", label: "Painel", icon: LayoutDashboard }],
+    links: [
+      { href: "/admin", label: "Painel", icon: LayoutDashboard },
+      { href: "/admin/analytics", label: "Dashboard de métricas", icon: BarChart3 },
+    ],
   },
   {
     titulo: "Pontos de apoio",
