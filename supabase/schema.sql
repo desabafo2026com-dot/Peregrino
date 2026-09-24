@@ -3152,3 +3152,18 @@ $$;
 grant execute on function public.salvar_foto_romaria_plus_slot(uuid, int, text, text, jsonb) to authenticated;
 
 -- FIM DA MIGRATION 33
+
+-- =====================================================================
+-- MIGRATION 34 (Rodada 32) — três novos motivos de peregrinação:
+-- Autoconhecimento, Pedido e Momento de reflexão (a lista de motivos usa
+-- um enum nativo do Postgres, então cada valor novo precisa ser
+-- registrado aqui antes que o formulário consiga salvá-lo).
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+alter type motivo_enum add value if not exists 'autoconhecimento';
+alter type motivo_enum add value if not exists 'pedido';
+alter type motivo_enum add value if not exists 'reflexao';
+
+-- FIM DA MIGRATION 34
