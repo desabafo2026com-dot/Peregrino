@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, nomeRota, kmPertenceARota } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, nomeRota, kmPertenceARota } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
@@ -41,9 +41,13 @@ function kmSentidoLabel(km: number | null, sentido: string | null) {
 export default async function RotasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ rota?: string }>;
+  searchParams: Promise<{ rota?: string; sentido?: string }>;
 }) {
-  const { rota: rotaSlug } = await searchParams;
+  const { rota: rotaSlug, sentido: sentidoParamRaw } = await searchParams;
+  // Filtro adicional por lado da rodovia (Rodada 33, a pedido do usuário),
+  // no mesmo padrão de link/query-param já usado no filtro de rota acima —
+  // "sp"/"rj" são os códigos internos de sentido (ver SENTIDO_PISTA_LABELS).
+  const sentidoParam = sentidoParamRaw === "sp" || sentidoParamRaw === "rj" ? sentidoParamRaw : undefined;
   const supabase = await createClient();
   const { data: rotasData } = await supabase.from("rotas").select("*").order("ordem");
   const rotas = (rotasData ?? []) as Rota[];
@@ -55,11 +59,13 @@ export default async function RotasPage({
   // branco ("ambas as rotas").
   const { data: todosRiscos } = await supabase.from("pontos_risco").select("*");
   const riscos = rotaAtual
-    ? ((todosRiscos ?? []) as PontoRisco[]).filter((r) =>
-        r.km_referencia != null
-          ? kmPertenceARota(r.km_referencia, rotaAtual.slug)
-          : r.rota_id === null || r.rota_id === rotaAtual.id
-      )
+    ? ((todosRiscos ?? []) as PontoRisco[])
+        .filter((r) =>
+          r.km_referencia != null
+            ? kmPertenceARota(r.km_referencia, rotaAtual.slug)
+            : r.rota_id === null || r.rota_id === rotaAtual.id
+        )
+        .filter((r) => !sentidoParam || r.sentido === sentidoParam)
     : [];
 
   const { data: pontosCheckin } = await supabase.from("pontos_checkin").select("*").order("ordem");
@@ -134,7 +140,40 @@ export default async function RotasPage({
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
           <TriangleAlert size={20} /> Pontos de risco ao longo da Rota — {nomeRota(rotaAtual)}
+          {sentidoParam ? ` — ${SENTIDO_PISTA_LABELS[sentidoParam]}` : ""}
         </h2>
+        <div className="mb-3 flex gap-2">
+          <Link
+            href={`/rotas?rota=${rotaAtual?.slug ?? ""}`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+              !sentidoParam
+                ? "bg-red-700 text-white"
+                : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+            }`}
+          >
+            Ambos os sentidos
+          </Link>
+          <Link
+            href={`/rotas?rota=${rotaAtual?.slug ?? ""}&sentido=sp`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+              sentidoParam === "sp"
+                ? "bg-red-700 text-white"
+                : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+            }`}
+          >
+            Pista Norte
+          </Link>
+          <Link
+            href={`/rotas?rota=${rotaAtual?.slug ?? ""}&sentido=rj`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+              sentidoParam === "rj"
+                ? "bg-red-700 text-white"
+                : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+            }`}
+          >
+            Pista Sul
+          </Link>
+        </div>
         <div className="card overflow-x-auto">
           <table className="w-full min-w-[500px] text-sm">
             <thead>

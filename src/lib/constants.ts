@@ -408,3 +408,35 @@ export function papAbertoAgora(
 ): boolean {
   return papAtivoHoje(p.datas_funcionamento) && dentroDoHorario(p.periodo_funcionamento, agora);
 }
+
+// Rodada 33 — exibição resumida dos dias de funcionamento (calendário
+// marcado em CalendarioDatas.tsx) nas telas públicas do PAP: agrupa datas
+// seguidas num intervalo só ("20/09 a 22/09") em vez de listar cada uma,
+// já que um PAP de romaria costuma marcar vários dias corridos.
+export function formatarDatasFuncionamento(datas: string[] | null | undefined): string {
+  if (!datas || datas.length === 0) return "não informado";
+  const ordenadas = [...datas].sort();
+  const grupos: string[][] = [];
+  let atual: string[] = [ordenadas[0]];
+  for (let i = 1; i < ordenadas.length; i++) {
+    const anterior = new Date(`${atual[atual.length - 1]}T00:00:00`);
+    const proxima = new Date(`${ordenadas[i]}T00:00:00`);
+    const diffDias = Math.round((proxima.getTime() - anterior.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDias === 1) {
+      atual.push(ordenadas[i]);
+    } else {
+      grupos.push(atual);
+      atual = [ordenadas[i]];
+    }
+  }
+  grupos.push(atual);
+
+  const formatarData = (iso: string) => {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+
+  return grupos
+    .map((g) => (g.length === 1 ? formatarData(g[0]) : `${formatarData(g[0])} a ${formatarData(g[g.length - 1])}`))
+    .join(", ");
+}

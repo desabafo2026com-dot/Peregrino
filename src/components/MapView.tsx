@@ -4,7 +4,15 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker, StyleSpecification, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, CATEGORIA_SINISTRO_LABELS, NIVEL_RISCO_LABELS, TIPO_COMERCIO_LABELS } from "@/lib/constants";
+import {
+  SENTIDO_KM_ABREV,
+  SENTIDO_PISTA_LABELS,
+  CATEGORIA_SINISTRO_LABELS,
+  NIVEL_RISCO_LABELS,
+  TIPO_COMERCIO_LABELS,
+  SERVICOS_PONTO_APOIO,
+  formatarDatasFuncionamento,
+} from "@/lib/constants";
 import { comDesvioMinimoPap } from "@/lib/geo";
 import { createClient } from "@/lib/supabase/client";
 import type { PontoApoio, PontoRisco, RiscoInformado, PontoComercial } from "@/types/database";
@@ -95,7 +103,9 @@ interface Props {
 }
 
 function servicosLabel(servicos: string[]) {
-  return servicos.length ? servicos.join(", ") : "—";
+  if (!servicos.length) return "—";
+  const labelPorValor = new Map(SERVICOS_PONTO_APOIO.map((s) => [s.value, s.label]));
+  return servicos.map((s) => labelPorValor.get(s) ?? s).join(", ");
 }
 
 function hojeISO() {
@@ -200,20 +210,25 @@ export default function MapView({
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([posicao.lng, posicao.lat])
         .setPopup(
-          // Conteúdo do popup — uma informação por linha. Rodada 20: nome,
-          // cidade, km/sentido, horário, serviços e doações. Rodada 24, a
-          // pedido do usuário: telefone (se autorizado) foi para o final,
-          // antecedido do nome do responsável (mesma autorização, ver
-          // PapForm.tsx) — antes o telefone vinha logo depois do nome.
-          // Linhas sem dado disponível não aparecem, em vez de mostrar "—".
+          // Conteúdo do popup — uma informação por linha. Rodada 33, a
+          // pedido do usuário ("ser mais simples"): foto, nome, cidade/km/
+          // sentido, dias de funcionamento, horário e o que oferece, nessa
+          // ordem; telefone/responsável/doações continuam abaixo, para quem
+          // precisar. Linhas sem dado disponível não aparecem, em vez de
+          // mostrar "—".
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               ${p.foto_url ? `<img src="${p.foto_url}" alt="Foto do PAP" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
               <strong>${p.nome}</strong><br/>
               ${p.cidade ? `Cidade: ${p.cidade}<br/>` : ""}
               ${kmSentidoLabel(p.km_referencia, p.sentido_pista) ? `${kmSentidoLabel(p.km_referencia, p.sentido_pista)}<br/>` : ""}
+              Dias de funcionamento: ${formatarDatasFuncionamento(p.datas_funcionamento)}${
+                ativoHoje(p.datas_funcionamento)
+                  ? ` <span style="color:#16a34a;font-weight:600">(ativo hoje)</span>`
+                  : ""
+              }<br/>
               ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
-              Serviços: ${servicosLabel(p.servicos)}<br/>
+              O que oferece: ${servicosLabel(p.servicos)}<br/>
               ${
                 p.aceita_doacoes
                   ? `<span style="color:#92400e;font-weight:600">Aceita doações: ${p.doacao_necessidade || "não especificado o quê"}</span><br/>`
@@ -325,6 +340,11 @@ export default function MapView({
       const marker = new maplibregl.Marker({ element: el, anchor: "center", draggable: permitirArrastarPapPreCadastro })
         .setLngLat([p.lng, p.lat])
         .setPopup(
+          // Rodada 33, a pedido do usuário: tirado o parágrafo explicativo
+          // longo sobre localização estimada/sem gerente vinculado — a
+          // etiqueta "PAP AGUARDANDO VÍNCULO" já comunica isso de forma
+          // simples. Adicionados os dias de funcionamento por extenso (antes
+          // só aparecia o status "ativo hoje"/"fora do período").
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               <span style="font-size:10px;letter-spacing:.05em;color:#737373;font-weight:700">PAP AGUARDANDO VÍNCULO</span><br/>
@@ -332,7 +352,7 @@ export default function MapView({
               ${p.cidade}${p.km != null ? ` — km ${p.km}` : ""}${
                 p.sentido_pista ? ` (${SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista})` : ""
               }<br/>
-              <span style="color:#737373">Localização estimada pelo km da rodovia — ainda sem gerente vinculado. Assim que um gerente vincular e a administração aprovar, este ponto passa a ser um PAP com localização exata.</span>
+              Dias de funcionamento: ${formatarDatasFuncionamento(p.datas_funcionamento)}
               ${
                 !ativoHoje(p.datas_funcionamento)
                   ? `<br/><span style="color:#dc2626;font-weight:600">Fora do período de funcionamento hoje</span>`

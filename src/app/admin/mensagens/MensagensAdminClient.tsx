@@ -21,11 +21,13 @@ const STATUS_COLOR: Record<string, string> = {
 function MensagemCard({
   m,
   nome,
+  cidade,
   onMarcarLida,
   onResponder,
 }: {
   m: MensagemContato;
   nome: string;
+  cidade: string | null;
   onMarcarLida: (id: string) => void;
   onResponder: (id: string, resposta: string) => void;
 }) {
@@ -37,7 +39,8 @@ function MensagemCard({
     <div className="card">
       <p className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-semibold">
-          {nome} — {m.assunto || "Sem assunto"}
+          {nome}
+          {cidade ? `, de ${cidade}` : ""} — {m.assunto || "Sem assunto"}
         </span>
         <span className={`flex items-center gap-1 text-xs font-medium ${STATUS_COLOR[m.status]}`}>
           <Icon size={13} /> {STATUS_MENSAGEM_CONTATO_LABELS[m.status] ?? m.status}
@@ -103,9 +106,11 @@ function MensagemCard({
 export default function MensagensAdminClient({
   mensagensIniciais,
   nomePorUsuario,
+  cidadePorUsuario,
 }: {
   mensagensIniciais: MensagemContato[];
   nomePorUsuario: Record<string, string>;
+  cidadePorUsuario: Record<string, string>;
 }) {
   const [mensagens, setMensagens] = useState(mensagensIniciais);
 
@@ -155,6 +160,7 @@ export default function MensagensAdminClient({
               key={m.id}
               m={m}
               nome={nomePorUsuario[m.user_id] ?? "Peregrino"}
+              cidade={cidadePorUsuario[m.user_id] ?? null}
               onMarcarLida={marcarLida}
               onResponder={responder}
             />
@@ -174,6 +180,7 @@ export default function MensagensAdminClient({
               key={m.id}
               m={m}
               nome={nomePorUsuario[m.user_id] ?? "Peregrino"}
+              cidade={cidadePorUsuario[m.user_id] ?? null}
               onMarcarLida={marcarLida}
               onResponder={responder}
             />

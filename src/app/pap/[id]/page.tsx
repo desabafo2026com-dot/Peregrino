@@ -5,11 +5,12 @@ import {
   Tent,
   Phone,
   Clock,
+  CalendarDays,
   MapPin,
   HeartHandshake,
   Info,
 } from "lucide-react";
-import { SENTIDO_PISTA_LABELS, BR_LABELS, SERVICOS_PONTO_APOIO } from "@/lib/constants";
+import { SENTIDO_PISTA_LABELS, SERVICOS_PONTO_APOIO, formatarDatasFuncionamento, papAtivoHoje } from "@/lib/constants";
 import type { PontoApoio } from "@/types/database";
 
 function servicosLabel(servicos: string[]) {
@@ -69,28 +70,32 @@ export default async function PapPublicoPage({ params }: { params: Promise<{ id:
         <h1 className="mb-2 text-xl font-bold">{p.nome}</h1>
         <p className="mb-1 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
           <MapPin size={16} className="shrink-0" />
-          {p.cidade ?? "cidade não informada"} — {BR_LABELS[p.br] ?? p.br}
+          {p.cidade ?? "cidade não informada"}
           {p.km_referencia != null ? ` — km ${p.km_referencia}` : ""}
           {p.sentido_pista ? ` (${SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista})` : ""}
         </p>
-        {p.ponto_referencia && (
-          <p className="mb-1 text-sm text-neutral-600 dark:text-neutral-300">
-            Referência: {p.ponto_referencia}
-          </p>
-        )}
+        <p className="mb-1 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+          <CalendarDays size={16} className="shrink-0" />
+          {formatarDatasFuncionamento(p.datas_funcionamento)}
+          {papAtivoHoje(p.datas_funcionamento) && (
+            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-400">
+              Ativo hoje
+            </span>
+          )}
+        </p>
         {p.periodo_funcionamento && (
           <p className="mb-1 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
             <Clock size={16} className="shrink-0" /> {p.periodo_funcionamento}
           </p>
         )}
+        <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
+          O que oferece: {servicosLabel(p.servicos)}
+        </p>
         {p.telefone && p.exibir_telefone && (
-          <p className="mb-1 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+          <p className="mt-2 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
             <Phone size={16} className="shrink-0" /> {p.telefone}
           </p>
         )}
-        <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
-          Serviços oferecidos: {servicosLabel(p.servicos)}
-        </p>
         {p.observacoes && (
           <p className="mt-2 text-sm text-neutral-500">{p.observacoes}</p>
         )}
