@@ -496,20 +496,41 @@ export default function PeregrinacaoClient({
     setMsg(null);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        let alvoId = pontoCheckinId;
+        let alvoPonto = alvoId ? pontosCheckin.find((p) => p.id === alvoId) : undefined;
+
+        // Botão principal, sem cidade pré-definida (Rodada 34, a pedido do
+        // usuário): em vez de sempre apontar para "a próxima cidade" na
+        // ordem cadastrada da rota, descobre pela localização atual qual
+        // ponto pendente está mais perto — o mesmo critério já usado pelo
+        // sino de alertas (AlertaProximidade), que chama esta função já
+        // passando o pontoCheckinId (e por isso pula este bloco).
+        if (!alvoId) {
+          const pendentes = pontosCheckin.filter((p) => !checkinsFeitosIds.includes(p.id));
+          let melhor: { ponto: PontoCheckin; distancia: number } | null = null;
+          for (const p of pendentes) {
+            const d = distanciaKm(pos.coords.latitude, pos.coords.longitude, p.latitude, p.longitude);
+            if (!melhor || d < melhor.distancia) melhor = { ponto: p, distancia: d };
+          }
+          if (melhor) {
+            alvoPonto = melhor.ponto;
+            alvoId = melhor.ponto.id;
+          }
+        }
+
         // Confere se a localização reportada está mesmo perto da cidade do
         // check-in — antes qualquer check-in era aceito sem checar isso,
         // então dava para "check-in" em várias cidades em segundos, sem
         // nunca ter chegado perto delas. Se não bater, avisa mas permite
         // confirmar mesmo assim (GPS impreciso, ponto de referência um
         // pouco distante da rota real, etc.).
-        const ponto = pontoCheckinId ? pontosCheckin.find((p) => p.id === pontoCheckinId) : null;
-        if (ponto) {
-          const dist = distanciaKm(pos.coords.latitude, pos.coords.longitude, ponto.latitude, ponto.longitude);
+        if (alvoPonto) {
+          const dist = distanciaKm(pos.coords.latitude, pos.coords.longitude, alvoPonto.latitude, alvoPonto.longitude);
           if (dist > RAIO_CHECKIN_KM) {
             const distTexto = dist < 10 ? dist.toFixed(1) : Math.round(dist).toString();
             if (
               !confirm(
-                `Não conseguimos confirmar que você está perto de ${ponto.cidade} pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja fazer o check-in mesmo assim?`
+                `Não conseguimos confirmar que você está perto de ${alvoPonto.cidade} pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja fazer o check-in em ${alvoPonto.cidade} mesmo assim?`
               )
             ) {
               return;
@@ -519,7 +540,7 @@ export default function PeregrinacaoClient({
         const { error } = await supabase.from("checkins").insert({
           peregrinacao_id: peregrinacao.id,
           user_id: peregrinacao.user_id,
-          ponto_checkin_id: pontoCheckinId || null,
+          ponto_checkin_id: alvoId || null,
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
         });
@@ -528,10 +549,10 @@ export default function PeregrinacaoClient({
           return;
         }
         setCheckinsCount((c) => c + 1);
-        if (pontoCheckinId) {
-          setCheckinsFeitosIds((ids) => [...ids, pontoCheckinId]);
+        if (alvoId) {
+          setCheckinsFeitosIds((ids) => [...ids, alvoId!]);
         }
-        setMsg("Check-in registrado com sucesso!");
+        setMsg(alvoPonto ? `Check-in em ${alvoPonto.cidade} registrado com sucesso!` : "Check-in registrado com sucesso!");
       },
       () => setErro("Não foi possível acessar sua localização para o check-in.")
     );
@@ -968,8 +989,10 @@ export default function PeregrinacaoClient({
     );
   } else if (peregrinacao.status === "em_andamento") {
     const rotaAtiva = rotas.find((r) => r.id === peregrinacao.rota_id);
-    const pontosOrdenados = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem);
-    const proximoPonto = pontosOrdenados.find((p) => !checkinsFeitosIds.includes(p.id));
+    // Rodada 34: o botão principal não aponta mais para uma cidade
+    // pré-definida (ver fazerCheckin) — só precisa saber se ainda há algum
+    // check-in pendente, para habilitar o botão e trocar o texto.
+    const haCheckinPendente = pontosCheckin.some((p) => !checkinsFeitosIds.includes(p.id));
     principal = (
       <div className="flex flex-col gap-4">
         {/* Módulo 1 — Peregrinação em andamento: dados + linha do tempo com
@@ -1041,12 +1064,12 @@ export default function PeregrinacaoClient({
             cidade de Aparecida para receber o certificado.
           </p>
           <button
-            onClick={() => fazerCheckin(proximoPonto?.id)}
-            disabled={!proximoPonto}
+            onClick={() => fazerCheckin()}
+            disabled={!haCheckinPendente}
             className="btn-primary flex w-full items-center justify-center gap-2 disabled:opacity-50"
           >
             <CheckCircle2 size={18} />{" "}
-            {proximoPonto ? `Fazer check-in em ${proximoPonto.cidade}` : "Todos os check-ins feitos"}
+            {haCheckinPendente ? "Fazer check-in" : "Todos os check-ins feitos"}
           </button>
           {msg && <p className="mt-2 text-center text-sm text-green-700">{msg}</p>}
         </div>

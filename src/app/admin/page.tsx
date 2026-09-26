@@ -21,15 +21,28 @@ import type {
   RomariaGrupo,
 } from "@/types/database";
 
+// Rodada 34 — corrige um peregrino que iniciou a caminhada hoje e não
+// aparecia no contador "iniciadas hoje": este arquivo roda no servidor
+// (Server Component), e o processo Node roda em UTC, não no horário de
+// Brasília. Como `data_inicio`/`data_fim` são timestamps completos
+// (timestamptz), um evento registrado entre ~21h e 23h59 no horário de
+// Brasília já corresponde ao dia seguinte em UTC — então comparar os
+// componentes de data com getFullYear/getMonth/getDate (que usam o fuso
+// local do processo) "perdia" esses casos. A comparação abaixo usa sempre o
+// dia civil em America/Sao_Paulo. Campos `date` puros do Postgres (só
+// "AAAA-MM-DD", sem hora nem fuso, ex.: data_inicio_prevista) são comparados
+// direto pela string — convertê-los para horário de Brasília na verdade
+// introduziria o erro (aparentariam ser um dia antes).
+function diaCivilBrasil(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
 function ehHoje(iso: string | null) {
   if (!iso) return false;
-  const d = new Date(iso);
-  const hoje = new Date();
-  return (
-    d.getFullYear() === hoje.getFullYear() &&
-    d.getMonth() === hoje.getMonth() &&
-    d.getDate() === hoje.getDate()
-  );
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return iso === diaCivilBrasil(new Date());
+  }
+  return diaCivilBrasil(new Date(iso)) === diaCivilBrasil(new Date());
 }
 
 export default async function AdminDashboardPage() {

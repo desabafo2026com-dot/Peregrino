@@ -704,7 +704,13 @@ export default function AdminDrilldownClient({
       </section>
 
       {categoria && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+        // z-50 (Rodada 34): o botão de emergência é fixed/z-40 e é renderizado
+        // depois do conteúdo da página (ver layout.tsx), então com o mesmo
+        // z-40 ele ficava por cima deste modal em telas pequenas, cobrindo o
+        // botão de fechar (X) e impedindo fechar o modal. z-50 é o mesmo
+        // usado pelo modal do próprio botão de emergência — convenção já
+        // existente no app para "sempre por cima de tudo".
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
           <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl dark:bg-neutral-900">
             <div className="flex items-center justify-between border-b border-neutral-200 p-4 dark:border-neutral-800">
               <h3 className="font-bold text-amber-800 dark:text-amber-500">{categoria.titulo}</h3>
