@@ -92,14 +92,20 @@ function LoginForm() {
     // para onde ir, ignorando o parâmetro de redirect quando for o caso.
     let destino = searchParams.get("redirect") || "/perfil";
     if (data.user) {
-      const { data: gerente } = await supabase
-        .from("gerentes_pap")
-        .select("id")
-        .eq("id", data.user.id)
-        .maybeSingle();
+      const [{ data: gerente }, { data: perfilPeregrino }] = await Promise.all([
+        supabase.from("gerentes_pap").select("id").eq("id", data.user.id).maybeSingle(),
+        supabase.from("profiles").select("id").eq("id", data.user.id).maybeSingle(),
+      ]);
       const ehGerente = !!gerente || data.user.user_metadata?.tipo_conta === "gerente_pap";
       if (ehGerente) {
-        destino = "/gerente-pap";
+        // Rodada 35 — bug relatado: uma conta de Gerente de PAP que entrava
+        // pelo caminho "Sou peregrino" (ex.: card da home) sempre caía direto
+        // em /gerente-pap, mesmo sem ter cadastro de peregrino ainda — sem
+        // nenhuma chance de completá-lo por aqui (só existia o caminho
+        // manual /gerente-pap → "Quero também fazer minha peregrinação" →
+        // /perfil). Agora, se a conta ainda não tem perfil de peregrino,
+        // manda direto para completá-lo.
+        destino = tipoPreset === "peregrino" && !perfilPeregrino ? "/perfil" : "/gerente-pap";
       } else if (tipoPreset === "gerente_pap") {
         // A pessoa entrou pelo caminho "Sou gerente de PAP" (ex.: card
         // "PAP — vincular ou cadastrar" da home), mas a conta já existia e

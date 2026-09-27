@@ -102,8 +102,17 @@ export default function CadastroGerentePapPage() {
 
     await supabase.rpc("registrar_aceite_termos", {});
     setLoading(false);
-    router.push("/gerente-pap");
-    router.refresh();
+    // Rodada 35 — bug relatado: virar Gerente de PAP com uma conta que já
+    // era só de peregrino não fazia aparecer o ícone "Meu PAP" no menu
+    // inferior. Causa: AuthRoleProvider (root layout) só relê is_gerente no
+    // mount ou num evento de auth do Supabase — router.push/refresh troca de
+    // rota e re-executa os Server Components da página, mas não remonta o
+    // provider, que fica com isGerente=false até um reload completo. Como
+    // esta conta acabou de ganhar sua primeira linha em gerentes_pap,
+    // navega com um reload completo (em vez de client-side) para o provider
+    // recarregar o papel certo já na primeira tela.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = "/gerente-pap";
   }
 
   async function handleCadastro(e: React.FormEvent) {
@@ -149,8 +158,9 @@ export default function CadastroGerentePapPage() {
     await supabase.rpc("registrar_aceite_termos", {});
     setLoading(false);
 
-    router.push("/gerente-pap");
-    router.refresh();
+    // Ver comentário em confirmarComDadosDoPerfil (Rodada 35) — mesmo motivo.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = "/gerente-pap";
   }
 
   if (checando) {

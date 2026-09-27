@@ -7,6 +7,7 @@ import { SEXO_OPTIONS, RELIGIOES, AVATARES_PEREGRINO, normalizarReligiaoAntiga }
 import { CIDADES_POR_UF, UF_OPTIONS } from "@/lib/cidades";
 import { validarNomeCompleto } from "@/lib/validation";
 import { Upload, ShieldCheck } from "lucide-react";
+import { useAuthRole } from "./AuthRoleProvider";
 import type { Profile } from "@/types/database";
 
 interface Props {
@@ -25,6 +26,7 @@ export default function ProfileForm({
   perfilExistente,
 }: Props) {
   const router = useRouter();
+  const { recarregar } = useAuthRole();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -139,6 +141,24 @@ export default function ProfileForm({
 
     if (error) {
       setErro(error.message);
+      return;
+    }
+
+    // Rodada 35 — bug relatado: uma conta de Gerente de PAP que completava
+    // aqui o cadastro de peregrino pela primeira vez (perfilExistente nulo,
+    // ver "Passo 2 de 2" acima) continuava sem o ícone "Minha peregrinação"
+    // no menu inferior. Causa: AuthRoleProvider (root layout) só relê
+    // is_admin/is_gerente/temPerfilPeregrino no mount ou num evento de auth
+    // do Supabase — router.refresh() só atualiza os Server Components desta
+    // página, não esse estado do provider, que fica com o valor antigo
+    // (temPerfilPeregrino: false) até um reload completo. Como essa conta
+    // acabou de ganhar sua primeira linha em profiles — o exato dado que
+    // decide qual menu aparece —, recarrega a página inteira para refletir
+    // o novo papel de uma vez. Numa edição normal (perfil já existia antes)
+    // isso não muda nada relevante para o menu, então mantém o comportamento
+    // já existente (sem reload, com a mensagem de sucesso visível).
+    if (!perfilExistente) {
+      recarregar();
       return;
     }
 
