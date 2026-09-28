@@ -436,8 +436,10 @@ function LoginForm() {
               <Mail size={18} className="mt-0.5 shrink-0" />
               <p>
                 Enviamos um e-mail de confirmação para <strong>{email}</strong>. Abra sua caixa de
-                entrada (e o spam) e toque no link para ativar sua conta. Depois disso você já
-                pode entrar normalmente.
+                entrada (verifique também a caixa de spam/lixo eletrônico) e procure uma mensagem
+                remetida por <strong>Supabase</strong> com o assunto &quot;Confirm Your Signup&quot;.
+                Abra esse e-mail e toque no link azul <strong>&quot;Confirm your mail&quot;</strong>{" "}
+                para ativar sua conta. Depois disso você já pode entrar normalmente.
               </p>
             </div>
             {erro && <MensagemErro texto={erro} />}

@@ -64,6 +64,17 @@ export const STATUS_PAP_LABELS: Record<string, string> = {
   pendente: "Aguardando aprovação da administração",
   aprovado: "Publicado no mapa",
   rejeitado: "Não aprovado pela administração",
+  // Rodada 36 — pseudo-status usado só no painel do admin (nunca gravado no
+  // banco) para as entradas do pré-cadastro (paps_pre_cadastro) que ainda
+  // não foram reivindicadas por nenhum gerente, ao entrarem na lista de
+  // "PAP Cadastrados" junto com os pontos_apoio de verdade.
+  pre_cadastro_sem_gerente: "Pré-cadastro — sem gerente vinculado",
+};
+
+export const STATUS_TRANSFERENCIA_PAP_LABELS: Record<string, string> = {
+  pendente: "Aguardando resposta",
+  aceita: "Aceita — PAP transferido",
+  negada: "Negada",
 };
 
 // Rodada 24 — Romarias em Grupo usa os mesmos 3 status de sempre
@@ -362,9 +373,19 @@ export const TERMOS_VERSAO_ATUAL = "1.0 (16/09/2026)";
 // MapView.tsx/MapClient.tsx (mantidas como estão, para não arriscar
 // regressão nelas) — esta versão compartilhada é para o código novo desta
 // rodada (contadores do admin, mapa do admin, status do gerente de PAP).
+// Rodada 39 — corrige bug relatado pelo usuário: um PAP vinculado e
+// aprovado, já ativo no mapa, sumia do contador "Ativos" do painel do
+// admin. Causa raiz: esta função rodava com `new Date()` no fuso do
+// processo — no admin (Server Component), o processo roda em UTC, não em
+// Brasília, então entre ~21h e 23h59 (horário de Brasília) o `getDate()`
+// já retornava o dia seguinte, fazendo `papAtivoHoje` comparar a data de
+// funcionamento com "amanhã" em vez de "hoje" e o PAP sumir dos contadores
+// nesse intervalo (o mapa, renderizado no navegador do próprio peregrino,
+// não tinha esse problema — daí o PAP continuar aparecendo lá). Mesma
+// classe de bug já corrigida para peregrinações na Rodada 34
+// (`diaCivilBrasil`/`ehHoje`, em admin/page.tsx), agora aplicada aqui.
 export function hojeISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 }
 
 // Um PAP só conta como "ativo hoje" se tiver datas marcadas no calendário e

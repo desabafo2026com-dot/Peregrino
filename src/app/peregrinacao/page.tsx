@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
-import { kmPertenceARota, avisoVisivelPublicamente } from "@/lib/constants";
+import { kmPertenceARota, avisoVisivelPublicamente, hojeISO } from "@/lib/constants";
 import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota } from "@/types/database";
 
 export default async function PeregrinacaoPage() {
@@ -57,10 +57,12 @@ export default async function PeregrinacaoPage() {
   // Promise.all elas saem ao mesmo tempo (Rodada 30, a pedido do usuário
   // sobre o site/iPhone estarem "meio lentos" — sem mudar nenhum dado
   // retornado, só o tempo até ele chegar).
-  const hoje = new Date();
-  const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(
-    hoje.getDate()
-  ).padStart(2, "0")}`;
+  // Rodada 39 — antes calculava "hoje" aqui mesmo com `new Date()` no fuso
+  // do processo (UTC no servidor), sujeito ao mesmo bug de fuso horário
+  // corrigido em `hojeISO()` (ver comentário em src/lib/constants.ts):
+  // entre ~21h e 23h59 de Brasília, um PAP ativo hoje podia sumir do mapa
+  // de "Minha peregrinação" por comparar com a data de amanhã em UTC.
+  const hojeISOStr = hojeISO();
   const [
     { data: peregrinacao },
     { data: concluidasData },
@@ -91,7 +93,7 @@ export default async function PeregrinacaoPage() {
       .select("*")
       .eq("ativo", true)
       .eq("status_aprovacao", "aprovado")
-      .contains("datas_funcionamento", [hojeISO]),
+      .contains("datas_funcionamento", [hojeISOStr]),
     supabase.from("rotas").select("*").order("ordem"),
     // Todos os pontos de check-in de todas as rotas — usados tanto para a
     // lista "Cidade de início na Dutra" do formulário de planejamento

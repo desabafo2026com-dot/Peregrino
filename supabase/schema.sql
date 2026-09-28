@@ -3258,3 +3258,232 @@ $$;
 grant execute on function public.estatisticas_publicas() to anon, authenticated;
 
 -- FIM DA MIGRATION 36
+
+-- =====================================================================
+-- MIGRATION 37 (Rodada 38) — conflitos de PAP duplicado/já vinculado e
+-- módulo de transferências. Até aqui não existia nenhuma checagem: um
+-- gerente podia cadastrar do zero (fora da busca na lista pública) um
+-- PAP com o mesmo nome/cidade de um já existente — de outro gerente, da
+-- administração sem gerente, ou ainda não reivindicado na lista pública
+-- — criando um registro duplicado no mapa. A detecção em si acontece no
+-- app (compara nome+cidade, ignorando acento/maiúsculas, ao tentar
+-- cadastrar) — esta migration só cria o mecanismo de "pedir para assumir
+-- um PAP que já existe": a tabela que guarda cada pedido e o histórico
+-- de quem pediu, para quem, e o resultado, e as 3 funções que o app usa
+-- para criar o pedido, o gerente atual responder (aceitar/negar), e a
+-- administração acompanhar ou decidir no lugar dele.
+--
+-- Um PAP sem gerente atual (cadastrado direto pela administração) também
+-- pode ser alvo de um pedido — aí `gerente_atual_id`/`gerente_atual_nome`
+-- ficam nulos e só a administração pode decidir (não há quem "aceitar"
+-- do lado do gerente).
+--
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este arquivo > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+create table if not exists public.pap_transferencias (
+  id uuid primary key default gen_random_uuid(),
+  pap_id uuid not null references public.pontos_apoio(id) on delete cascade,
+  -- Nome do PAP e nomes dos gerentes envolvidos são gravados no momento do
+  -- pedido (não como referência viva) para o histórico continuar legível
+  -- mesmo se o PAP for renomeado ou um dos gerentes excluir a conta depois.
+  pap_nome text not null,
+  gerente_atual_id uuid references public.gerentes_pap(id) on delete set null,
+  gerente_atual_nome text,
+  solicitante_id uuid not null references public.gerentes_pap(id) on delete cascade,
+  solicitante_nome text not null,
+  motivo text,
+  status text not null default 'pendente' check (status in ('pendente', 'aceita', 'negada')),
+  resolvido_por_admin boolean not null default false,
+  resolvido_em timestamptz,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.pap_transferencias is 'Pedidos de um gerente para assumir um PAP que já existe (de outro gerente, ou sem gerente vinculado) — histórico completo, resolvido pelo gerente atual ou pela administração.';
+
+alter table public.pap_transferencias enable row level security;
+
+drop policy if exists "pap_transferencias_select" on public.pap_transferencias;
+create policy "pap_transferencias_select" on public.pap_transferencias for select to authenticated
+  using (
+    public.is_admin()
+    or solicitante_id = auth.uid()
+    or gerente_atual_id = auth.uid()
+  );
+
+-- Sem política de insert/update para o cliente: as 3 funções abaixo, todas
+-- security definer, são o único jeito de criar ou resolver um pedido —
+-- garante que motivo/nomes gravados e as regras de quem pode responder
+-- sejam sempre aplicados no servidor, nunca só no app.
+
+create or replace function public.solicitar_transferencia_pap(p_pap_id uuid, p_motivo text default null)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_solicitante_nome text;
+  v_pap record;
+  v_gerente_atual_nome text;
+  v_id uuid;
+begin
+  select nome_completo into v_solicitante_nome from public.gerentes_pap where id = auth.uid();
+  if v_solicitante_nome is null then
+    raise exception 'apenas gerentes de PAP podem solicitar a transferência de um PAP';
+  end if;
+
+  select id, nome, gerente_id into v_pap from public.pontos_apoio where id = p_pap_id;
+  if not found then
+    raise exception 'PAP não encontrado';
+  end if;
+  if v_pap.gerente_id = auth.uid() then
+    raise exception 'este PAP já está vinculado à sua própria conta';
+  end if;
+  if exists (
+    select 1 from public.pap_transferencias
+    where pap_id = p_pap_id and solicitante_id = auth.uid() and status = 'pendente'
+  ) then
+    raise exception 'você já tem uma solicitação pendente para este PAP';
+  end if;
+
+  if v_pap.gerente_id is not null then
+    select nome_completo into v_gerente_atual_nome from public.gerentes_pap where id = v_pap.gerente_id;
+  end if;
+
+  insert into public.pap_transferencias
+    (pap_id, pap_nome, gerente_atual_id, gerente_atual_nome, solicitante_id, solicitante_nome, motivo)
+  values
+    (v_pap.id, v_pap.nome, v_pap.gerente_id, v_gerente_atual_nome, auth.uid(), v_solicitante_nome, p_motivo)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+grant execute on function public.solicitar_transferencia_pap(uuid, text) to authenticated;
+
+create or replace function public.responder_transferencia_pap(p_id uuid, p_aceitar boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_transf record;
+begin
+  select * into v_transf from public.pap_transferencias where id = p_id;
+  if not found then
+    raise exception 'solicitação não encontrada';
+  end if;
+  if v_transf.gerente_atual_id is null or v_transf.gerente_atual_id <> auth.uid() then
+    raise exception 'apenas o gerente atual do PAP pode responder esta solicitação';
+  end if;
+  if v_transf.status <> 'pendente' then
+    raise exception 'esta solicitação já foi resolvida';
+  end if;
+
+  if p_aceitar then
+    update public.pontos_apoio set gerente_id = v_transf.solicitante_id where id = v_transf.pap_id;
+  end if;
+  update public.pap_transferencias
+    set status = case when p_aceitar then 'aceita' else 'negada' end, resolvido_em = now()
+    where id = p_id;
+end;
+$$;
+
+grant execute on function public.responder_transferencia_pap(uuid, boolean) to authenticated;
+
+create or replace function public.admin_resolver_transferencia_pap(p_id uuid, p_aceitar boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_transf record;
+begin
+  if not public.is_admin() then
+    raise exception 'apenas administradores podem usar esta função';
+  end if;
+  select * into v_transf from public.pap_transferencias where id = p_id;
+  if not found then
+    raise exception 'solicitação não encontrada';
+  end if;
+  if v_transf.status <> 'pendente' then
+    raise exception 'esta solicitação já foi resolvida';
+  end if;
+
+  if p_aceitar then
+    update public.pontos_apoio set gerente_id = v_transf.solicitante_id where id = v_transf.pap_id;
+  end if;
+  update public.pap_transferencias
+    set status = case when p_aceitar then 'aceita' else 'negada' end,
+        resolvido_por_admin = true,
+        resolvido_em = now()
+    where id = p_id;
+end;
+$$;
+
+grant execute on function public.admin_resolver_transferencia_pap(uuid, boolean) to authenticated;
+
+-- FIM DA MIGRATION 37
+
+-- =====================================================================
+-- MIGRATION 38 (Rodada 39) — corrige o mesmo bug de fuso horário da
+-- Migration relacionada a "hoje" (Rodada 34, feita para peregrinações) só
+-- que aqui do lado do banco: `current_date`, dentro desta função, usa o
+-- fuso do próprio servidor Postgres (normalmente UTC) — entre ~21h e
+-- 23h59 no horário de Brasília, isso já é "amanhã" em UTC. Na prática,
+-- nesse intervalo, `checkins_hoje` contava a partir da meia-noite errada
+-- (perdendo check-ins feitos mais cedo no mesmo dia em Brasília) e
+-- `pontos_apoio_ativos` comparava a data de funcionamento do PAP com
+-- "amanhã" em vez de "hoje", fazendo um PAP com a data de hoje marcada
+-- sumir do contador público da home nesse mesmo intervalo (relatado pelo
+-- usuário: um PAP vinculado e aprovado, já visível no mapa, "sumindo" do
+-- contador). Troca `current_date` por `(now() at time zone
+-- 'America/Sao_Paulo')::date` nas duas contagens afetadas — não depende
+-- da configuração de fuso do servidor, sempre calcula "hoje" no horário
+-- de Brasília.
+--
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este arquivo > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    -- meia-noite de "hoje" em Brasília, convertida de volta para um
+    -- instante absoluto (timestamptz) — comparar timestamptz direto com um
+    -- `date` reintroduziria a dependência do fuso da sessão do Postgres.
+    (select count(*) from public.checkins
+       where criado_em >= (((now() at time zone 'America/Sao_Paulo')::date)::timestamp at time zone 'America/Sao_Paulo')),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true
+         and cardinality(datas_funcionamento) > 0
+         and (now() at time zone 'America/Sao_Paulo')::date = any(datas_funcionamento))
+    +
+    (select count(*) from public.paps_pre_cadastro
+       where reivindicado_por is null
+         and cardinality(datas_funcionamento) > 0
+         and (now() at time zone 'America/Sao_Paulo')::date = any(datas_funcionamento)),
+    (select count(*) from public.certificados);
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
+-- FIM DA MIGRATION 38

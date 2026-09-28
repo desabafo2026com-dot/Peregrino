@@ -41,6 +41,7 @@ import {
   TIPOS_POR_CATEGORIA,
   NIVEL_RISCO_LABELS,
   papAtivoHoje,
+  hojeISO,
 } from "@/lib/constants";
 import type { StatusRiscoInformado, StatusRomariaGrupo } from "@/types/database";
 
@@ -201,11 +202,6 @@ interface Props {
   mensagensNovas: number;
 }
 
-function hojeISOLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 // flex-1 (em vez de largura fixa) faz cada card crescer para preencher
 // junto com os outros da mesma linha — inclusive numa última linha
 // incompleta, que já não fica mais nem à esquerda (bug da Rodada 13) nem
@@ -303,7 +299,7 @@ export default function AdminDrilldownClient({
     [romariasGrupo]
   );
   const romariasGrupoPrevistasHoje = useMemo(
-    () => romariasGrupo.filter((r) => r.dataInicio === hojeISOLocal()),
+    () => romariasGrupo.filter((r) => r.dataInicio === hojeISO()),
     [romariasGrupo]
   );
 
