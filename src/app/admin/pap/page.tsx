@@ -20,7 +20,8 @@ export default async function AdminPapPage() {
           <h2 className="mb-1 text-xl font-bold">PAP cadastrados por gerentes</h2>
           <p className="text-sm text-neutral-500">
             Aprove a divulgação no mapa público, ou rejeite. PAP pendentes não
-            aparecem no mapa até serem aprovados.
+            aparecem no mapa até serem aprovados. Use <strong>Editar</strong> para
+            ajustar os dados de um PAP no lugar do gerente.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

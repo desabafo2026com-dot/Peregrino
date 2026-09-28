@@ -173,6 +173,7 @@ export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = fals
           permitirArrastarPapPreCadastro={isAdmin}
           papDestacado
           focoPap={foco}
+          linkEditarPapAdmin={isAdmin}
         />
       </div>
 

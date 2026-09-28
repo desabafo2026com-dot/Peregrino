@@ -551,6 +551,7 @@ export default async function AdminDashboardPage() {
           pontosRisco={(pontosRisco ?? []) as PontoRisco[]}
           avisos={avisos}
           peregrinos={localizacoes ?? []}
+          podeEditarPap={isAdmin}
         />
       </section>
     </div>

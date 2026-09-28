@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Clock, CheckCircle2, XCircle, MapPinned, QrCode, Link2, Move, Trash2 } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, MapPinned, QrCode, Link2, Move, Trash2, Pencil, Search } from "lucide-react";
 import { STATUS_PAP_LABELS } from "@/lib/constants";
 import type { PontoApoio } from "@/types/database";
 
@@ -22,6 +22,7 @@ const STATUS_ICON: Record<string, React.ElementType> = {
 export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: PontoApoio[] }) {
   const supabase = createClient();
   const [pontos, setPontos] = useState(pontosIniciais);
+  const [busca, setBusca] = useState("");
 
   async function atualizarStatus(id: string, status: "aprovado" | "rejeitado") {
     const { error } = await supabase.from("pontos_apoio").update({ status_aprovacao: status }).eq("id", id);
@@ -50,8 +51,20 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
     }
   }
 
-  const pendentes = pontos.filter((p) => p.status_aprovacao === "pendente");
-  const outros = pontos.filter((p) => p.status_aprovacao !== "pendente");
+  // Rodada 43 — busca por nome ou cidade, para achar rápido o PAP que um
+  // gerente pediu para ajustar (sem diferenciar acento/maiúscula).
+  const filtrados = useMemo(() => {
+    const normalizar = (t: string) =>
+      t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const termo = normalizar(busca);
+    if (!termo) return pontos;
+    return pontos.filter(
+      (p) => normalizar(p.nome).includes(termo) || normalizar(p.cidade ?? "").includes(termo)
+    );
+  }, [pontos, busca]);
+
+  const pendentes = filtrados.filter((p) => p.status_aprovacao === "pendente");
+  const outros = filtrados.filter((p) => p.status_aprovacao !== "pendente");
 
   function Card({ p }: { p: PontoApoio }) {
     const Icon = STATUS_ICON[p.status_aprovacao];
@@ -63,6 +76,7 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
             {p.nome}
           </p>
           <p className="text-xs text-neutral-500">
+            {p.cidade ? `${p.cidade} — ` : ""}
             {p.km_referencia != null ? `km ${p.km_referencia} — ` : ""}
             {p.gerente_id ? "cadastrado por gerente de PAP" : "cadastrado pela administração"}
             {p.pre_cadastro_id ? " — vinculado da lista pública" : ""}
@@ -99,6 +113,14 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
               <Link2 size={14} /> Ver página pública
             </Link>
           )}
+          {/* Rodada 43 — edição completa pela administração, para ajudar
+              gerentes com dificuldade de usar o app. */}
+          <Link
+            href={`/admin/pap/${p.id}/editar`}
+            className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950"
+          >
+            <Pencil size={14} /> Editar
+          </Link>
           <Link
             href={`/admin/pap/${p.id}/qrcode`}
             className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
@@ -124,6 +146,16 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
+        <input
+          type="search"
+          className="input input-com-icone"
+          placeholder="Buscar PAP por nome ou cidade..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+      </div>
       <section>
         <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-amber-800 dark:text-amber-500">
           Pendentes de aprovação ({pendentes.length})
@@ -133,7 +165,9 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
             <Card key={p.id} p={p} />
           ))}
           {pendentes.length === 0 && (
-            <p className="text-sm text-neutral-400">Nenhum PAP pendente no momento.</p>
+            <p className="text-sm text-neutral-400">
+              {busca.trim() ? "Nenhum PAP pendente com esse nome ou cidade." : "Nenhum PAP pendente no momento."}
+            </p>
           )}
         </div>
       </section>
@@ -145,6 +179,9 @@ export default function PapAdminClient({ pontosIniciais }: { pontosIniciais: Pon
           {outros.map((p) => (
             <Card key={p.id} p={p} />
           ))}
+          {outros.length === 0 && busca.trim() && (
+            <p className="text-sm text-neutral-400">Nenhum PAP com esse nome ou cidade.</p>
+          )}
         </div>
       </section>
     </div>

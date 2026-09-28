@@ -20,6 +20,8 @@ interface Props {
   pontosRisco: PontoRisco[];
   avisos: RiscoInformado[];
   peregrinos: { user_id: string; latitude: number; longitude: number }[];
+  // Rodada 43 — agentes também veem este mapa, mas só admin edita PAP.
+  podeEditarPap?: boolean;
 }
 
 // Rodada 24, a pedido do usuário: o mapa do painel ganhou filtros próprios
@@ -31,7 +33,7 @@ interface Props {
 // gerente, sem relação com o calendário), o que fazia um PAP sem data de
 // hoje marcada continuar aparecendo "ativo" aqui mesmo já tendo sumido do
 // mapa público (bug relatado pelo usuário).
-export default function AdminMapClient({ pontosApoio, pontosRisco, avisos, peregrinos }: Props) {
+export default function AdminMapClient({ pontosApoio, pontosRisco, avisos, peregrinos, podeEditarPap = false }: Props) {
   const [mostrarPap, setMostrarPap] = useState(true);
   const [mostrarRiscos, setMostrarRiscos] = useState(true);
   const [mostrarAvisos, setMostrarAvisos] = useState(true);
@@ -82,6 +84,7 @@ export default function AdminMapClient({ pontosApoio, pontosRisco, avisos, pereg
         peregrinos={mostrarCalor ? peregrinos : []}
         calorPeregrinos={mostrarCalor}
         height="55vh"
+        linkEditarPapAdmin={podeEditarPap}
       />
     </div>
   );

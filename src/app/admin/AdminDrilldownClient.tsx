@@ -934,6 +934,17 @@ export default function AdminDrilldownClient({
                               STATUS_PAP_LABELS[p.statusAprovacao] ?? p.statusAprovacao
                             } — ${p.ativo && papAtivoHoje(p.datasFuncionamento) ? "ativo hoje" : "inativo hoje"}`}
                       </p>
+                      {/* Rodada 43 — atalho para a edição pela administração
+                          (só PAP de verdade; os do pré-cadastro têm telas
+                          próprias de datas e posição). */}
+                      {p.statusAprovacao !== "pre_cadastro_sem_gerente" && (
+                        <Link
+                          href={`/admin/pap/${p.id}/editar`}
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400"
+                        >
+                          <Pencil size={13} /> Editar este PAP
+                        </Link>
+                      )}
                     </div>
                   ))}
 

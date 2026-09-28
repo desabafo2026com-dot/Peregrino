@@ -108,6 +108,9 @@ interface Props {
   // PAP confirmado ou "pre:<id>" para PAP do pré-cadastro; `seq` muda a
   // cada clique, para o mesmo PAP poder ser escolhido de novo.
   focoPap?: { chave: string; seq: number } | null;
+  // Rodada 43 — só para administradores: o popup do PAP ganha um link
+  // "Editar este PAP", que abre a edição pela administração.
+  linkEditarPapAdmin?: boolean;
 }
 
 function servicosLabel(servicos: string[]) {
@@ -154,6 +157,7 @@ export default function MapView({
   permitirArrastarPapPreCadastro = false,
   papDestacado = false,
   focoPap = null,
+  linkEditarPapAdmin = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -257,6 +261,11 @@ export default function MapView({
               }
               ${p.responsavel && p.exibir_telefone !== false ? `Responsável: ${p.responsavel}<br/>` : ""}
               ${p.telefone && p.exibir_telefone !== false ? `Telefone: ${p.telefone}` : ""}
+              ${
+                linkEditarPapAdmin
+                  ? `<a href="/admin/pap/${p.id}/editar" style="display:inline-block;margin-top:8px;color:#8f3f19;font-weight:700;text-decoration:underline">Editar este PAP (administração)</a>`
+                  : ""
+              }
             </div>
           `)
         )
@@ -445,7 +454,7 @@ export default function MapView({
         .addTo(map);
       markersRef.current.push(marker);
     });
-  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, pontosComerciais, permitirArrastarPapPreCadastro, papDestacado]);
+  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, pontosComerciais, permitirArrastarPapPreCadastro, papDestacado, linkEditarPapAdmin]);
 
   // Rodada 42 — busca de PAP em /mapa: leva o mapa até o PAP escolhido e
   // abre o popup com as informações dele (fechando qualquer outro aberto).
