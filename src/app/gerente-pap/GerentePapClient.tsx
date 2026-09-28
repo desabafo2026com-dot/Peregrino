@@ -9,7 +9,10 @@ import { STATUS_PAP_LABELS, papAbertoAgora } from "@/lib/constants";
 import PapForm, { type PapFormDados } from "@/components/PapForm";
 import PapPreCadastroBusca from "@/components/PapPreCadastroBusca";
 import PapQrCode from "@/components/PapQrCode";
-import type { GerentePap, PontoApoio, PapPreCadastro } from "@/types/database";
+import PapConflitoDialog from "@/components/PapConflitoDialog";
+import SolicitacoesTransferenciaRecebidas from "@/components/SolicitacoesTransferenciaRecebidas";
+import { verificarPapDuplicado, type ConflitoPap } from "@/lib/pap-duplicidade";
+import type { GerentePap, PontoApoio, PapPreCadastro, PapTransferencia } from "@/types/database";
 
 const STATUS_PAP_COLOR: Record<string, string> = {
   pendente: "text-amber-700 dark:text-amber-500",
@@ -20,14 +23,21 @@ const STATUS_PAP_COLOR: Record<string, string> = {
 export default function GerentePapClient({
   gerente,
   pontosIniciais,
+  transferenciasRecebidasIniciais,
 }: {
   gerente: GerentePap;
   pontosIniciais: PontoApoio[];
+  transferenciasRecebidasIniciais: PapTransferencia[];
 }) {
   const supabase = createClient();
   const router = useRouter();
   const [pontos, setPontos] = useState(pontosIniciais);
   const [preCadastro, setPreCadastro] = useState<PapPreCadastro | null | undefined>(undefined);
+  // Rodada 38 — conflito detectado ao tentar cadastrar "do zero" um PAP cujo
+  // nome+cidade já existem (ver verificarPapDuplicado). Guardamos junto os
+  // dados que a pessoa preencheu, para reaproveitar se ela escolher "Usar
+  // este PAP" (pré-cadastro) em vez de cancelar.
+  const [conflito, setConflito] = useState<ConflitoPap | null>(null);
   // Rodada 24: o status "Aberto/Fechado" deixou de ser um botão que o
   // gerente alternava manualmente (podia ficar "aberto" mesmo fora do
   // calendário/horário cadastrado, ou vice-versa) — agora é só um selo
@@ -43,6 +53,11 @@ export default function GerentePapClient({
   // sucesso com o QR code para imprimir antes de ir para a lista normal —
   // "vinculado" só quando os dados vieram da base pública (preCadastro).
   const [sucesso, setSucesso] = useState<{ ponto: PontoApoio; vinculado: boolean } | null>(null);
+  // Rodada 38 — pedidos pendentes de outros gerentes querendo assumir um dos
+  // PAP desta conta. Ao aceitar um pedido, o PAP some da lista (deixou de
+  // ser desta conta) — removido direto do estado em memória, sem precisar
+  // recarregar a página inteira.
+  const [transferenciasRecebidas, setTransferenciasRecebidas] = useState(transferenciasRecebidasIniciais);
 
   async function cadastrarPrimeiroPap(dados: PapFormDados) {
     if (dados.pre_cadastro_id) {
@@ -54,6 +69,16 @@ export default function GerentePapClient({
           error:
             "Este PAP da lista pública já foi vinculado por outra pessoa. Volte e escolha outro, ou cadastre do zero.",
         };
+      }
+    } else {
+      // Cadastro do zero (fora da busca da lista pública) — só aqui faz
+      // sentido checar duplicidade, já que quem selecionou um item da lista
+      // (dados.pre_cadastro_id acima) está vinculando algo que, por
+      // definição da própria busca, ainda não tem gerente.
+      const conflitoDetectado = await verificarPapDuplicado(supabase, dados.nome, dados.cidade, gerente.id);
+      if (conflitoDetectado) {
+        setConflito(conflitoDetectado);
+        return {};
       }
     }
     const {
@@ -128,46 +153,77 @@ export default function GerentePapClient({
   }
 
   if (pontos.length === 0) {
-    if (preCadastro === undefined) {
-      return (
-        <PapPreCadastroBusca
-          onSelecionar={(item) => setPreCadastro(item)}
-          onPular={() => setPreCadastro(null)}
-        />
-      );
-    }
     return (
-      <div className="card">
-        <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
-          <MapPinPlus size={20} /> Cadastre seu PAP
-        </h2>
-        <p className="mb-5 text-sm text-neutral-500">
-          Preencha os dados do seu Ponto de Apoio ao Peregrino e marque a
-          localização no mapa. Ele fica pendente até um administrador aprovar
-          a divulgação — depois disso, você pode alterar esses dados quando
-          quiser.
-        </p>
-        {preCadastro && (
-          <button
-            type="button"
-            onClick={() => setPreCadastro(undefined)}
-            className="mb-4 text-xs font-medium text-amber-700 dark:text-amber-500"
-          >
-            ← Escolher outro da lista pública
-          </button>
+      <>
+        {preCadastro === undefined ? (
+          <PapPreCadastroBusca
+            onSelecionar={(item) => setPreCadastro(item)}
+            onPular={() => setPreCadastro(null)}
+          />
+        ) : (
+          <div className="card">
+            <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+              <MapPinPlus size={20} /> Cadastre seu PAP
+            </h2>
+            <p className="mb-5 text-sm text-neutral-500">
+              Preencha os dados do seu Ponto de Apoio ao Peregrino e marque a
+              localização no mapa. Ele fica pendente até um administrador aprovar
+              a divulgação — depois disso, você pode alterar esses dados quando
+              quiser.
+            </p>
+            {preCadastro && (
+              <button
+                type="button"
+                onClick={() => setPreCadastro(undefined)}
+                className="mb-4 text-xs font-medium text-amber-700 dark:text-amber-500"
+              >
+                ← Escolher outro da lista pública
+              </button>
+            )}
+            <PapForm
+              // Rodada 38: força remontar o formulário (limpando os campos
+              // com os dados do item) quando "Usar este PAP" troca o
+              // pré-cadastro depois que o form já estava aberto — sem isso,
+              // PapForm manteria o que a pessoa já tinha digitado, já que
+              // seus campos são useState só inicializados na montagem.
+              key={preCadastro?.id ?? "novo"}
+              preCadastro={preCadastro}
+              onSalvar={cadastrarPrimeiroPap}
+              submitLabel="Cadastrar PAP"
+              submitLoadingLabel="Salvando..."
+            />
+          </div>
         )}
-        <PapForm
-          preCadastro={preCadastro}
-          onSalvar={cadastrarPrimeiroPap}
-          submitLabel="Cadastrar PAP"
-          submitLoadingLabel="Salvando..."
-        />
-      </div>
+        {conflito && (
+          <PapConflitoDialog
+            conflito={conflito}
+            onFechar={() => setConflito(null)}
+            onUsarPreCadastro={(id) => {
+              const item =
+                conflito.tipo === "pre_cadastro" && conflito.preCadastro.id === id
+                  ? conflito.preCadastro
+                  : null;
+              setConflito(null);
+              if (item) setPreCadastro(item);
+            }}
+          />
+        )}
+      </>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {transferenciasRecebidas.length > 0 && (
+        <SolicitacoesTransferenciaRecebidas
+          solicitacoes={transferenciasRecebidas}
+          onAceitar={(papId) => {
+            setTransferenciasRecebidas((prev) => prev.filter((s) => s.pap_id !== papId));
+            setPontos((prev) => prev.filter((p) => p.id !== papId));
+          }}
+        />
+      )}
+
       <Link href="/gerente-pap/pap/novo" className="btn-primary flex items-center justify-center gap-2">
         <MapPinPlus size={18} /> Cadastrar novo PAP
       </Link>

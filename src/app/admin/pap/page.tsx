@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MapPin } from "lucide-react";
+import { MapPin, ArrowLeftRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import PapAdminClient from "./PapAdminClient";
 import VoltarButton from "@/components/VoltarButton";
@@ -23,12 +23,20 @@ export default async function AdminPapPage() {
             aparecem no mapa até serem aprovados.
           </p>
         </div>
-        <Link
-          href="/admin/pap/pre-cadastro"
-          className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-        >
-          <MapPin size={16} /> Posição dos PAP pré-cadastrados
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/pap/transferencias"
+            className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            <ArrowLeftRight size={16} /> Transferências
+          </Link>
+          <Link
+            href="/admin/pap/pre-cadastro"
+            className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            <MapPin size={16} /> Posição dos PAP pré-cadastrados
+          </Link>
+        </div>
       </div>
       <PapAdminClient pontosIniciais={(pontos ?? []) as PontoApoio[]} />
     </div>

@@ -7,17 +7,50 @@ import { createClient } from "@/lib/supabase/client";
 import VoltarButton from "@/components/VoltarButton";
 import PapForm, { type PapFormDados } from "@/components/PapForm";
 import PapQrCode from "@/components/PapQrCode";
-import type { PontoApoio } from "@/types/database";
+import PapConflitoDialog from "@/components/PapConflitoDialog";
+import { verificarPapDuplicado, type ConflitoPap } from "@/lib/pap-duplicidade";
+import type { PontoApoio, PapPreCadastro } from "@/types/database";
 
 export default function NovoPapGerentePage() {
   const router = useRouter();
   const [sucesso, setSucesso] = useState<PontoApoio | null>(null);
+  // Rodada 38 — igual ao cadastro do primeiro PAP em GerentePapClient.tsx:
+  // se a checagem encontrar um PAP já existente na lista pública ainda sem
+  // gerente, oferecemos usar aqueles dados em vez de criar um duplicado.
+  const [preCadastro, setPreCadastro] = useState<PapPreCadastro | null>(null);
+  const [conflito, setConflito] = useState<ConflitoPap | null>(null);
 
   async function salvar(dados: PapFormDados) {
     const supabase = createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    if (dados.pre_cadastro_id) {
+      // Mesmo caminho de GerentePapClient.tsx: reivindicar o item na lista
+      // pública antes de criar o PAP de verdade, para ele sair da busca de
+      // quem ainda não tem gerente.
+      const { error: erroReivindicar } = await supabase.rpc("reivindicar_pap_pre_cadastro", {
+        p_id: dados.pre_cadastro_id,
+      });
+      if (erroReivindicar) {
+        return {
+          error:
+            "Este PAP da lista pública já foi vinculado por outra pessoa. Volte e escolha outro, ou cadastre do zero.",
+        };
+      }
+    } else {
+      const conflitoDetectado = await verificarPapDuplicado(
+        supabase,
+        dados.nome,
+        dados.cidade,
+        user!.id
+      );
+      if (conflitoDetectado) {
+        setConflito(conflitoDetectado);
+        return {};
+      }
+    }
 
     const { data, error } = await supabase
       .from("pontos_apoio")
@@ -75,7 +108,39 @@ export default function NovoPapGerentePage() {
         aparece no mapa para os peregrinos depois que um administrador
         aprovar a divulgação. Você pode alterar esses dados quando precisar.
       </p>
-      <PapForm onSalvar={salvar} submitLabel="Cadastrar PAP" submitLoadingLabel="Salvando..." />
+      {preCadastro && (
+        <button
+          type="button"
+          onClick={() => setPreCadastro(null)}
+          className="mb-4 text-xs font-medium text-amber-700 dark:text-amber-500"
+        >
+          ← Cadastrar sem aproveitar estes dados
+        </button>
+      )}
+      <PapForm
+        // Rodada 38: força remontar (ver GerentePapClient.tsx) quando "Usar
+        // este PAP" preenche os campos a partir de um pré-cadastro depois
+        // que o formulário já estava aberto.
+        key={preCadastro?.id ?? "novo"}
+        preCadastro={preCadastro}
+        onSalvar={salvar}
+        submitLabel="Cadastrar PAP"
+        submitLoadingLabel="Salvando..."
+      />
+      {conflito && (
+        <PapConflitoDialog
+          conflito={conflito}
+          onFechar={() => setConflito(null)}
+          onUsarPreCadastro={(id) => {
+            const item =
+              conflito.tipo === "pre_cadastro" && conflito.preCadastro.id === id
+                ? conflito.preCadastro
+                : null;
+            setConflito(null);
+            if (item) setPreCadastro(item);
+          }}
+        />
+      )}
     </div>
   );
 }

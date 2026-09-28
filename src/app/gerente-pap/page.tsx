@@ -3,7 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
 import GerentePapClient from "./GerentePapClient";
-import type { GerentePap, PontoApoio } from "@/types/database";
+import TambemPeregrinoCheck from "@/components/TambemPeregrinoCheck";
+import type { GerentePap, PontoApoio, PapTransferencia } from "@/types/database";
 
 export default async function GerentePapPage() {
   const supabase = await createClient();
@@ -78,6 +79,16 @@ export default async function GerentePapPage() {
     .eq("id", user.id)
     .maybeSingle();
 
+  // Rodada 38 — pedidos de outros gerentes querendo assumir um PAP que hoje
+  // está vinculado a esta conta (ver solicitar_transferencia_pap). Só os
+  // pendentes: uma vez aceito ou negado, o pedido sai desta lista.
+  const { data: transferenciasRecebidas } = await supabase
+    .from("pap_transferencias")
+    .select("*")
+    .eq("gerente_atual_id", user.id)
+    .eq("status", "pendente")
+    .order("criado_em", { ascending: false });
+
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href="/" />
@@ -86,17 +97,12 @@ export default async function GerentePapPage() {
         Vincule ou cadastre seu Ponto de Apoio ao Peregrino — ele fica
         pendente até um administrador aprovar a divulgação no mapa.
       </p>
-      <GerentePapClient gerente={gerente as GerentePap} pontosIniciais={pontos} />
-      <div className="mt-6 border-t border-neutral-200 pt-4 text-center dark:border-neutral-800">
-        <p className="mb-2 text-sm text-neutral-500">
-          {perfil
-            ? "Você também tem cadastro de peregrino nesta conta."
-            : "Vai caminhar também? Você pode usar esta mesma conta para fazer sua peregrinação."}
-        </p>
-        <Link href="/peregrinacao" className="btn-secondary inline-block text-sm">
-          {perfil ? "Ir para Minha peregrinação" : "Quero também fazer minha peregrinação"}
-        </Link>
-      </div>
+      <GerentePapClient
+        gerente={gerente as GerentePap}
+        pontosIniciais={pontos}
+        transferenciasRecebidasIniciais={(transferenciasRecebidas ?? []) as PapTransferencia[]}
+      />
+      <TambemPeregrinoCheck gerente={gerente as GerentePap} temPerfil={!!perfil} />
     </div>
   );
 }

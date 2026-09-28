@@ -14,6 +14,7 @@ export type Motivo =
 export type StatusPeregrinacao = "planejada" | "em_andamento" | "concluida" | "cancelada";
 export type StatusGerentePap = "pendente" | "aprovado" | "rejeitado";
 export type StatusAprovacaoPap = "pendente" | "aprovado" | "rejeitado";
+export type StatusTransferenciaPap = "pendente" | "aceita" | "negada";
 export type MeioTransporte = "a_pe" | "bicicleta" | "moto" | "outros";
 export type SentidoPista = "sp" | "rj";
 export type Br = "116" | "488";
@@ -145,6 +146,25 @@ export interface PontoComercial {
   longitude: number;
   ativo: boolean;
   criado_por: string | null;
+  criado_em: string;
+}
+
+// Rodada 38 — pedido de um gerente para assumir um PAP que já existe (de
+// outro gerente, ou cadastrado pela administração sem gerente vinculado).
+// Nomes gravados no momento do pedido, não como referência viva (ver
+// comentário da tabela em supabase/schema.sql).
+export interface PapTransferencia {
+  id: string;
+  pap_id: string;
+  pap_nome: string;
+  gerente_atual_id: string | null;
+  gerente_atual_nome: string | null;
+  solicitante_id: string;
+  solicitante_nome: string;
+  motivo: string | null;
+  status: StatusTransferenciaPap;
+  resolvido_por_admin: boolean;
+  resolvido_em: string | null;
   criado_em: string;
 }
 
