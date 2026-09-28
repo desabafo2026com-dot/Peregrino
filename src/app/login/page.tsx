@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { validarNomeCompleto } from "@/lib/validation";
 import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
+import EntrarComGoogle from "@/components/EntrarComGoogle";
 import { LogIn, Mail, Footprints, MapPinPlus, ArrowLeft } from "lucide-react";
 
 type Passo = "email" | "senha" | "tipo" | "cadastro" | "verifique";
@@ -22,6 +23,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const avisoConfirmeEmail = searchParams.get("aviso") === "confirme-email";
+  const erroGoogle = searchParams.get("erro") === "google";
   const tipoParam = searchParams.get("tipo");
   const tipoPreset: TipoConta | null =
     tipoParam === "peregrino" || tipoParam === "gerente_pap" ? tipoParam : null;
@@ -230,7 +232,7 @@ function LoginForm() {
           <LogIn size={22} className="text-amber-700" /> Entrar ou cadastrar
         </h1>
         <p className="mb-5 text-sm text-neutral-500">
-          {passo === "email" && "Digite seu e-mail para entrar ou criar sua conta."}
+          {passo === "email" && "Entre ou crie sua conta com o Google ou com seu e-mail."}
           {passo === "senha" && "Este e-mail já tem conta. Informe sua senha."}
           {passo === "tipo" && "Este e-mail ainda não tem conta. Como você vai usar o app?"}
           {passo === "cadastro" &&
@@ -246,6 +248,25 @@ function LoginForm() {
           </p>
         )}
 
+        {erroGoogle && passo === "email" && (
+          <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+            Não foi possível entrar com o Google. Tente de novo ou use seu e-mail abaixo.
+          </p>
+        )}
+
+        {/* Rodada 40 — entrar com o Google fica em primeiro lugar: é o
+            caminho que não passa pelo e-mail de confirmação. */}
+        {passo === "email" && (
+          <div className="mb-5">
+            <EntrarComGoogle tipo={tipoPreset} redirect={searchParams.get("redirect")} />
+            <div className="mt-5 flex items-center gap-3 text-xs text-neutral-400">
+              <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+              ou use seu e-mail
+              <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+            </div>
+          </div>
+        )}
+
         {passo === "email" && (
           <form onSubmit={handleContinuarEmail} className="flex flex-col gap-4">
             <div>
@@ -253,7 +274,6 @@ function LoginForm() {
               <input
                 type="email"
                 required
-                autoFocus
                 className="input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

@@ -23,6 +23,13 @@ interface AuthRoleState {
   // ainda não tem nenhum cadastro (ex.: entre o signUp e finalizarCadastro),
   // que é um estado transitório, não um caso real de "nunca aceitou".
   precisaAceitarTermos: boolean;
+  // Rodada 40 — logado, mas sem nenhum cadastro (nem peregrino, nem gerente)
+  // e sem ter escolhido um tipo de conta. Só acontece com quem entrou pelo
+  // "Entrar com o Google" e saiu antes de terminar /login/completar (o
+  // cadastro por e-mail sempre grava o tipo de conta já no signUp). Usado
+  // pelo CompletarCadastroGate para levar a pessoa de volta até lá, onde
+  // ela aceita os Termos antes de usar as áreas logadas.
+  cadastroIncompleto: boolean;
 }
 
 const DEFAULT_STATE: AuthRoleState = {
@@ -34,6 +41,7 @@ const DEFAULT_STATE: AuthRoleState = {
   nomeCompleto: null,
   avatarUrl: null,
   precisaAceitarTermos: false,
+  cadastroIncompleto: false,
 };
 
 const AuthRoleContext = createContext<AuthRoleState & { recarregar: () => void }>({
@@ -93,6 +101,7 @@ export function AuthRoleProvider({ children }: { children: ReactNode }) {
           null,
         avatarUrl: (perfil?.avatar_url as string | undefined) ?? null,
         precisaAceitarTermos: temAlgumCadastro && (!versaoPerfilOk || !versaoGerenteOk),
+        cadastroIncompleto: !temAlgumCadastro && !metadata?.tipo_conta,
       });
     }
 
