@@ -18,6 +18,7 @@ import {
   Link2,
   Sun,
   Clock,
+  CheckCircle2,
   TriangleAlert,
   Megaphone,
   Search,
@@ -194,6 +195,7 @@ interface Props {
   papCadastrados: PapLinha[];
   papAtivos: PapLinha[];
   papPendentes: PapLinha[];
+  papConfirmados: PapLinha[];
   papVinculados: PapLinha[];
   riscosCadastrados: RiscoLinha[];
   riscosInformados: RiscoInformadoLinha[];
@@ -254,6 +256,7 @@ export default function AdminDrilldownClient({
   papCadastrados,
   papAtivos,
   papPendentes,
+  papConfirmados,
   papVinculados,
   riscosCadastrados,
   riscosInformados: riscosInformadosIniciais,
@@ -614,9 +617,29 @@ export default function AdminDrilldownClient({
             value={papPendentes.length}
             onClick={() => abrir({ tipo: "pap", titulo: "PAP pendentes de aprovação", dados: papPendentes })}
           />
+          {/* Rodada 39 — novo card: mesmo critério que pinta o marcador de
+              verde no mapa público (aprovado pela administração, com ou sem
+              gerente_id, com ou sem vínculo ao pré-cadastro). Adicionado
+              porque "Vinculados" abaixo, apesar do nome, só conta PAP que
+              vieram de uma reivindicação da lista pública — um PAP
+              "vinculado a um gerente" e aprovado (o que a legenda do mapa
+              chama de "vinculado") podia aparecer verde no mapa e mesmo
+              assim mostrar 0 aqui. */}
+          <Card
+            icon={CheckCircle2}
+            label="Confirmados"
+            value={papConfirmados.length}
+            onClick={() =>
+              abrir({
+                tipo: "pap",
+                titulo: "PAP confirmados (aprovados — mesmo critério do marcador verde no mapa)",
+                dados: papConfirmados,
+              })
+            }
+          />
           <Card
             icon={Link2}
-            label="Vinculados"
+            label="Vinc. lista pública"
             value={papVinculados.length}
             onClick={() =>
               abrir({ tipo: "pap", titulo: "PAP vinculados da lista pública pré-cadastrada", dados: papVinculados })

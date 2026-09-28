@@ -104,6 +104,7 @@ export default async function AdminDashboardPage() {
   let papCadastrados: PapLinha[] = [];
   let papAtivos: PapLinha[] = [];
   let papPendentes: PapLinha[] = [];
+  let papConfirmados: PapLinha[] = [];
   let papVinculados: PapLinha[] = [];
   let riscosCadastrados: RiscoLinha[] = [];
   let riscosInformados: RiscoInformadoLinha[] = [];
@@ -416,6 +417,24 @@ export default async function AdminDashboardPage() {
       ...preCadastroRows.filter((p) => papAtivoHoje(p.datasFuncionamento)),
     ];
     papPendentes = papRows.filter((p) => p.statusAprovacao === "pendente");
+    // Rodada 39 — corrige bug relatado pelo usuário: existia um PAP vinculado
+    // a um gerente e aprovado, aparecendo em verde ("Confirmado / vinculado a
+    // um gerente") no mapa público, mas o painel do admin mostrava "0" em
+    // Vinculados. Causa raiz: o card "Vinculados" nunca teve esse
+    // significado — ele sempre contou `pre_cadastro_id != null`, ou seja, só
+    // os PAP que nasceram de alguém reivindicando uma linha da lista pública
+    // pré-cadastrada (ver comentário da Rodada 36/37 acima e o próprio título
+    // do drilldown, "PAP vinculados da lista pública pré-cadastrada") — um
+    // PAP cadastrado do zero pelo gerente (sem passar pelo pré-cadastro,
+    // como era o caso do PAP relatado) nunca entra nessa conta, mesmo
+    // "vinculado a um gerente" e aprovado. Esse é um contador legítimo, só
+    // com um nome ambíguo — mantido como está (renomeado no drilldown para
+    // deixar claro que é sobre a lista pública), e criado aqui um novo
+    // contador "Confirmados" com o MESMO critério que pinta o marcador de
+    // verde no mapa (/mapa/page.tsx: `status_aprovacao = 'aprovado'`, sem
+    // checar pre_cadastro_id nem gerente_id) — este sim reflete o que o
+    // usuário e a legenda do mapa chamam de "vinculado".
+    papConfirmados = papRows.filter((p) => p.statusAprovacao === "aprovado");
     papVinculados = papRows.filter((p) => p.vinculadoPreCadastro);
 
     // Nome(s) do(s) PAP de cada gerente — mesma lógica do /admin/gerentes,
@@ -468,6 +487,7 @@ export default async function AdminDashboardPage() {
           papCadastrados={papCadastrados}
           papAtivos={papAtivos}
           papPendentes={papPendentes}
+          papConfirmados={papConfirmados}
           papVinculados={papVinculados}
           riscosCadastrados={riscosCadastrados}
           riscosInformados={riscosInformados}
