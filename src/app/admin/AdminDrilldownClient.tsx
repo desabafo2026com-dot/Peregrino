@@ -29,6 +29,8 @@ import {
   Save,
   AlertTriangle,
   MessageCircle,
+  MailWarning,
+  UserPlus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -125,6 +127,33 @@ export interface GerenteLinha {
   criadoEm: string;
 }
 
+// Rodada 41 — uma conta de acesso (auth.users), vinda de cadastros_admin()
+// (Migration 39). Inclui quem ainda não confirmou o e-mail, que não aparece
+// em nenhuma outra lista do painel por ainda não ter conseguido entrar.
+export interface CadastroLinha {
+  id: string;
+  nome: string;
+  email: string;
+  telefone: string | null;
+  tipoConta: string | null;
+  criadoEm: string;
+  confirmado: boolean;
+  viaGoogle: boolean;
+}
+
+// Link de WhatsApp a partir do telefone digitado no cadastro (formatos
+// variados: "(12) 99876-5432", "12998765432", "+55 12 ..."). Sem DDI,
+// assume Brasil. Devolve null quando não dá para montar um número válido.
+function linkWhatsApp(telefone: string | null, nome: string) {
+  if (!telefone) return null;
+  let digitos = telefone.replace(/\D/g, "");
+  if (digitos.length === 10 || digitos.length === 11) digitos = `55${digitos}`;
+  if (digitos.length < 12 || digitos.length > 13) return null;
+  const primeiroNome = nome.split(" ")[0];
+  const texto = `Olá, ${primeiroNome}! Aqui é da equipe do app O Peregrino. Vi que você começou o cadastro e talvez não tenha conseguido confirmar o e-mail. Posso ajudar? Se preferir, na tela de entrar tem o botão "Continuar com o Google", que dispensa o e-mail de confirmação.`;
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(texto)}`;
+}
+
 export interface RiscoInformadoLinha {
   id: string;
   titulo: string;
@@ -178,6 +207,7 @@ type Categoria =
   | { tipo: "pap"; titulo: string; dados: PapLinha[] }
   | { tipo: "risco"; titulo: string; dados: RiscoLinha[] }
   | { tipo: "gerente"; titulo: string; dados: GerenteLinha[] }
+  | { tipo: "cadastro"; titulo: string; dados: CadastroLinha[] }
   // "filtro" em vez de uma lista fixa: assim a lista aberta no modal
   // reflete confirmações/edições feitas sem precisar fechar e reabrir.
   | { tipo: "riscoInformado"; titulo: string; filtro: "todos" | "semRevisao" }
@@ -202,6 +232,8 @@ interface Props {
   gerentesCadastrados: GerenteLinha[];
   romariasGrupo: RomariaGrupoLinha[];
   mensagensNovas: number;
+  cadastros: CadastroLinha[] | null;
+  cadastrosNovos7d: CadastroLinha[];
 }
 
 // flex-1 (em vez de largura fixa) faz cada card crescer para preencher
@@ -263,6 +295,8 @@ export default function AdminDrilldownClient({
   gerentesCadastrados,
   romariasGrupo: romariasGrupoIniciais,
   mensagensNovas,
+  cadastros,
+  cadastrosNovos7d,
 }: Props) {
   const router = useRouter();
   const [categoria, setCategoria] = useState<Categoria | null>(null);
@@ -306,6 +340,12 @@ export default function AdminDrilldownClient({
     [romariasGrupo]
   );
 
+  const cadastrosNaoConfirmados = useMemo(
+    () => (cadastros ?? []).filter((c) => !c.confirmado && !c.viaGoogle),
+    [cadastros]
+  );
+  const cadastrosGoogle = useMemo(() => (cadastros ?? []).filter((c) => c.viaGoogle), [cadastros]);
+
   function abrir(cat: Categoria) {
     setCategoria(cat);
     setBusca("");
@@ -337,11 +377,13 @@ export default function AdminDrilldownClient({
       const nome = (d.nome as string) ?? (d.titulo as string) ?? "";
       const local = (d.local as string) ?? (d.cidade as string) ?? (d.cidadeOrigem as string) ?? "";
       const telefone = (d.telefone as string) ?? (d.organizadorTelefone as string) ?? "";
+      const email = (d.email as string) ?? "";
       const papNomes = ((d.papNomes as string[]) ?? []).join(" ");
       return (
         nome.toLowerCase().includes(termo) ||
         local.toLowerCase().includes(termo) ||
         telefone.toLowerCase().includes(termo) ||
+        email.toLowerCase().includes(termo) ||
         papNomes.toLowerCase().includes(termo)
       );
     });
@@ -532,6 +574,54 @@ export default function AdminDrilldownClient({
             onClick={() => abrir({ tipo: "peregrino", titulo: "Peregrinos ativos agora", dados: peregrinosAtivos })}
           />
         </div>
+      </section>
+
+      {/* Rodada 41 — para medir se o "Continuar com o Google" e a prévia do
+          link estão ajudando quem tinha receio de se cadastrar. */}
+      <section>
+        <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">Cadastros</h2>
+        {cadastros === null ? (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            Para ver estes contadores, rode a <strong>Migration 39</strong> (arquivo
+            peregrino_migration_39.sql) no SQL Editor do Supabase.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <Card
+                icon={MailWarning}
+                label="Não confirmaram o e-mail"
+                value={cadastrosNaoConfirmados.length}
+                destaque={cadastrosNaoConfirmados.length > 0}
+                onClick={() =>
+                  abrir({
+                    tipo: "cadastro",
+                    titulo: "Começaram o cadastro por e-mail e não confirmaram",
+                    dados: cadastrosNaoConfirmados,
+                  })
+                }
+              />
+              <Card
+                icon={LogoGoogleMono}
+                label="Entraram com Google"
+                value={cadastrosGoogle.length}
+                onClick={() => abrir({ tipo: "cadastro", titulo: "Contas que entram com o Google", dados: cadastrosGoogle })}
+              />
+              <Card
+                icon={UserPlus}
+                label="Novos (7 dias)"
+                value={cadastrosNovos7d.length}
+                onClick={() =>
+                  abrir({ tipo: "cadastro", titulo: "Contas criadas nos últimos 7 dias", dados: cadastrosNovos7d })
+                }
+              />
+            </div>
+            <p className="mt-2 text-xs text-neutral-500">
+              Quem não confirmou o e-mail ainda não consegue entrar no app. Na lista, dá para
+              chamar a pessoa no WhatsApp e sugerir o &quot;Continuar com o Google&quot;.
+            </p>
+          </>
+        )}
       </section>
 
       <section>
@@ -864,6 +954,51 @@ export default function AdminDrilldownClient({
                     </div>
                   ))}
 
+                {categoria.tipo === "cadastro" &&
+                  (dadosPagina as CadastroLinha[]).map((c) => {
+                    const whats = !c.confirmado && !c.viaGoogle ? linkWhatsApp(c.telefone, c.nome) : null;
+                    return (
+                      <div key={c.id} className="card">
+                        <p className="flex flex-wrap items-center gap-2 font-semibold">
+                          {c.nome}
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              c.viaGoogle
+                                ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                                : c.confirmado
+                                  ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                            }`}
+                          >
+                            {c.viaGoogle ? "Google" : c.confirmado ? "E-mail confirmado" : "E-mail não confirmado"}
+                          </span>
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {c.email}
+                          {c.telefone ? ` — Tel: ${c.telefone}` : ""}
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {c.tipoConta === "gerente_pap"
+                            ? "Gerente de PAP"
+                            : c.tipoConta === "peregrino"
+                              ? "Peregrino"
+                              : "Tipo de conta não escolhido"}{" "}
+                          — criada em {new Date(c.criadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                        </p>
+                        {whats && (
+                          <a
+                            href={whats}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 dark:text-green-400"
+                          >
+                            <MessageCircle size={14} /> Chamar no WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+
                 {categoria.tipo === "romariaGrupo" &&
                   (dadosPagina as RomariaGrupoLinha[]).map((r) => {
                     const fim = new Date(r.dataInicio + "T00:00:00");
@@ -1122,5 +1257,18 @@ export default function AdminDrilldownClient({
         </div>
       )}
     </div>
+  );
+}
+
+// Ícone "G" simples (de uma cor só, herda a cor do card) para o contador de
+// contas que entram com o Google — o lucide-react não traz logos de marca.
+function LogoGoogleMono({ size = 20, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M21.35 11.1H12v2.98h5.35c-.23 1.4-1.64 4.1-5.35 4.1-3.22 0-5.85-2.67-5.85-5.96S8.78 6.26 12 6.26c1.83 0 3.06.78 3.76 1.45l2.56-2.47C16.68 3.7 14.55 2.8 12 2.8 6.92 2.8 2.8 6.92 2.8 12s4.12 9.2 9.2 9.2c5.31 0 8.83-3.73 8.83-8.99 0-.6-.07-1.06-.15-1.51z"
+      />
+    </svg>
   );
 }

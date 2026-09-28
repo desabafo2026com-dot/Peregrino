@@ -3487,3 +3487,66 @@ $$;
 grant execute on function public.estatisticas_publicas() to anon, authenticated;
 
 -- FIM DA MIGRATION 38
+
+-- =====================================================================
+-- MIGRATION 39 (Rodada 41) — contadores de cadastro no painel do admin.
+--
+-- Para medir se as mudanças da Rodada 40 (entrar com o Google, prévia do
+-- link) estão ajudando quem tinha receio de se cadastrar, o painel passa a
+-- mostrar quantas pessoas começaram o cadastro por e-mail e ainda não
+-- clicaram no link de confirmação (e por isso não conseguem entrar),
+-- quantas entraram pelo Google e quantas contas foram criadas nos últimos
+-- 7 dias. Esses dados só existem em auth.users, que nenhuma política RLS
+-- deixa o app ler — por isso esta função SECURITY DEFINER, que só devolve
+-- linhas para administradores (public.is_admin()); para qualquer outra
+-- pessoa (inclusive anônimos) ela volta vazia.
+--
+-- Nome e telefone vêm do que a própria pessoa digitou no cadastro (guardado
+-- no metadata da conta), para a administração poder chamar no WhatsApp
+-- quem travou na confirmação do e-mail.
+--
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este arquivo > Run
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+drop function if exists public.cadastros_admin();
+create or replace function public.cadastros_admin()
+returns table (
+  id uuid,
+  email text,
+  nome text,
+  telefone text,
+  tipo_conta text,
+  criado_em timestamptz,
+  confirmado boolean,
+  via_google boolean,
+  ultimo_login timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select
+    u.id,
+    u.email::text,
+    coalesce(
+      nullif(u.raw_user_meta_data->>'nome_completo', ''),
+      nullif(u.raw_user_meta_data->>'full_name', ''),
+      nullif(u.raw_user_meta_data->>'name', '')
+    ),
+    nullif(u.raw_user_meta_data->>'telefone', ''),
+    nullif(u.raw_user_meta_data->>'tipo_conta', ''),
+    u.created_at,
+    u.email_confirmed_at is not null,
+    coalesce(u.raw_app_meta_data->'providers' ? 'google', false),
+    u.last_sign_in_at
+  from auth.users u
+  where public.is_admin()
+  order by u.created_at desc;
+$$;
+
+revoke all on function public.cadastros_admin() from public, anon;
+grant execute on function public.cadastros_admin() to authenticated;
+
+-- FIM DA MIGRATION 39

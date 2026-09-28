@@ -477,6 +477,13 @@ function LoginForm() {
           </div>
         )}
       </div>
+      {/* Rodada 41 — resposta às dúvidas de quem tem receio de um app fora
+          da loja (ver /seguro). */}
+      <p className="mt-4 text-center text-sm" style={{ textAlign: "center" }}>
+        <Link href="/seguro" className="font-medium text-amber-700 underline dark:text-amber-500">
+          O app é seguro? Por que não está na loja?
+        </Link>
+      </p>
     </div>
   );
 }

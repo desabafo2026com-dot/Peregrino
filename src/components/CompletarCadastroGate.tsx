@@ -9,8 +9,8 @@ import { useAuthRole } from "./AuthRoleProvider";
 // escolhido o tipo de conta nem aceitado os Termos. Aqui mandamos essa
 // pessoa de volta para terminar, em qualquer página — menos nas que ela
 // precisa conseguir abrir nesse meio-tempo (o próprio login/completar e os
-// textos dos Termos e da Política de Privacidade).
-const LIVRES = ["/login", "/auth", "/termos", "/privacidade"];
+// textos dos Termos, da Política de Privacidade e o "É seguro?").
+const LIVRES = ["/login", "/auth", "/termos", "/privacidade", "/seguro"];
 
 export default function CompletarCadastroGate() {
   const { cadastroIncompleto } = useAuthRole();

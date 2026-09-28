@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, Smartphone } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, Smartphone, ShieldCheck } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import DoacaoCard from "@/components/DoacaoCard";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
@@ -147,6 +147,31 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Rodada 41 — para quem chega por um link de grupo e ainda não tem
+          conta: deixa claro logo de cara que dá para usar o essencial sem
+          cadastro (parte do público tinha receio de se cadastrar num app
+          fora da loja) e aponta para a página que responde essa dúvida. */}
+      {!user && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <p className="mb-1 font-bold text-amber-900 dark:text-amber-200">
+            Pode usar sem cadastro
+          </p>
+          <p className="mb-3 text-sm text-neutral-700 dark:text-neutral-300">
+            O mapa de Pontos de Apoio, as rotas com os trechos de risco e os hotéis e restaurantes
+            estão liberados para qualquer pessoa. O cadastro só é preciso para registrar sua
+            peregrinação, fazer check-in e receber o certificado.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/mapa" className="btn-primary inline-flex items-center gap-1.5 text-sm">
+              <MapPin size={16} /> Ver o mapa agora
+            </Link>
+            <Link href="/seguro" className="btn-secondary inline-flex items-center gap-1.5 text-sm">
+              <ShieldCheck size={16} /> O app é seguro?
+            </Link>
+          </div>
+        </section>
+      )}
+
       {stats && (
         // Grid de 2 colunas (5 no celular maior/tablet+, os 4 módulos de
         // estatística mais o botão de instalar) em vez do flex-wrap
@@ -281,6 +306,10 @@ export default async function Home() {
         ·{" "}
         <Link href="/privacidade" className="underline">
           Política de Privacidade
+        </Link>{" "}
+        ·{" "}
+        <Link href="/seguro" className="underline">
+          O app é seguro?
         </Link>
       </p>
     </div>

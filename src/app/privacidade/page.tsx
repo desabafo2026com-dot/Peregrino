@@ -49,7 +49,10 @@ export default function PoliticaDePrivacidadePage() {
           <ul className="list-disc space-y-2 pl-5">
             <li>
               <strong>Cadastro:</strong> nome completo, telefone (opcional),
-              e-mail e senha — para criar e proteger sua conta.{" "}
+              e-mail e senha — para criar e proteger sua conta. Se você
+              escolher entrar com sua conta Google, recebemos do Google apenas
+              seu nome, e-mail e foto de perfil (nesse caso não há senha
+              cadastrada no App).{" "}
               <em>Base legal: execução de contrato.</em>
             </li>
             <li>
@@ -142,7 +145,11 @@ export default function PoliticaDePrivacidadePage() {
             </li>
             <li>
               <strong>Mercado Pago</strong> — processamento de pagamentos e
-              doações.
+              doações;
+            </li>
+            <li>
+              <strong>Google</strong> — apenas para quem escolhe entrar com a
+              conta Google (login, sem acesso a e-mails, arquivos ou contatos).
             </li>
           </ul>
           <p>

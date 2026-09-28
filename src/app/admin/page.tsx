@@ -9,6 +9,7 @@ import AdminDrilldownClient, {
   type RiscoInformadoLinha,
   type GerenteLinha,
   type RomariaGrupoLinha,
+  type CadastroLinha,
 } from "./AdminDrilldownClient";
 import VoltarButton from "@/components/VoltarButton";
 import type {
@@ -43,6 +44,13 @@ function ehHoje(iso: string | null) {
     return iso === diaCivilBrasil(new Date());
   }
   return diaCivilBrasil(new Date(iso)) === diaCivilBrasil(new Date());
+}
+
+// Rodada 41 — contador "Novos (7 dias)" do módulo Cadastros. `criado_em`
+// é um instante absoluto (timestamptz), então comparar direto com "agora"
+// não tem problema de fuso horário.
+function criadoNosUltimos7Dias(iso: string) {
+  return new Date(iso).getTime() >= new Date().getTime() - 7 * 24 * 60 * 60 * 1000;
 }
 
 export default async function AdminDashboardPage() {
@@ -112,6 +120,11 @@ export default async function AdminDashboardPage() {
   let romariasGrupo: RomariaGrupoLinha[] = [];
   let mensagensNovas = 0;
   let avisos: RiscoInformado[] = [];
+  // Rodada 41 — null quando a função cadastros_admin() ainda não existe no
+  // banco (Migration 39 não aplicada): o painel mostra um aviso em vez dos
+  // contadores, sem quebrar o resto da página.
+  let cadastros: CadastroLinha[] | null = null;
+  let cadastrosNovos7d: CadastroLinha[] = [];
 
   if (isAdmin) {
     const [
@@ -124,6 +137,7 @@ export default async function AdminDashboardPage() {
       { data: romariasGrupoData },
       { count: contagemMensagensNovas },
       { data: preCadastro },
+      { data: cadastrosData, error: erroCadastros },
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome_completo, cidade, uf, is_admin, is_agente"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
@@ -145,7 +159,36 @@ export default async function AdminDashboardPage() {
         .from("paps_pre_cadastro")
         .select("id, nome, cidade, km, sentido_pista, datas_funcionamento, criado_em")
         .is("reivindicado_por", null),
+      // Rodada 41 — contas de acesso (auth.users), só visível para admin
+      // (ver cadastros_admin() na Migration 39).
+      supabase.rpc("cadastros_admin"),
     ]);
+
+    if (!erroCadastros) {
+      interface CadastroBruto {
+        id: string;
+        email: string | null;
+        nome: string | null;
+        telefone: string | null;
+        tipo_conta: string | null;
+        criado_em: string;
+        confirmado: boolean;
+        via_google: boolean;
+      }
+      cadastros = ((cadastrosData ?? []) as CadastroBruto[]).map(
+        (c): CadastroLinha => ({
+          id: c.id,
+          nome: c.nome ?? "(sem nome)",
+          email: c.email ?? "",
+          telefone: c.telefone,
+          tipoConta: c.tipo_conta,
+          criadoEm: c.criado_em,
+          confirmado: c.confirmado,
+          viaGoogle: c.via_google,
+        })
+      );
+      cadastrosNovos7d = cadastros.filter((c) => criadoNosUltimos7Dias(c.criadoEm));
+    }
 
     mensagensNovas = contagemMensagensNovas ?? 0;
     avisos = ((informados ?? []) as RiscoInformado[]).filter(avisoVisivelPublicamente);
@@ -494,6 +537,8 @@ export default async function AdminDashboardPage() {
           gerentesCadastrados={gerentesCadastrados}
           romariasGrupo={romariasGrupo}
           mensagensNovas={mensagensNovas}
+          cadastros={cadastros}
+          cadastrosNovos7d={cadastrosNovos7d}
         />
       )}
 
