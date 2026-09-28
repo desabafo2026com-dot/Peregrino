@@ -122,6 +122,7 @@ export default async function AdminDashboardPage() {
       { data: informados },
       { data: romariasGrupoData },
       { count: contagemMensagensNovas },
+      { data: preCadastro },
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome_completo, cidade, uf, is_admin, is_agente"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
@@ -131,6 +132,18 @@ export default async function AdminDashboardPage() {
       supabase.from("riscos_informados").select("*").order("criado_em", { ascending: false }),
       supabase.from("romarias_grupo").select("*").order("data_inicio", { ascending: true }),
       supabase.from("mensagens_contato").select("id", { count: "exact", head: true }).eq("status", "novo"),
+      // Rodada 36 — usada para "PAP Cadastrados" contar também as entradas
+      // da base de pré-cadastro (paps_pre_cadastro) ainda sem gerente
+      // vinculado (reivindicado_por nulo), que não têm nenhuma linha em
+      // pontos_apoio e por isso ficavam de fora do contador (bug relatado:
+      // mostrava só 1, quando deveria contar "todos que já foram
+      // cadastrados, mesmo os sem vinculação"). "PAP Ativos" continua sem
+      // usar isso — só pontos_apoio de verdade (aprovado/ativo) contam como
+      // ativo no painel do admin, ver papAtivos abaixo.
+      supabase
+        .from("paps_pre_cadastro")
+        .select("id, nome, cidade, km, sentido_pista, datas_funcionamento, criado_em")
+        .is("reivindicado_por", null),
     ]);
 
     mensagensNovas = contagemMensagensNovas ?? 0;
@@ -349,15 +362,59 @@ export default async function AdminDashboardPage() {
       })
     );
 
-    papCadastrados = papRows;
+    // Rodada 36 — entradas do pré-cadastro ainda sem gerente (a query acima
+    // já filtra reivindicado_por nulo) viram linhas "fake" para a lista de
+    // Cadastrados, com o pseudo-status pre_cadastro_sem_gerente (ver
+    // STATUS_PAP_LABELS). Rodada 37, a pedido do usuário: "PAP ativo" é
+    // definido só pela data de funcionamento bater com hoje — não precisa
+    // estar vinculado a um gerente nem aprovado pela administração para
+    // contar (só o que muda, ao ser vinculado e aprovado, é aparecer em
+    // verde no mapa com os dados confirmados pelo gerente). Por isso estas
+    // linhas entram em papAtivos também (`ativo: true` aqui não é um campo
+    // real — pré-cadastro não tem esse toggle — só computado como sempre
+    // "elegível", já que quem decide se conta é só a data). Continuam de
+    // fora de papPendentes/papVinculados, que são conceitos exclusivos de
+    // pontos_apoio de verdade.
+    interface PreCadastroBasico {
+      id: string;
+      nome: string;
+      cidade: string | null;
+      km: number | null;
+      sentido_pista: string | null;
+      datas_funcionamento: string[];
+      criado_em: string;
+    }
+    const preCadastroRows = ((preCadastro ?? []) as PreCadastroBasico[]).map(
+      (p): PapLinha => ({
+        id: p.id,
+        nome: p.nome,
+        cidade: p.cidade,
+        kmReferencia: p.km,
+        sentidoPista: p.sentido_pista,
+        statusAprovacao: "pre_cadastro_sem_gerente",
+        ativo: true,
+        datasFuncionamento: p.datas_funcionamento,
+        gerenteNome: null,
+        vinculadoPreCadastro: false,
+        criadoEm: p.criado_em,
+      })
+    );
+
+    papCadastrados = [...papRows, ...preCadastroRows];
     // Rodada 24: "Ativos" usava aberto_agora (alternado manualmente pelo
     // gerente, sem relação com o calendário) — por isso um PAP com a data de
     // hoje removida do calendário continuava contando como ativo aqui,
     // mesmo já tendo sumido do filtro "PAP ativos agora" do mapa público
     // (bug relatado pelo usuário). Agora usa o mesmo critério por data.
-    papAtivos = papRows.filter(
-      (p) => p.ativo && p.statusAprovacao === "aprovado" && papAtivoHoje(p.datasFuncionamento)
-    );
+    // Rodada 37 — a pedido do usuário: tirado o filtro por status_aprovacao
+    // (um PAP pendente de revisão, com a data de hoje marcada, já conta como
+    // ativo — só o selo verde no mapa depende de estar aprovado) e somadas
+    // as entradas do pré-cadastro sem gerente, mesmo critério do contador
+    // público da home (estatisticas_publicas() no banco).
+    papAtivos = [
+      ...papRows.filter((p) => p.ativo && papAtivoHoje(p.datasFuncionamento)),
+      ...preCadastroRows.filter((p) => papAtivoHoje(p.datasFuncionamento)),
+    ];
     papPendentes = papRows.filter((p) => p.statusAprovacao === "pendente");
     papVinculados = papRows.filter((p) => p.vinculadoPreCadastro);
 

@@ -817,11 +817,13 @@ export default function AdminDrilldownClient({
                         {p.kmReferencia != null ? ` — km ${p.kmReferencia}` : ""}
                       </p>
                       <p className="text-xs text-neutral-500">
-                        {p.gerenteNome ? `Gerente: ${p.gerenteNome}` : "Cadastrado pela administração"}
-                        {" — "}
-                        {STATUS_PAP_LABELS[p.statusAprovacao] ?? p.statusAprovacao}
-                        {" — "}
-                        {p.ativo && papAtivoHoje(p.datasFuncionamento) ? "ativo hoje" : "inativo hoje"}
+                        {p.statusAprovacao === "pre_cadastro_sem_gerente"
+                          ? `${STATUS_PAP_LABELS[p.statusAprovacao]} — ${
+                              papAtivoHoje(p.datasFuncionamento) ? "ativo hoje" : "inativo hoje"
+                            }`
+                          : `${p.gerenteNome ? `Gerente: ${p.gerenteNome}` : "Cadastrado pela administração"} — ${
+                              STATUS_PAP_LABELS[p.statusAprovacao] ?? p.statusAprovacao
+                            } — ${p.ativo && papAtivoHoje(p.datasFuncionamento) ? "ativo hoje" : "inativo hoje"}`}
                       </p>
                     </div>
                   ))}

@@ -3167,3 +3167,94 @@ alter type motivo_enum add value if not exists 'pedido';
 alter type motivo_enum add value if not exists 'reflexao';
 
 -- FIM DA MIGRATION 34
+
+-- =====================================================================
+-- MIGRATION 35 (Rodada 36) — reverte "PAP ativos" (contador público da
+-- home) para contar só pontos_apoio de verdade (aprovado, ativo e com a
+-- data de hoje no calendário) — bug relatado pelo usuário: a home mostrava
+-- 1 PAP ativo enquanto o painel do admin (que nunca considerou o
+-- pré-cadastro aqui) mostrava 0, que é o valor correto. A soma dos
+-- pré-cadastrados ainda sem gerente vinculado (adicionada numa rodada
+-- anterior, ver bloco de "MIGRATION" anterior a este) inflava esse número
+-- com entradas da base pública (fonte: reportagem G1) que ninguém
+-- confirmou estarem realmente montadas este ano — nenhum gerente responde
+-- por elas. Essas entradas continuam contando normalmente no card
+-- "Cadastrados" do painel do admin (mudança só no código do app, sem
+-- necessidade de migration), só deixam de contar como "ativas".
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true and status_aprovacao = 'aprovado'
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento)),
+    (select count(*) from public.certificados);
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
+-- FIM DA MIGRATION 35
+
+-- =====================================================================
+-- MIGRATION 36 (Rodada 37) — ajusta de novo "PAP ativos" (home): o
+-- usuário esclareceu o critério depois da Migration 35 — um PAP conta
+-- como "ativo" só pela data de funcionamento bater com a data de hoje,
+-- não precisa estar vinculado a um gerente nem aprovado pela
+-- administração para isso (o que muda, ao ficar vinculado e aprovado, é
+-- só a aparência no mapa — verde, com os dados confirmados pelo
+-- gerente). Volta a somar o pré-cadastro sem gerente (igual à Migration
+-- anterior a 35), e agora também tira o filtro de status_aprovacao do
+-- lado de pontos_apoio — um PAP pendente de revisão com a data de hoje
+-- marcada já conta. O contador "Ativos" do painel do admin foi ajustado
+-- do mesmo jeito no código do app (sem precisar de migration).
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este bloco > Run
+-- (idempotente — pode ser executado novamente sem duplicar dados)
+-- =====================================================================
+
+drop function if exists public.estatisticas_publicas();
+create or replace function public.estatisticas_publicas()
+returns table (
+  peregrinos_ativos bigint,
+  checkins_hoje bigint,
+  checkins_total bigint,
+  pontos_apoio_ativos bigint,
+  peregrinacoes_concluidas bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.peregrinacoes where status = 'em_andamento'),
+    (select count(*) from public.checkins where criado_em >= current_date),
+    (select count(*) from public.checkins),
+    (select count(*) from public.pontos_apoio
+       where ativo = true
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento))
+    +
+    (select count(*) from public.paps_pre_cadastro
+       where reivindicado_por is null
+         and cardinality(datas_funcionamento) > 0 and current_date = any(datas_funcionamento)),
+    (select count(*) from public.certificados);
+$$;
+
+grant execute on function public.estatisticas_publicas() to anon, authenticated;
+
+-- FIM DA MIGRATION 36
