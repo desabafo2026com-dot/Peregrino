@@ -832,7 +832,7 @@ export default function AdminDrilldownClient({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
                 <input
                   autoFocus
-                  className="input pl-9"
+                  className="input input-com-icone"
                   placeholder="Buscar por nome ou local..."
                   value={busca}
                   onChange={(e) => {

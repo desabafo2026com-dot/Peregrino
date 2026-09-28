@@ -100,6 +100,14 @@ interface Props {
   // abrir a tela separada de reposicionar (RLS já restringe esse update a
   // admin, ver paps_pre_cadastro_update_admin).
   permitirArrastarPapPreCadastro?: boolean;
+  // Rodada 42 — só /mapa usa: marcadores de PAP maiores, com borda mais
+  // grossa, para ficarem bem visíveis quando o mapa mostra só PAP.
+  papDestacado?: boolean;
+  // Rodada 42 — ao mudar, o mapa voa até esse PAP e abre o popup dele
+  // (usado pela busca abaixo do mapa em /mapa). `chave` é "pap:<id>" para
+  // PAP confirmado ou "pre:<id>" para PAP do pré-cadastro; `seq` muda a
+  // cada clique, para o mesmo PAP poder ser escolhido de novo.
+  focoPap?: { chave: string; seq: number } | null;
 }
 
 function servicosLabel(servicos: string[]) {
@@ -144,10 +152,13 @@ export default function MapView({
   calorPeregrinos = false,
   minhaPosicao = null,
   permitirArrastarPapPreCadastro = false,
+  papDestacado = false,
+  focoPap = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const papMarkersRef = useRef<Map<string, Marker>>(new Map());
   const trajetoMarkersRef = useRef<Marker[]>([]);
   const previewMarkerRef = useRef<Marker | null>(null);
   const minhaPosicaoMarkerRef = useRef<Marker | null>(null);
@@ -186,6 +197,14 @@ export default function MapView({
 
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
+    papMarkersRef.current = new Map();
+
+    // Rodada 42 — tamanhos maiores quando papDestacado (só em /mapa).
+    const tamPap = papDestacado ? 40 : 30;
+    const iconePap = papDestacado ? 22 : 17;
+    const bordaPap = papDestacado ? 3 : 2;
+    const tamPre = papDestacado ? 36 : 28;
+    const iconePre = papDestacado ? 19 : 15;
 
     // Rodada 24: pequeno desvio determinístico só para PAP cujas
     // coordenadas caem praticamente coincidentes com outro (ver
@@ -198,10 +217,12 @@ export default function MapView({
       // PAP marcado com uma barraca (tenda) verde — mais fácil de
       // reconhecer de relance no mapa do que o antigo losango marrom.
       const el = document.createElement("div");
-      el.style.cssText =
-        "width:30px;height:30px;border-radius:50%;background:#16a34a;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center";
+      el.style.cssText = `width:${tamPap}px;height:${tamPap}px;border-radius:50%;background:#16a34a;border:${bordaPap}px solid white;box-shadow:0 ${
+        papDestacado ? "2px 6px rgba(0,0,0,.55)" : "1px 3px rgba(0,0,0,.4)"
+      };display:flex;align-items:center;justify-content:center;cursor:pointer${papDestacado ? ";z-index:2" : ""}`;
+      el.setAttribute("aria-label", `PAP ${p.nome}`);
       el.innerHTML = `
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="${iconePap}" height="${iconePap}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3.5 21 14 3"/>
           <path d="M20.5 21 10 3"/>
           <path d="M15.5 21 12 15l-3.5 6"/>
@@ -216,7 +237,7 @@ export default function MapView({
           // ordem; telefone/responsável/doações continuam abaixo, para quem
           // precisar. Linhas sem dado disponível não aparecem, em vez de
           // mostrar "—".
-          new maplibregl.Popup({ offset: 20 }).setHTML(`
+          new maplibregl.Popup({ offset: papDestacado ? 24 : 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               ${p.foto_url ? `<img src="${p.foto_url}" alt="Foto do PAP" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
               <strong>${p.nome}</strong><br/>
@@ -241,6 +262,7 @@ export default function MapView({
         )
         .addTo(map);
       markersRef.current.push(marker);
+      papMarkersRef.current.set(`pap:${p.id}`, marker);
     });
 
     pontosRisco.forEach((r) => {
@@ -328,10 +350,14 @@ export default function MapView({
       // deixa claro que é uma localização aproximada (pela cidade), ainda
       // sem gerente vinculado.
       const el = document.createElement("div");
-      el.style.cssText =
-        "width:28px;height:28px;border-radius:50%;background:#a3a3a3;border:2px dashed white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;opacity:.85";
+      el.style.cssText = `width:${tamPre}px;height:${tamPre}px;border-radius:50%;background:${
+        papDestacado ? "#8a8a8a" : "#a3a3a3"
+      };border:2px dashed white;box-shadow:0 ${
+        papDestacado ? "2px 5px rgba(0,0,0,.45)" : "1px 3px rgba(0,0,0,.4)"
+      };display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:${papDestacado ? "1" : ".85"}`;
+      el.setAttribute("aria-label", `PAP ${p.nome} (aguardando vínculo)`);
       el.innerHTML = `
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="${iconePre}" height="${iconePre}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3.5 21 14 3"/>
           <path d="M20.5 21 10 3"/>
           <path d="M15.5 21 12 15l-3.5 6"/>
@@ -345,7 +371,7 @@ export default function MapView({
           // etiqueta "PAP AGUARDANDO VÍNCULO" já comunica isso de forma
           // simples. Adicionados os dias de funcionamento por extenso (antes
           // só aparecia o status "ativo hoje"/"fora do período").
-          new maplibregl.Popup({ offset: 20 }).setHTML(`
+          new maplibregl.Popup({ offset: papDestacado ? 22 : 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               <span style="font-size:10px;letter-spacing:.05em;color:#737373;font-weight:700">PAP AGUARDANDO VÍNCULO</span><br/>
               <strong>${p.nome}</strong><br/>
@@ -386,6 +412,7 @@ export default function MapView({
       }
 
       markersRef.current.push(marker);
+      papMarkersRef.current.set(`pre:${p.id}`, marker);
     });
 
     pontosComerciais.forEach((c) => {
@@ -418,7 +445,30 @@ export default function MapView({
         .addTo(map);
       markersRef.current.push(marker);
     });
-  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, pontosComerciais, permitirArrastarPapPreCadastro]);
+  }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, pontosComerciais, permitirArrastarPapPreCadastro, papDestacado]);
+
+  // Rodada 42 — busca de PAP em /mapa: leva o mapa até o PAP escolhido e
+  // abre o popup com as informações dele (fechando qualquer outro aberto).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focoPap) return;
+    const marker = papMarkersRef.current.get(focoPap.chave);
+    if (!marker) return;
+    markersRef.current.forEach((m) => {
+      if (m !== marker && m.getPopup()?.isOpen()) m.togglePopup();
+    });
+    const abrir = () => {
+      if (!marker.getPopup()?.isOpen()) marker.togglePopup();
+    };
+    map.once("moveend", abrir);
+    map.flyTo({ center: marker.getLngLat(), zoom: Math.max(map.getZoom(), 13), essential: true });
+    // Garantia caso o mapa já esteja parado exatamente ali (sem "moveend").
+    const reserva = window.setTimeout(abrir, 2500);
+    return () => {
+      map.off("moveend", abrir);
+      window.clearTimeout(reserva);
+    };
+  }, [focoPap]);
 
   // Trajeto — linha ligando os pontos de check-in da rota, destacando os
   // já concluídos (verde) dos pendentes (âmbar)

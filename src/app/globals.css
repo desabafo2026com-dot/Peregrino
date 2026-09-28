@@ -106,6 +106,16 @@ p {
   color: white;
 }
 
+/* Rodada 42 — campos de busca com a lupa desenhada por cima, à esquerda.
+   O utilitário "pl-9" do Tailwind não funcionava nesses campos: a regra
+   .input acima fica fora de qualquer @layer e por isso vence os
+   utilitários (mesmo problema já visto com text-align na Rodada 28), então
+   o texto começava embaixo da lupa. Esta classe vem depois de .input, com
+   a mesma especificidade, e por isso ganha. */
+.input.input-com-icone {
+  padding-left: 2.25rem;
+}
+
 .label {
   font-size: 0.85rem;
   font-weight: 600;

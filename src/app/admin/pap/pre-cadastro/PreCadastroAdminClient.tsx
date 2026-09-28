@@ -26,7 +26,7 @@ export default function PreCadastroAdminClient({ itensIniciais }: { itensIniciai
       <div className="relative">
         <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-neutral-400" size={16} />
         <input
-          className="input pl-9"
+          className="input input-com-icone"
           placeholder="Buscar por nome ou cidade..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
