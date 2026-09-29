@@ -34,6 +34,15 @@ export default async function GerentePapPage() {
       .select()
       .maybeSingle();
     gerente = novoGerente;
+    // Rodada 45 — o gatilho da Migration 40 cria junto o perfil de
+    // peregrino desta conta; aqui registramos no servidor o aceite dos
+    // Termos que a pessoa já marcou no formulário de cadastro (guardado no
+    // metadata), nos dois cadastros de uma vez — antes esse caminho não
+    // registrava o aceite e a pessoa via o aviso de "Atualizamos nossos
+    // termos" logo na primeira entrada.
+    if (novoGerente && user.user_metadata?.aceita_termos) {
+      await supabase.rpc("registrar_aceite_termos", {});
+    }
   }
 
   if (!gerente) {

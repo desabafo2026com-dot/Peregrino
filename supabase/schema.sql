@@ -3550,3 +3550,111 @@ revoke all on function public.cadastros_admin() from public, anon;
 grant execute on function public.cadastros_admin() to authenticated;
 
 -- FIM DA MIGRATION 39
+
+-- =====================================================================
+-- MIGRATION 40 (Rodada 45) — gerente de PAP também é peregrino, e avisos
+-- do desenvolvedor para todos.
+--
+-- 1) A pedido do usuário, toda conta de gerente de PAP passa a ter também
+--    o perfil de peregrino (linha em public.profiles), para o menu de
+--    baixo já mostrar "Minha peregrinação" e "Meu PAP" juntos. Um gatilho
+--    cria essa linha mínima (nome, telefone e o aceite dos Termos que o
+--    gerente já deu) sempre que um gerente é cadastrado — cobre todos os
+--    caminhos de cadastro (e-mail, Google, "virar gerente" com conta de
+--    peregrino, criação automática em /gerente-pap). Os gerentes que já
+--    existem ganham a linha aqui mesmo, de uma vez. Quem quiser caminhar
+--    completa o resto do perfil (cidade, data de nascimento...) em /perfil,
+--    como qualquer peregrino.
+--
+-- 2) Avisos para todos: a administração publica uma mensagem que aparece
+--    para todo mundo que abre o app (logado ou não), com um sininho
+--    pulsando no topo até a pessoa abrir e ler. Cada aviso tem validade em
+--    horas ou dias (expira_em) ou fica fixo até a administração apagar
+--    (expira_em nulo). Avisos vencidos somem sozinhos para o público.
+--
+-- Como aplicar: Supabase Dashboard > SQL Editor > cole este arquivo > Run
+-- (idempotente — pode ser executado novamente sem duplicar nada)
+-- =====================================================================
+
+-- 1) Perfil de peregrino automático para gerentes de PAP ----------------
+
+create or replace function public.gerente_cria_perfil_peregrino()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, nome_completo, telefone, termos_aceitos_versao, termos_aceitos_em)
+  values (
+    new.id,
+    coalesce(nullif(trim(new.nome_completo), ''), 'Gerente de PAP'),
+    new.telefone,
+    new.termos_aceitos_versao,
+    new.termos_aceitos_em
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_gerente_cria_perfil_peregrino on public.gerentes_pap;
+create trigger trg_gerente_cria_perfil_peregrino
+  after insert on public.gerentes_pap
+  for each row execute function public.gerente_cria_perfil_peregrino();
+
+-- Retroativo: gerentes que já existiam e ainda não tinham perfil.
+insert into public.profiles (id, nome_completo, telefone, termos_aceitos_versao, termos_aceitos_em)
+select
+  g.id,
+  coalesce(nullif(trim(g.nome_completo), ''), 'Gerente de PAP'),
+  g.telefone,
+  g.termos_aceitos_versao,
+  g.termos_aceitos_em
+from public.gerentes_pap g
+where not exists (select 1 from public.profiles p where p.id = g.id)
+on conflict (id) do nothing;
+
+-- 2) Avisos para todos ---------------------------------------------------
+
+create table if not exists public.avisos_gerais (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null check (char_length(trim(titulo)) between 1 and 120),
+  mensagem text not null check (char_length(trim(mensagem)) between 1 and 2000),
+  criado_em timestamptz not null default now(),
+  -- nulo = fixo, até a administração apagar
+  expira_em timestamptz,
+  criado_por uuid references auth.users(id) on delete set null default auth.uid()
+);
+
+comment on table public.avisos_gerais is 'Avisos da administração para todos os usuários do app (sininho no topo). expira_em nulo = fixo até ser apagado.';
+
+create index if not exists avisos_gerais_criado_em_idx on public.avisos_gerais (criado_em desc);
+
+alter table public.avisos_gerais enable row level security;
+
+drop policy if exists "avisos_gerais_select_vigentes" on public.avisos_gerais;
+create policy "avisos_gerais_select_vigentes" on public.avisos_gerais for select
+  to anon, authenticated
+  using (expira_em is null or expira_em > now() or public.is_admin());
+
+drop policy if exists "avisos_gerais_insert_admin" on public.avisos_gerais;
+create policy "avisos_gerais_insert_admin" on public.avisos_gerais for insert
+  to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "avisos_gerais_update_admin" on public.avisos_gerais;
+create policy "avisos_gerais_update_admin" on public.avisos_gerais for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "avisos_gerais_delete_admin" on public.avisos_gerais;
+create policy "avisos_gerais_delete_admin" on public.avisos_gerais for delete
+  to authenticated
+  using (public.is_admin());
+
+grant select on public.avisos_gerais to anon, authenticated;
+grant insert, update, delete on public.avisos_gerais to authenticated;
+
+-- FIM DA MIGRATION 40

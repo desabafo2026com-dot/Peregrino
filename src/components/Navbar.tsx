@@ -8,6 +8,7 @@ import { LogOut, UserRound, ChevronDown, Tent, UserCog } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthRole } from "./AuthRoleProvider";
 import ThemeToggle from "./ThemeToggle";
+import AvisosGeraisSino from "./AvisosGeraisSino";
 
 // Barra superior enxuta: marca do app à esquerda; à direita, a foto/nome do
 // peregrino com atalho para editar o perfil e sair — ou "Entrar" para quem
@@ -58,6 +59,8 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-2">
+          {/* Rodada 45 — avisos da administração para todos. */}
+          <AvisosGeraisSino />
           <ThemeToggle />
           {loading ? null : loggedIn ? (
             <div className="flex items-center gap-2">

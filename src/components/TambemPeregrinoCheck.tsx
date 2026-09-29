@@ -38,7 +38,10 @@ export default function TambemPeregrinoCheck({
       nome_completo: gerente.nome_completo,
       telefone: gerente.telefone,
     });
-    if (error) {
+    // Rodada 45 — com a Migration 40 todo gerente já ganha o perfil de
+    // peregrino automaticamente; se ele já existir (código 23505, chave
+    // duplicada), é só recarregar para o menu mostrar os dois ícones.
+    if (error && error.code !== "23505") {
       setSalvando(false);
       setErro("Não foi possível salvar: " + error.message);
       return;
