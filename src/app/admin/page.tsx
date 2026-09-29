@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { nomeRota, avisoVisivelPublicamente, papAtivoHoje } from "@/lib/constants";
+import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
+import type { PapPreCadastroMapa } from "@/components/MapView";
 import AdminMapClient from "./AdminMapClient";
 import AdminDrilldownClient, {
   type PeregrinoLinha,
@@ -13,6 +15,8 @@ import AdminDrilldownClient, {
 } from "./AdminDrilldownClient";
 import VoltarButton from "@/components/VoltarButton";
 import type {
+  PapPreCadastro,
+  PontoCheckin,
   PontoApoio,
   PontoRisco,
   Rota,
@@ -125,6 +129,10 @@ export default async function AdminDashboardPage() {
   // contadores, sem quebrar o resto da página.
   let cadastros: CadastroLinha[] | null = null;
   let cadastrosNovos7d: CadastroLinha[] = [];
+  // Rodada 44 — PAP do pré-cadastro (sem gerente) ativos hoje, já com
+  // posição no mapa, para o filtro "PAP ativos" do mapa do painel bater com
+  // o contador "Ativos" (que desde a Rodada 37 conta esses também).
+  let papsPreCadastroAtivosMapa: PapPreCadastroMapa[] = [];
 
   if (isAdmin) {
     const [
@@ -138,6 +146,8 @@ export default async function AdminDashboardPage() {
       { count: contagemMensagensNovas },
       { data: preCadastro },
       { data: cadastrosData, error: erroCadastros },
+      { data: pontosCheckinData },
+      { data: basePreCadastroCidadeKm },
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome_completo, cidade, uf, is_admin, is_agente"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
@@ -157,12 +167,23 @@ export default async function AdminDashboardPage() {
       // ativo no painel do admin, ver papAtivos abaixo.
       supabase
         .from("paps_pre_cadastro")
-        .select("id, nome, cidade, km, sentido_pista, datas_funcionamento, criado_em")
+        .select("*")
         .is("reivindicado_por", null),
       // Rodada 41 — contas de acesso (auth.users), só visível para admin
       // (ver cadastros_admin() na Migration 39).
       supabase.rpc("cadastros_admin"),
+      // Rodada 44 — âncoras para posicionar no mapa os PAP do pré-cadastro
+      // ativos hoje (mesmo cálculo do /mapa, ver lib/pap-pre-cadastro-mapa).
+      supabase.from("pontos_checkin").select("*").order("ordem"),
+      supabase.from("paps_pre_cadastro").select("cidade, km"),
     ]);
+
+    papsPreCadastroAtivosMapa = posicionarPapsPreCadastro({
+      paps: ((preCadastro ?? []) as PapPreCadastro[]).filter((p) => papAtivoHoje(p.datas_funcionamento)),
+      baseCidadeKm: (basePreCadastroCidadeKm ?? []) as { cidade: string | null; km: number | null }[],
+      rotas: (rotas ?? []) as Rota[],
+      pontosCheckin: (pontosCheckinData ?? []) as PontoCheckin[],
+    });
 
     if (!erroCadastros) {
       interface CadastroBruto {
@@ -552,6 +573,7 @@ export default async function AdminDashboardPage() {
           avisos={avisos}
           peregrinos={localizacoes ?? []}
           podeEditarPap={isAdmin}
+          papsPreCadastroAtivos={papsPreCadastroAtivosMapa}
         />
       </section>
     </div>

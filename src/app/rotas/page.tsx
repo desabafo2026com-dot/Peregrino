@@ -137,6 +137,19 @@ export default async function RotasPage({
         </div>
       </section>
 
+      {/* Rodada 44 — a pedido do usuário, o mapa sobe para logo abaixo das
+          dicas de segurança (antes ficava no fim da página, depois da
+          tabela) e o título diz como ver os detalhes de cada ponto. */}
+      <section>
+        <h2 className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-lg font-bold text-red-700">
+          <TriangleAlert size={20} /> Mapa dos pontos de risco
+          <span className="text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+            — clique na bandeira para visualizar os detalhes
+          </span>
+        </h2>
+        <RiscoMapClient pontosRisco={riscosOrdenados} rotasLinhas={rotasLinhas} />
+      </section>
+
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
           <TriangleAlert size={20} /> Pontos de risco ao longo da Rota — {nomeRota(rotaAtual)}
@@ -216,12 +229,6 @@ export default async function RotasPage({
         </p>
       </section>
 
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
-          <TriangleAlert size={20} /> Mapa dos pontos de risco
-        </h2>
-        <RiscoMapClient pontosRisco={riscosOrdenados} rotasLinhas={rotasLinhas} />
-      </section>
     </div>
   );
 }
