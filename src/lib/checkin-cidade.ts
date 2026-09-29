@@ -1,23 +1,36 @@
 import { distanciaMetros } from "@/lib/geo";
 import type { PontoCheckin } from "@/types/database";
 
-// Rodada 47 — em qual cidade da rota o peregrino está agora, para o
-// check-in. O ponto cadastrado de cada cidade é uma referência (às vezes a
-// sede, fora da rodovia), mas o peregrino faz o check-in quase sempre na
-// própria Dutra — por isso não existe mais a trava de "até 5 km do ponto"
-// nem a confirmação: vale a cidade mais próxima de onde ele está, em
-// qualquer ordem (se pulou uma cidade, registra direto na atual).
-// Considera todas as cidades da caminhada (feitas ou não): se a mais
-// próxima já tem check-in, a pessoa ainda está nela e nada é duplicado.
-export function cidadeMaisProxima(
+// Rodada 48 — check-ins das cidades do caminho.
+//   - A cidade de início tem o check-in feito ao tocar "Iniciar caminhada".
+//   - Aparecida tem o check-in feito ao tocar "Finalizar peregrinação",
+//     conferindo a localização.
+//   - As cidades do meio são registradas sozinhas, pelo gatilho
+//     trg_checkin_automatico (Migration 42), enquanto a localização está
+//     compartilhada e o app aberto; o botão "Registrar agora" usa a mesma
+//     regra, aqui no aparelho.
+// A regra: a cidade da caminhada mais próxima da posição atual, se estiver
+// a até RAIO_CHECKIN_AUTOMATICO_KM e não for a de início nem Aparecida. O
+// ponto de referência de algumas cidades fica na sede, fora da rodovia —
+// daí o raio folgado. Mesmos números da Migration 42.
+export const RAIO_CHECKIN_AUTOMATICO_KM = 8;
+
+export function cidadeDoCaminhoProxima(
   lat: number,
   lng: number,
   pontos: PontoCheckin[]
 ): PontoCheckin | null {
+  if (pontos.length < 3) return null;
+  const ordenados = [...pontos].sort((a, b) => a.ordem - b.ordem);
+  const primeiro = ordenados[0];
+  const ultimo = ordenados[ordenados.length - 1];
   let melhor: { ponto: PontoCheckin; distancia: number } | null = null;
-  for (const p of pontos) {
+  for (const p of ordenados) {
     const d = distanciaMetros(lat, lng, p.latitude, p.longitude);
     if (!melhor || d < melhor.distancia) melhor = { ponto: p, distancia: d };
   }
-  return melhor?.ponto ?? null;
+  if (!melhor) return null;
+  if (melhor.distancia > RAIO_CHECKIN_AUTOMATICO_KM * 1000) return null;
+  if (melhor.ponto.id === primeiro.id || melhor.ponto.id === ultimo.id) return null;
+  return melhor.ponto;
 }

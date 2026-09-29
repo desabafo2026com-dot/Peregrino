@@ -21,18 +21,20 @@ import {
   Sparkles,
   Tent,
   Megaphone,
+  TriangleAlert,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
-import AlertaProximidade from "@/components/AlertaProximidade";
 import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
-import { cidadeMaisProxima } from "@/lib/checkin-cidade";
+import { cidadeDoCaminhoProxima } from "@/lib/checkin-cidade";
+import { kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
 import { votarAviso } from "@/lib/avisos-votos";
 import type { PapPreCadastroMapa, PontoTrajeto } from "@/components/MapView";
 import type {
   Peregrinacao,
   PontoApoio,
   PontoCheckin,
+  PontoRisco,
   RiscoInformado,
   Profile,
   Rota,
@@ -55,6 +57,7 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 const SEM_PAP: PontoApoio[] = [];
 const SEM_PRE: PapPreCadastroMapa[] = [];
 const SEM_AVISO: RiscoInformado[] = [];
+const SEM_RISCO: PontoRisco[] = [];
 
 // Coordenadas aproximadas da Basílica de Nossa Senhora Aparecida — usadas
 // como referência para confirmar, por geolocalização, que o peregrino está
@@ -89,6 +92,7 @@ interface Props {
   // Rodada 46 — PAP do pré-cadastro (ainda sem gerente) ativos hoje, já
   // posicionados no servidor, para o mapa mostrar todos os PAP ativos.
   papsPreCadastro: PapPreCadastroMapa[];
+  pontosRisco: PontoRisco[];
   avisos: RiscoInformado[];
   rotas: Rota[];
   checkinsCount: number;
@@ -199,6 +203,7 @@ export default function PeregrinacaoClient({
   peregrinacoesConcluidas,
   pontosApoio,
   papsPreCadastro,
+  pontosRisco,
   avisos,
   rotas,
   checkinsCount: checkinsCountInicial,
@@ -213,6 +218,9 @@ export default function PeregrinacaoClient({
   // mostra mais os pontos de risco, só PAP ativos e avisos (os riscos que
   // faltam continuam listados, com foto, na página do trajeto).
   const [mostrarPapMapa, setMostrarPapMapa] = useState(true);
+  // Rodada 48 — os riscos voltaram ao mapa (só os que faltam até
+  // Aparecida), mas desmarcados por padrão.
+  const [mostrarRiscoMapa, setMostrarRiscoMapa] = useState(false);
   const [mostrarAvisosMapa, setMostrarAvisosMapa] = useState(true);
 
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
@@ -319,6 +327,53 @@ export default function PeregrinacaoClient({
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [emAndamento]);
+
+  const rotaSlugAtual = rotas.find((r) => r.id === peregrinacao?.rota_id)?.slug ?? null;
+
+  // Só os pontos de risco que ainda faltam até Aparecida: do km da cidade
+  // do último check-in (ou da cidade de início) em diante, na rota do
+  // peregrino.
+  const riscosAFrente = useMemo(() => {
+    const kmAtual = kmReferenciaAtual(rotaSlugAtual, pontosCheckin, checkinsFeitosIds);
+    return pontosRisco.filter((r) => riscoAindaAFrente(r, rotaSlugAtual, kmAtual));
+  }, [pontosRisco, rotaSlugAtual, pontosCheckin, checkinsFeitosIds]);
+
+  // Rodada 48 — os check-ins das cidades do meio são feitos sozinhos no
+  // banco (Migration 42) conforme a localização chega; a cada 30 segundos
+  // a tela busca a lista de novo para o mapa e a linha do tempo
+  // acompanharem.
+  const checkinsFeitosRef = useRef(checkinsFeitosIds);
+  useEffect(() => {
+    checkinsFeitosRef.current = checkinsFeitosIds;
+  }, [checkinsFeitosIds]);
+  useEffect(() => {
+    if (!emAndamento || !peregrinacao) return;
+    const peregrinacaoId = peregrinacao.id;
+    const timer = window.setInterval(async () => {
+      const { data, error } = await supabase
+        .from("checkins")
+        .select("ponto_checkin_id")
+        .eq("peregrinacao_id", peregrinacaoId)
+        .not("ponto_checkin_id", "is", null)
+        .order("criado_em", { ascending: true });
+      if (error || !data) return;
+      const ids = data.map((c) => c.ponto_checkin_id as string);
+      // Mantém a ordem já conhecida e acrescenta os novos no fim.
+      const atuais = checkinsFeitosRef.current;
+      const novos = ids.filter((id) => !atuais.includes(id));
+      if (novos.length === 0) return;
+      checkinsFeitosRef.current = [...atuais, ...novos];
+      setCheckinsFeitosIds(checkinsFeitosRef.current);
+      setCheckinsCount((c) => c + novos.length);
+      const cidades = novos
+        .map((id) => pontosCheckin.find((p) => p.id === id)?.cidade)
+        .filter(Boolean)
+        .join(", ");
+      if (cidades) setMsg(`Check-in automático em ${cidades} registrado.`);
+    }, 30000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emAndamento, peregrinacao?.id]);
 
   // Cidades de check-in no mapa: as já feitas ganham o número da sequência
   // em que foram feitas (1º, 2º...), as pendentes ficam sem número.
@@ -581,7 +636,10 @@ export default function PeregrinacaoClient({
       .eq("id", peregrinacao.id);
   }
 
-  async function fazerCheckin(pontoCheckinId?: string) {
+  // Rodada 48 — "Registrar agora": mesma regra do check-in automático
+  // (cidade do caminho mais próxima, até 8 km, fora a de início e
+  // Aparecida), para quem pausou o compartilhamento ou não quer esperar.
+  async function registrarCidadeAgora() {
     if (!peregrinacao) return;
     if (!navigator.geolocation) {
       setErro("Geolocalização não disponível neste navegador.");
@@ -591,25 +649,21 @@ export default function PeregrinacaoClient({
     setMsg(null);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        // Rodada 47 — vale a cidade onde o peregrino está (a mais próxima
-        // da localização atual), em qualquer ordem: se pulou uma cidade, o
-        // registro já cai direto na atual, sem pedir confirmação de
-        // distância (o ponto de referência de algumas cidades fica na sede,
-        // fora da rodovia, e o check-in é feito quase sempre na Dutra). O
-        // sino de proximidade (AlertaProximidade) já passa a cidade certa.
-        const alvoPonto = pontoCheckinId
-          ? pontosCheckin.find((p) => p.id === pontoCheckinId) ?? null
-          : cidadeMaisProxima(pos.coords.latitude, pos.coords.longitude, pontosCheckin);
-
-        if (alvoPonto && checkinsFeitosIds.includes(alvoPonto.id)) {
+        const alvoPonto = cidadeDoCaminhoProxima(pos.coords.latitude, pos.coords.longitude, pontosCheckin);
+        if (!alvoPonto) {
+          setMsg(
+            "Você não está perto de uma cidade do caminho agora. A cidade de início já tem check-in e o de Aparecida é feito ao finalizar."
+          );
+          return;
+        }
+        if (checkinsFeitosIds.includes(alvoPonto.id)) {
           setMsg(`Você está em ${alvoPonto.cidade}, e o check-in desta cidade já foi feito.`);
           return;
         }
-
         const { error } = await supabase.from("checkins").insert({
           peregrinacao_id: peregrinacao.id,
           user_id: peregrinacao.user_id,
-          ponto_checkin_id: alvoPonto?.id ?? null,
+          ponto_checkin_id: alvoPonto.id,
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
         });
@@ -618,12 +672,10 @@ export default function PeregrinacaoClient({
           return;
         }
         setCheckinsCount((c) => c + 1);
-        if (alvoPonto) {
-          setCheckinsFeitosIds((ids) => (ids.includes(alvoPonto.id) ? ids : [...ids, alvoPonto.id]));
-        }
-        setMsg(alvoPonto ? `Check-in em ${alvoPonto.cidade} registrado com sucesso!` : "Check-in registrado com sucesso!");
+        setCheckinsFeitosIds((ids) => (ids.includes(alvoPonto.id) ? ids : [...ids, alvoPonto.id]));
+        setMsg(`Check-in em ${alvoPonto.cidade} registrado com sucesso!`);
       },
-      () => setErro("Não foi possível acessar sua localização para o check-in."),
+      () => setErro("Não foi possível acessar sua localização."),
       { enableHighAccuracy: true, timeout: 15000 }
     );
   }
@@ -632,27 +684,56 @@ export default function PeregrinacaoClient({
     if (!peregrinacao) return;
     if (!confirm("Finalizar a peregrinação?")) return;
 
-    // Tenta confirmar, por geolocalização, que o peregrino está em
-    // Aparecida-SP. Se a posição não bater (ou não puder ser obtida), avisa
-    // mas não bloqueia — o GPS pode falhar ou o peregrino pode estar
-    // encerrando de um ponto próximo, não exatamente na Basílica.
+    // Rodada 48 — o check-in final, em Aparecida, é feito aqui, conferindo
+    // a localização: estando a até DISTANCIA_AVISO_KM da Basílica, o
+    // check-in de Aparecida é registrado e o certificado sai. Longe (ou sem
+    // localização), ainda dá para finalizar, mas sem certificado.
     const pontosOrdenadosParaAlvo = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem);
     const pontoAparecida = pontosOrdenadosParaAlvo[pontosOrdenadosParaAlvo.length - 1];
     const alvoLat = pontoAparecida?.latitude ?? APARECIDA_LAT;
     const alvoLng = pontoAparecida?.longitude ?? APARECIDA_LNG;
     const posAtual = await obterPosicaoAtual();
+    let emAparecida = false;
     if (posAtual) {
       const dist = distanciaKm(posAtual.coords.latitude, posAtual.coords.longitude, alvoLat, alvoLng);
-      if (dist > DISTANCIA_AVISO_KM) {
+      if (dist <= DISTANCIA_AVISO_KM) {
+        emAparecida = true;
+      } else {
         const distTexto = dist < 10 ? dist.toFixed(1) : Math.round(dist).toString();
         if (
           !confirm(
-            `Não conseguimos confirmar que você está em Aparecida-SP pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja finalizar mesmo assim?`
+            `Pela sua localização, você está a aproximadamente ${distTexto} km de Aparecida. O certificado só é emitido com o check-in final feito em Aparecida.\n\nFinalizar mesmo assim, sem certificado?`
           )
         ) {
           return;
         }
       }
+    } else if (
+      !confirm(
+        "Não foi possível acessar sua localização para conferir que você está em Aparecida, e sem isso o certificado não é emitido. Para receber o certificado, ative a localização e toque em Finalizar de novo.\n\nFinalizar mesmo assim, sem certificado?"
+      )
+    ) {
+      return;
+    }
+
+    let checkinsFeitosFinal = checkinsFeitosIds;
+    let totalCheckins = checkinsCount;
+    if (emAparecida && pontoAparecida && posAtual && !checkinsFeitosIds.includes(pontoAparecida.id)) {
+      const { error: erroCheckinFinal } = await supabase.from("checkins").insert({
+        peregrinacao_id: peregrinacao.id,
+        user_id: peregrinacao.user_id,
+        ponto_checkin_id: pontoAparecida.id,
+        latitude: posAtual.coords.latitude,
+        longitude: posAtual.coords.longitude,
+      });
+      if (erroCheckinFinal) {
+        setErro(`Não foi possível registrar o check-in em Aparecida: ${erroCheckinFinal.message}`);
+        return;
+      }
+      checkinsFeitosFinal = [...checkinsFeitosIds, pontoAparecida.id];
+      totalCheckins = checkinsCount + 1;
+      setCheckinsFeitosIds(checkinsFeitosFinal);
+      setCheckinsCount(totalCheckins);
     }
 
     setLoading(true);
@@ -688,7 +769,7 @@ export default function PeregrinacaoClient({
       !!primeiroPonto &&
       !!ultimoPonto &&
       primeiroPonto.cidade.trim().toLowerCase() !== "aparecida" &&
-      checkinsFeitosIds.includes(ultimoPonto.id);
+      checkinsFeitosFinal.includes(ultimoPonto.id);
 
     // Distância aproximada percorrida, calculada a partir do km_aproximado
     // já cadastrado em cada ponto de check-in (distância acumulada desde a
@@ -720,7 +801,7 @@ export default function PeregrinacaoClient({
       dias_caminhada: diasCaminhada,
       data_inicio: peregrinacao.data_inicio,
       data_fim: agora.toISOString(),
-      total_checkins: checkinsCount,
+      total_checkins: totalCheckins,
       rota_nome: rotaAtual ? nomeRota(rotaAtual) : null,
       origem: peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio,
       meio_transporte: meioAtual,
@@ -1059,10 +1140,6 @@ export default function PeregrinacaoClient({
     );
   } else if (peregrinacao.status === "em_andamento") {
     const rotaAtiva = rotas.find((r) => r.id === peregrinacao.rota_id);
-    // Rodada 34: o botão principal não aponta mais para uma cidade
-    // pré-definida (ver fazerCheckin) — só precisa saber se ainda há algum
-    // check-in pendente, para habilitar o botão e trocar o texto.
-    const haCheckinPendente = pontosCheckin.some((p) => !checkinsFeitosIds.includes(p.id));
     principal = (
       <div className="flex flex-col gap-4">
         {/* Módulo 1 — Peregrinação em andamento: dados + linha do tempo com
@@ -1090,13 +1167,7 @@ export default function PeregrinacaoClient({
                 .
               </p>
             </div>
-            {pontosCheckin.length > 0 && (
-              <AlertaProximidade
-                pontosCheckin={pontosCheckin}
-                checkinsFeitosIds={checkinsFeitosIds}
-                onCheckin={(ponto) => fazerCheckin(ponto.id)}
-              />
-            )}
+
           </div>
 
           <div className="mt-4 border-t border-green-200/70 pt-4 dark:border-green-900/50">
@@ -1122,27 +1193,28 @@ export default function PeregrinacaoClient({
           </div>
         </div>
 
-        {/* Módulo 2 — Fazer check-in, sozinho acima do mapa (Rodada 20: antes
-            dividia a linha com "Informe sinistro ou suspeita", que desceu
-            para depois do mapa, ver abaixo). */}
+        {/* Módulo 2 — Check-ins (Rodada 48): o inicial é feito ao iniciar,
+            o de Aparecida ao finalizar, e os das cidades do meio são
+            automáticos enquanto a localização está compartilhada. */}
         <div className="card">
           <h2 className="mb-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
-            Fazer check-in
+            Check-ins automáticos
           </h2>
+          <p className="mb-2 text-xs text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
+            {compartilhando
+              ? "Localização ativa: ao passar por cada cidade do caminho, o check-in é registrado sozinho (com o app aberto)."
+              : "Compartilhamento pausado: os check-ins automáticos só acontecem com a localização compartilhada. Retome acima."}
+          </p>
           <p className="mb-3 text-xs text-neutral-500" style={{ textAlign: "left" }}>
-            O check-in inicial foi feito ao iniciar a caminhada. O
-            certificado sai com ele e o check-in final em Aparecida; os
-            check-ins nas cidades do caminho ficam como registro da sua
-            peregrinação. O app registra a cidade onde você está, mesmo que
-            tenha passado por outra sem fazer check-in.
+            O check-in inicial foi feito ao iniciar a caminhada, e o de
+            Aparecida é feito ao tocar em Finalizar, conferindo sua
+            localização — com os dois, o certificado é emitido.
           </p>
           <button
-            onClick={() => fazerCheckin()}
-            disabled={!haCheckinPendente}
-            className="btn-primary flex w-full items-center justify-center gap-2 disabled:opacity-50"
+            onClick={registrarCidadeAgora}
+            className="btn-secondary flex w-full items-center justify-center gap-2 text-sm"
           >
-            <CheckCircle2 size={18} />{" "}
-            {haCheckinPendente ? "Fazer check-in" : "Todos os check-ins feitos"}
+            <CheckCircle2 size={16} /> Registrar agora a cidade onde estou
           </button>
           {msg && <p className="mt-2 text-center text-sm text-green-700">{msg}</p>}
         </div>
@@ -1152,7 +1224,7 @@ export default function PeregrinacaoClient({
             para desligar cada camada (Rodada 20 — antes só mostrava PAP). */}
         <div className="card">
           <h2 className="mb-3 flex items-center justify-center gap-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
-            <MapPinned size={18} /> PAP e avisos na rota
+            <MapPinned size={18} /> PAP, avisos e riscos na rota
           </h2>
           <div className="mb-3 flex flex-wrap justify-center gap-4 text-sm font-medium">
             <label className="flex items-center gap-2">
@@ -1162,6 +1234,14 @@ export default function PeregrinacaoClient({
                 onChange={(e) => setMostrarPapMapa(e.target.checked)}
               />
               <Tent size={16} className="text-green-600" /> PAP ativos hoje ({pontosApoio.length + papsPreCadastro.length})
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mostrarRiscoMapa}
+                onChange={(e) => setMostrarRiscoMapa(e.target.checked)}
+              />
+              <TriangleAlert size={16} className="text-red-600" /> Riscos à frente ({riscosAFrente.length})
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -1181,6 +1261,7 @@ export default function PeregrinacaoClient({
             pontosApoio={mostrarPapMapa ? pontosApoio : SEM_PAP}
             papsPreCadastro={mostrarPapMapa ? papsPreCadastro : SEM_PRE}
             avisos={mostrarAvisosMapa ? avisos : SEM_AVISO}
+            pontosRisco={mostrarRiscoMapa ? riscosAFrente : SEM_RISCO}
             trajeto={trajetoMapa}
             minhaPosicao={minhaPosicao}
             onVotarAviso={votarAviso}
@@ -1208,11 +1289,10 @@ export default function PeregrinacaoClient({
             <Award size={18} /> Concluir
           </h2>
           <p className="mx-auto mb-4 max-w-md text-justify text-sm text-neutral-600 dark:text-neutral-300">
-            Ao finalizar, tentaremos confirmar por localização que você está
-            em Aparecida-SP — se não conseguirmos, você poderá confirmar
-            manualmente. Seu certificado de peregrino será gerado
-            automaticamente, desde que você tenha feito o check-in inicial
-            fora de Aparecida e o check-in final em Aparecida.
+            Ao chegar, toque em Finalizar: conferimos pela localização que
+            você está em Aparecida-SP e registramos o check-in final. Com ele
+            e o check-in inicial, seu certificado de peregrino é gerado na
+            hora. Deixe a localização do celular ligada.
           </p>
           <div className="flex justify-center">
             <button disabled={loading} onClick={finalizarPeregrinacao} className="btn-primary">

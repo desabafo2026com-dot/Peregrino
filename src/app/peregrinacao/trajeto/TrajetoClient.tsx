@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Circle, TriangleAlert, Megaphone, ThumbsUp, Ban } from "lucide-react";
 import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
-import { cidadeMaisProxima } from "@/lib/checkin-cidade";
+import { cidadeDoCaminhoProxima } from "@/lib/checkin-cidade";
 import { votarAviso, LIMITE_NAO_EXISTE, type TipoVotoAviso } from "@/lib/avisos-votos";
 import InformarSinistro from "@/components/InformarSinistro";
 import { KM_DUTRA_APARECIDA, kmDutraEntrada, kmFaltamAparecida, kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
@@ -73,9 +73,31 @@ export default function TrajetoClient({
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  // Rodada 47 — um botão só: registra a cidade onde o peregrino está (a
-  // mais próxima da localização atual), em qualquer ordem e sem pedir
-  // confirmação de distância — mesmo critério de "Minha peregrinação".
+  // Rodada 48 — os check-ins das cidades do meio são automáticos
+  // (Migration 42); este botão faz o mesmo na hora, com a mesma regra
+  // (cidade do caminho mais próxima, até 8 km, fora a de início e
+  // Aparecida). A lista é atualizada a cada 30 segundos.
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      const { data, error } = await supabase
+        .from("checkins")
+        .select("ponto_checkin_id")
+        .eq("peregrinacao_id", peregrinacao.id)
+        .not("ponto_checkin_id", "is", null)
+        .order("criado_em", { ascending: true });
+      if (error || !data) return;
+      const ids = data.map((c) => c.ponto_checkin_id as string);
+      setCheckinsFeitos((prev) => {
+        if (ids.every((id) => prev.has(id))) return prev;
+        const proximo = new Set(prev);
+        ids.forEach((id) => proximo.add(id));
+        return proximo;
+      });
+    }, 30000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peregrinacao.id]);
+
   async function fazerCheckin() {
     if (!navigator.geolocation) {
       setErro("Geolocalização não disponível neste navegador.");
@@ -86,9 +108,12 @@ export default function TrajetoClient({
     setCarregando(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const ponto = cidadeMaisProxima(pos.coords.latitude, pos.coords.longitude, pontosCheckin);
+        const ponto = cidadeDoCaminhoProxima(pos.coords.latitude, pos.coords.longitude, pontosCheckin);
         if (!ponto) {
           setCarregando(false);
+          setMsg(
+            "Você não está perto de uma cidade do caminho agora. A cidade de início já tem check-in e o de Aparecida é feito ao finalizar, em Minha peregrinação."
+          );
           return;
         }
         if (checkinsFeitos.has(ponto.id)) {
@@ -220,22 +245,19 @@ export default function TrajetoClient({
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">
           Pontos de check-in por cidade
         </h2>
+        <p className="mb-2 text-xs text-neutral-500" style={{ textAlign: "left" }}>
+          O check-in da cidade de início é feito ao iniciar a caminhada, e o
+          de Aparecida ao finalizar. Os das cidades do caminho são
+          automáticos com a localização compartilhada e o app aberto.
+        </p>
         <button
           onClick={fazerCheckin}
-          disabled={carregando || concluidos === pontosCheckin.length}
-          className="btn-primary mb-1 flex w-full items-center justify-center gap-2 disabled:opacity-50"
+          disabled={carregando}
+          className="btn-secondary mb-3 flex w-full items-center justify-center gap-2 text-sm disabled:opacity-50"
         >
-          <CheckCircle2 size={18} />
-          {carregando
-            ? "Registrando..."
-            : concluidos === pontosCheckin.length
-              ? "Todos os check-ins feitos"
-              : "Fazer check-in onde estou"}
+          <CheckCircle2 size={16} />
+          {carregando ? "Registrando..." : "Registrar agora a cidade onde estou"}
         </button>
-        <p className="mb-3 text-xs text-neutral-500" style={{ textAlign: "left" }}>
-          O app registra a cidade onde você está, mesmo que tenha passado por
-          outra sem fazer check-in.
-        </p>
         {msg && <p className="mb-3 text-center text-sm text-green-700">{msg}</p>}
         <div className="flex flex-col gap-2">
           {pontosCheckin.map((p) => {

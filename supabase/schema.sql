@@ -3785,3 +3785,101 @@ create policy "riscos_informados_select_publicos" on public.riscos_informados fo
   );
 
 -- FIM DA MIGRATION 41
+
+-- =====================================================================
+-- MIGRATION 42 — Rodada 48: check-in automático nas cidades do caminho
+-- ---------------------------------------------------------------------
+-- Com a caminhada em andamento e a localização compartilhada, o app
+-- grava a posição do peregrino em localizacoes_ativas enquanto está
+-- aberto. Este gatilho aproveita cada atualização: se a cidade da rota
+-- mais próxima estiver a até 8 km e ainda não tiver check-in, registra o
+-- check-in dela sozinho.
+--   - A cidade de início fica de fora (o check-in dela é feito ao tocar
+--     "Iniciar caminhada").
+--   - Aparecida fica de fora (o check-in dela é feito ao tocar "Finalizar
+--     peregrinação", conferindo a localização).
+--   - Posições muito imprecisas (mais de 1 km de margem) são ignoradas.
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+create or replace function public.checkin_automatico_por_localizacao()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_pereg record;
+  v_ordem_inicio integer;
+  v_ordem_final integer;
+  v_ponto_id uuid;
+  v_ponto_ordem integer;
+  v_dist_km double precision;
+begin
+  if new.precisao_m is not null and new.precisao_m > 1000 then
+    return new;
+  end if;
+
+  select p.id, p.user_id, p.rota_id, p.cidade_inicio, p.status
+    into v_pereg
+  from public.peregrinacoes p
+  where p.id = new.peregrinacao_id;
+
+  if not found or v_pereg.status <> 'em_andamento' or v_pereg.rota_id is null then
+    return new;
+  end if;
+
+  select coalesce(min(pc.ordem), 1) into v_ordem_inicio
+  from public.pontos_checkin pc
+  where pc.rota_id = v_pereg.rota_id and pc.cidade = v_pereg.cidade_inicio;
+
+  select max(pc.ordem) into v_ordem_final
+  from public.pontos_checkin pc
+  where pc.rota_id = v_pereg.rota_id;
+
+  -- Cidade da caminhada mais próxima da posição atual (distância em linha
+  -- reta, fórmula de haversine).
+  select pc.id, pc.ordem,
+         6371 * 2 * asin(sqrt(
+           power(sin(radians(pc.latitude - new.latitude) / 2), 2)
+           + cos(radians(new.latitude)) * cos(radians(pc.latitude))
+             * power(sin(radians(pc.longitude - new.longitude) / 2), 2)
+         ))
+    into v_ponto_id, v_ponto_ordem, v_dist_km
+  from public.pontos_checkin pc
+  where pc.rota_id = v_pereg.rota_id and pc.ordem >= v_ordem_inicio
+  order by 3
+  limit 1;
+
+  if v_ponto_id is null
+     or v_dist_km > 8
+     or v_ponto_ordem = v_ordem_inicio
+     or v_ponto_ordem = v_ordem_final then
+    return new;
+  end if;
+
+  -- Evita dois check-ins da mesma cidade se duas posições chegarem juntas.
+  perform pg_advisory_xact_lock(hashtext('checkin_auto:' || v_pereg.id::text));
+
+  if exists (
+    select 1 from public.checkins c
+    where c.peregrinacao_id = v_pereg.id and c.ponto_checkin_id = v_ponto_id
+  ) then
+    return new;
+  end if;
+
+  insert into public.checkins (peregrinacao_id, user_id, ponto_checkin_id, latitude, longitude)
+  values (v_pereg.id, v_pereg.user_id, v_ponto_id, new.latitude, new.longitude);
+
+  return new;
+end;
+$$;
+
+revoke all on function public.checkin_automatico_por_localizacao() from public;
+
+drop trigger if exists trg_checkin_automatico on public.localizacoes_ativas;
+create trigger trg_checkin_automatico
+  after insert or update of latitude, longitude on public.localizacoes_ativas
+  for each row execute function public.checkin_automatico_por_localizacao();
+
+-- FIM DA MIGRATION 42

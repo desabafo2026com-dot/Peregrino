@@ -3,9 +3,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
-import { avisoVisivelPublicamente, hojeISO } from "@/lib/constants";
+import { kmPertenceARota, avisoVisivelPublicamente, hojeISO } from "@/lib/constants";
 import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
-import type { Peregrinacao, PontoApoio, PontoCheckin, RiscoInformado, Profile, Rota, PapPreCadastro } from "@/types/database";
+import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota, PapPreCadastro } from "@/types/database";
 
 export default async function PeregrinacaoPage() {
   const supabase = await createClient();
@@ -158,8 +158,17 @@ export default async function PeregrinacaoPage() {
   // Avisos de peregrinos da rota atual (Rodada 20): entram se forem da
   // rota atual ou sem rota marcada.
   let avisos: RiscoInformado[] = [];
+  // Pontos de risco da rota (Rodada 48: voltaram ao mapa daqui, desmarcados
+  // por padrão, e o próprio app filtra só os que faltam até Aparecida). Risco
+  // entra pela rota se o km bater (kmPertenceARota) ou, sem km cadastrado,
+  // pela rota_id.
+  let pontosRisco: PontoRisco[] = [];
 
   if (peregrinacao) {
+    const rotaAtual = peregrinacao.rota_id
+      ? ((rotas ?? []) as Rota[]).find((r) => r.id === peregrinacao.rota_id)
+      : undefined;
+
     if (peregrinacao.rota_id) {
       const pontosRota = todosPontosCheckin.filter((p) => p.rota_id === peregrinacao.rota_id);
       const ordemInicio = peregrinacao.cidade_inicio
@@ -179,6 +188,7 @@ export default async function PeregrinacaoPage() {
         .eq("peregrinacao_id", peregrinacao.id),
       peregrinacao.rota_id
         ? Promise.all([
+            supabase.from("pontos_risco").select("*"),
             // A RLS sozinha não basta para filtrar isto: além da política
             // pública por tempo (migration 17/26), existe uma política
             // separada que dá acesso irrestrito a quem enviou o relato e a
@@ -208,9 +218,14 @@ export default async function PeregrinacaoPage() {
     checkinsCount = count ?? 0;
 
     if (riscosResultado) {
-      // Rodada 47 — o mapa daqui não mostra mais os pontos de risco (só PAP
-      // ativos e avisos); os riscos que faltam ficam na página do trajeto.
-      const [{ data: avisosData }] = riscosResultado;
+      const [{ data: todosRiscos }, { data: avisosData }] = riscosResultado;
+      pontosRisco = rotaAtual
+        ? ((todosRiscos ?? []) as PontoRisco[]).filter((r) =>
+            r.km_referencia != null
+              ? kmPertenceARota(r.km_referencia, rotaAtual.slug)
+              : r.rota_id === null || r.rota_id === rotaAtual.id
+          )
+        : [];
       avisos = ((avisosData ?? []) as RiscoInformado[]).filter(avisoVisivelPublicamente);
     }
 
@@ -236,6 +251,7 @@ export default async function PeregrinacaoPage() {
         peregrinacoesConcluidas={peregrinacoesConcluidas}
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
         papsPreCadastro={papsPreCadastro}
+        pontosRisco={pontosRisco}
         avisos={avisos}
         rotas={(rotas ?? []) as Rota[]}
         checkinsCount={checkinsCount}
