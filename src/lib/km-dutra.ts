@@ -1,49 +1,42 @@
 import { normalizarCidade } from "@/lib/pap-pre-cadastro-mapa";
 import type { PontoRisco } from "@/types/database";
 
-// Rodada 46 — km real da Via Dutra (BR-116, trecho paulista) na ENTRADA de
-// cada cidade de check-in, no sentido em que o peregrino caminha:
-//   - rota São Paulo - Aparecida ("norte"): o km DIMINUI até Aparecida,
-//     então a entrada da cidade é o maior km dela;
-//   - rota Rio de Janeiro - Aparecida ("sul", a partir de Queluz): o km
-//     AUMENTA até Aparecida, então a entrada é o menor km.
-// Valores aproximados, estimados a partir dos km reais dos 138 PAP da base
-// oficial (paps_pre_cadastro) em cada cidade — os limites entre cidades
-// ficam entre o último PAP de uma e o primeiro da seguinte. Para corrigir
-// algum, basta trocar o número aqui.
+// Rodada 46 — km real da Via Dutra (BR-116, trecho paulista) de
+// referência na ENTRADA de cada cidade de check-in, informados pelo
+// usuário. O mesmo número vale para as duas rotas: na rota São Paulo -
+// Aparecida ("norte") o km DIMINUI até Aparecida; na rota Rio de Janeiro -
+// Aparecida ("sul", a partir de Queluz) o km AUMENTA até Aparecida.
+// Silveiras não veio na lista do usuário: fica entre Cruzeiro (32) e
+// Cachoeira Paulista (39) na ordem da rota, então usa 36 até ser
+// confirmado. Para corrigir algum, basta trocar o número aqui.
 export const KM_DUTRA_APARECIDA = 71;
 
-const KM_DUTRA_ENTRADA: Record<string, Record<string, number>> = {
-  norte: {
-    "sao paulo": 231,
-    guarulhos: 226,
-    aruja: 205,
-    "santa isabel": 197,
-    guararema: 181,
-    jacarei: 172,
-    "sao jose dos campos": 156,
-    cacapava: 134,
-    taubate: 118,
-    pindamonhangaba: 105,
-    roseira: 84,
-    aparecida: 77,
-  },
-  sul: {
-    queluz: 3,
-    lavrinhas: 12,
-    cruzeiro: 19,
-    silveiras: 27,
-    "cachoeira paulista": 34,
-    canas: 44,
-    lorena: 49,
-    guaratingueta: 57,
-    aparecida: 66,
-  },
+const KM_DUTRA_ENTRADA_CIDADE: Record<string, number> = {
+  "sao paulo": 231,
+  guarulhos: 220,
+  aruja: 203,
+  "santa isabel": 186,
+  guararema: 176,
+  jacarei: 160,
+  "sao jose dos campos": 150,
+  cacapava: 127,
+  taubate: 111,
+  pindamonhangaba: 99,
+  roseira: 80,
+  aparecida: 71,
+  guaratingueta: 65,
+  lorena: 53,
+  canas: 44,
+  "cachoeira paulista": 39,
+  silveiras: 36,
+  cruzeiro: 32,
+  lavrinhas: 22,
+  queluz: 6,
 };
 
 export function kmDutraEntrada(rotaSlug: string | null | undefined, cidade: string): number | null {
   if (!rotaSlug) return null;
-  return KM_DUTRA_ENTRADA[rotaSlug]?.[normalizarCidade(cidade)] ?? null;
+  return KM_DUTRA_ENTRADA_CIDADE[normalizarCidade(cidade)] ?? null;
 }
 
 // Quantos km faltam até Aparecida (Basílica, km 71) a partir de um km da

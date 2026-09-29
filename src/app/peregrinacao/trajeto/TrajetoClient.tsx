@@ -356,8 +356,7 @@ function KmCidade({
   if (ehAparecida) {
     return (
       <p className="text-xs text-neutral-500" style={{ textAlign: "left" }}>
-        {kmEntrada != null ? `Entrada da cidade ≈ km ${kmEntrada} da Dutra — ` : ""}
-        Basílica ≈ km {KM_DUTRA_APARECIDA}
+        ≈ km {kmEntrada ?? KM_DUTRA_APARECIDA} da Dutra — chegada à Basílica
       </p>
     );
   }
