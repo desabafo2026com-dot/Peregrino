@@ -304,10 +304,20 @@ export const STATUS_RISCO_INFORMADO_LABELS: Record<string, string> = {
 // peregrinação" muito depois de expirarem para os demais peregrinos,
 // porque a RLS "deixaria passar" essas linhas por um motivo que nada tem a
 // ver com "ainda está público agora".
-export function avisoVisivelPublicamente(r: { status: string; categoria: string; criado_em: string }) {
+export function avisoVisivelPublicamente(r: {
+  status: string;
+  categoria: string;
+  criado_em: string;
+  ultima_confirmacao_em?: string | null;
+}) {
   if (r.status === "rejeitado") return false;
   const idadeMs = Date.now() - new Date(r.criado_em).getTime();
-  if (idadeMs > 60 * 60 * 1000) return false;
+  // Rodada 47 (Migration 41): a confirmação de outro peregrino renova o
+  // prazo de 1 hora — conta a partir da mais recente das duas datas.
+  const desdeUltimaMs = r.ultima_confirmacao_em
+    ? Math.min(idadeMs, Date.now() - new Date(r.ultima_confirmacao_em).getTime())
+    : idadeMs;
+  if (desdeUltimaMs > 60 * 60 * 1000) return false;
   if (r.status === "aprovado") return true;
   if (r.categoria === "chuva") return true;
   return idadeMs >= 30 * 60 * 1000;

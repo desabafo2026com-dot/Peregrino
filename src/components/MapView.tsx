@@ -16,6 +16,22 @@ import {
 import { comDesvioMinimoPap } from "@/lib/geo";
 import { createClient } from "@/lib/supabase/client";
 import type { PontoApoio, PontoRisco, RiscoInformado, PontoComercial } from "@/types/database";
+import { LIMITE_NAO_EXISTE, type ResultadoVotoAviso, type TipoVotoAviso } from "@/lib/avisos-votos";
+
+// Texto vindo de peregrinos (avisos) vai para dentro de HTML do balão —
+// escapado para não virar marcação.
+function escaparHtml(texto: string) {
+  return texto
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function textoConfirmacoes(n: number) {
+  return n === 1 ? "Confirmado por 1 peregrino" : `Confirmado por ${n} peregrinos`;
+}
 
 const OSM_STYLE: StyleSpecification = {
   version: 8,
@@ -115,6 +131,9 @@ interface Props {
   // Rodada 43 — só para administradores: o popup do PAP ganha um link
   // "Editar este PAP", que abre a edição pela administração.
   linkEditarPapAdmin?: boolean;
+  // Rodada 47 — quando presente (mapa de "Minha peregrinação"), o balão de
+  // cada aviso ganha os botões "Ainda está lá" / "Já não existe".
+  onVotarAviso?: (avisoId: string, tipo: TipoVotoAviso) => Promise<ResultadoVotoAviso | { erro: string }>;
 }
 
 function servicosLabel(servicos: string[]) {
@@ -162,6 +181,7 @@ export default function MapView({
   papDestacado = false,
   focoPap = null,
   linkEditarPapAdmin = false,
+  onVotarAviso,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -326,22 +346,91 @@ export default function MapView({
           <path d="M8 6v8"/>
         </svg>`;
       const minutos = Math.max(0, Math.round((Date.now() - new Date(a.criado_em).getTime()) / 60000));
+
+      // Rodada 47 — mostrador de confirmações: bolinha verde com o número
+      // em cima do marcador, e a mesma contagem no alto do balão.
+      el.style.position = "relative";
+      const selo = document.createElement("span");
+      selo.style.cssText =
+        "position:absolute;top:-9px;right:-9px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#16a34a;color:white;font:700 10px/17px sans-serif;text-align:center;border:1.5px solid white;box-sizing:border-box";
+      function atualizarSelo(n: number) {
+        selo.textContent = String(n);
+        selo.style.display = n > 0 ? "block" : "none";
+      }
+      atualizarSelo(a.confirmacoes ?? 0);
+      el.appendChild(selo);
+
+      const conteudo = document.createElement("div");
+      conteudo.style.cssText = "font-family:sans-serif;max-width:230px;color:#1f1f1f";
+      conteudo.innerHTML = `
+        <div data-contador style="display:${(a.confirmacoes ?? 0) > 0 ? "inline-block" : "none"};margin-bottom:4px;padding:2px 8px;border-radius:999px;background:#dcfce7;color:#166534;font-size:11px;font-weight:700"></div>
+        <div style="font-size:10px;letter-spacing:.05em;color:#ea580c;font-weight:700">${escaparHtml(
+          CATEGORIA_SINISTRO_LABELS[a.categoria] ?? a.categoria
+        )} — ${confirmado ? "CONFIRMADO PELA ADMINISTRAÇÃO" : "NÃO CONFIRMADO PELA ADMINISTRAÇÃO"}</div>
+        <strong>${escaparHtml(a.titulo)}</strong><br/>
+        ${a.descricao ? `${escaparHtml(a.descricao)}<br/>` : ""}
+        <span style="color:#666;font-size:12px">Informado há ${minutos} min</span>
+        ${
+          onVotarAviso
+            ? `<div style="margin-top:8px;font-size:12px;font-weight:600">Você está passando por aqui?</div>
+               <div style="display:flex;gap:6px;margin-top:4px">
+                 <button type="button" data-voto="confirma" style="flex:1;padding:7px 4px;border-radius:8px;border:none;background:#16a34a;color:white;font-weight:700;font-size:12px;cursor:pointer">Ainda está lá</button>
+                 <button type="button" data-voto="nao_existe" style="flex:1;padding:7px 4px;border-radius:8px;border:1px solid #d4d4d4;background:white;color:#404040;font-weight:700;font-size:12px;cursor:pointer">Já não existe</button>
+               </div>
+               <div data-status style="margin-top:6px;font-size:11px;color:#525252"></div>`
+            : ""
+        }
+      `;
+      const contador = conteudo.querySelector<HTMLElement>("[data-contador]")!;
+      contador.textContent = textoConfirmacoes(a.confirmacoes ?? 0);
+
+      // Balão sempre acima do aviso, e o mapa desliza para ele caber
+      // inteiro na tela (com os botões, fica mais alto que os outros).
+      const popupAviso = new maplibregl.Popup({ offset: 20, anchor: "bottom", maxWidth: "250px" }).setDOMContent(conteudo);
+      popupAviso.on("open", () => {
+        map.easeTo({ center: [a.longitude, a.latitude], offset: [0, onVotarAviso ? 140 : 90], duration: 400 });
+      });
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([a.longitude, a.latitude])
-        .setPopup(
-          new maplibregl.Popup({ offset: 20 }).setHTML(`
-            <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
-              <span style="font-size:10px;letter-spacing:.05em;color:#ea580c;font-weight:700">${
-                CATEGORIA_SINISTRO_LABELS[a.categoria] ?? a.categoria
-              } — ${confirmado ? "CONFIRMADO" : "NÃO CONFIRMADO"}</span><br/>
-              <strong>${a.titulo}</strong><br/>
-              ${a.descricao ? `${a.descricao}<br/>` : ""}
-              Informado há ${minutos} min
-            </div>
-          `)
-        )
+        .setPopup(popupAviso)
         .addTo(map);
       markersRef.current.push(marker);
+
+      if (onVotarAviso) {
+        const status = conteudo.querySelector<HTMLElement>("[data-status]")!;
+        const botoes = Array.from(conteudo.querySelectorAll<HTMLButtonElement>("button[data-voto]"));
+        botoes.forEach((botao) => {
+          botao.addEventListener("click", async () => {
+            const tipo = botao.dataset.voto as TipoVotoAviso;
+            botoes.forEach((b) => (b.disabled = true));
+            status.style.color = "#525252";
+            status.textContent = "Enviando...";
+            const r = await onVotarAviso(a.id, tipo);
+            botoes.forEach((b) => (b.disabled = false));
+            if ("erro" in r) {
+              status.style.color = "#dc2626";
+              status.textContent = r.erro;
+              return;
+            }
+            atualizarSelo(r.confirmacoes);
+            contador.textContent = textoConfirmacoes(r.confirmacoes);
+            contador.style.display = r.confirmacoes > 0 ? "inline-block" : "none";
+            if (r.removido) {
+              status.style.color = "#166534";
+              status.textContent = `Obrigado! ${LIMITE_NAO_EXISTE} peregrinos informaram que já não existe — o aviso saiu do mapa.`;
+              botoes.forEach((b) => (b.disabled = true));
+              window.setTimeout(() => marker.remove(), 2500);
+              return;
+            }
+            status.style.color = "#166534";
+            status.textContent = r.ja_tinha_votado
+              ? "Você já tinha respondido este aviso."
+              : tipo === "confirma"
+                ? "Obrigado por confirmar!"
+                : `Obrigado! Já não existe: ${r.nao_existe} de ${LIMITE_NAO_EXISTE} para sair do mapa.`;
+          });
+        });
+      }
     });
 
     peregrinos.forEach((p) => {
@@ -459,6 +548,9 @@ export default function MapView({
         .addTo(map);
       markersRef.current.push(marker);
     });
+    // onVotarAviso fica de fora de propósito: é uma função estável em
+    // intenção, e recriar os marcadores a cada render fecharia o balão.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pontosApoio, pontosRisco, avisos, peregrinos, papsPreCadastro, pontosComerciais, permitirArrastarPapPreCadastro, papDestacado, linkEditarPapAdmin]);
 
   // Rodada 42 — busca de PAP em /mapa: leva o mapa até o PAP escolhido e

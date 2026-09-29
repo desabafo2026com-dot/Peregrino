@@ -3,18 +3,13 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
-import { CheckCircle2, Circle, TriangleAlert, Megaphone } from "lucide-react";
+import { CheckCircle2, Circle, TriangleAlert, Megaphone, ThumbsUp, Ban } from "lucide-react";
 import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
-import { distanciaMetros } from "@/lib/geo";
+import { cidadeMaisProxima } from "@/lib/checkin-cidade";
+import { votarAviso, LIMITE_NAO_EXISTE, type TipoVotoAviso } from "@/lib/avisos-votos";
 import InformarSinistro from "@/components/InformarSinistro";
 import { KM_DUTRA_APARECIDA, kmDutraEntrada, kmFaltamAparecida, kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
 import type { Peregrinacao, PontoCheckin, PontoRisco, RiscoInformado, Rota } from "@/types/database";
-
-// Mesma tolerância usada em /peregrinacao para o check-in principal — o
-// ponto cadastrado é uma referência da cidade, não o exato lugar da Dutra
-// por onde o peregrino passa, então alguns km de folga evitam bloquear
-// check-ins legítimos por imprecisão do GPS.
-const RAIO_CHECKIN_KM = 5;
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -61,8 +56,10 @@ export default function TrajetoClient({
 }: Props) {
   const supabase = createClient();
   const [checkinsFeitos, setCheckinsFeitos] = useState(new Set(checkinsFeitosIdsIniciais));
-  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [listaAvisos, setListaAvisos] = useState(avisos);
   const [minhaPosicao, setMinhaPosicao] = useState<{ lat: number; lng: number } | null>(null);
 
   // Mostra a posição atual do peregrino no mapa do trajeto.
@@ -76,31 +73,28 @@ export default function TrajetoClient({
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  async function fazerCheckin(ponto: PontoCheckin) {
+  // Rodada 47 — um botão só: registra a cidade onde o peregrino está (a
+  // mais próxima da localização atual), em qualquer ordem e sem pedir
+  // confirmação de distância — mesmo critério de "Minha peregrinação".
+  async function fazerCheckin() {
     if (!navigator.geolocation) {
       setErro("Geolocalização não disponível neste navegador.");
       return;
     }
     setErro(null);
-    setLoadingId(ponto.id);
+    setMsg(null);
+    setCarregando(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        // Mesma validação de proximidade de /peregrinacao — aqui era ainda
-        // mais fácil de furar, já que cada cidade da lista tem seu próprio
-        // botão "Fazer check-in" sempre habilitado, sem checar se a
-        // localização reportada tem algo a ver com aquela cidade.
-        const distM = distanciaMetros(pos.coords.latitude, pos.coords.longitude, ponto.latitude, ponto.longitude);
-        const distKm = distM / 1000;
-        if (distKm > RAIO_CHECKIN_KM) {
-          const distTexto = distKm < 10 ? distKm.toFixed(1) : Math.round(distKm).toString();
-          if (
-            !confirm(
-              `Não conseguimos confirmar que você está perto de ${ponto.cidade} pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja fazer o check-in mesmo assim?`
-            )
-          ) {
-            setLoadingId(null);
-            return;
-          }
+        const ponto = cidadeMaisProxima(pos.coords.latitude, pos.coords.longitude, pontosCheckin);
+        if (!ponto) {
+          setCarregando(false);
+          return;
+        }
+        if (checkinsFeitos.has(ponto.id)) {
+          setCarregando(false);
+          setMsg(`Você está em ${ponto.cidade}, e o check-in desta cidade já foi feito.`);
+          return;
         }
         const { error } = await supabase.from("checkins").insert({
           peregrinacao_id: peregrinacao.id,
@@ -109,17 +103,19 @@ export default function TrajetoClient({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
         });
-        setLoadingId(null);
+        setCarregando(false);
         if (error) {
           setErro(error.message);
           return;
         }
         setCheckinsFeitos((prev) => new Set(prev).add(ponto.id));
+        setMsg(`Check-in em ${ponto.cidade} registrado com sucesso!`);
       },
       () => {
-        setLoadingId(null);
+        setCarregando(false);
         setErro("Não foi possível acessar sua localização.");
-      }
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
     );
   }
 
@@ -165,27 +161,22 @@ export default function TrajetoClient({
     <div className="flex flex-col gap-6">
       <InformarSinistro rotaId={peregrinacao.rota_id} destaque />
 
-      {avisos.length > 0 && (
+      {listaAvisos.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-orange-600">
+          <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-orange-600">
             <Megaphone size={20} /> Avisos recentes de peregrinos
           </h2>
+          <p className="mb-3 text-xs text-neutral-500" style={{ textAlign: "left" }}>
+            Passou por algum? Confirme se ainda está lá ou informe que já
+            não existe — com {LIMITE_NAO_EXISTE} respostas de &quot;já não existe&quot; o aviso sai.
+          </p>
           <div className="flex flex-col gap-2">
-            {avisos.map((a) => (
-              <div key={a.id} className="card border-orange-200 dark:border-orange-900">
-                <p className="flex items-center justify-between gap-2 font-semibold text-orange-700">
-                  <span>
-                    {CATEGORIA_SINISTRO_LABELS[a.categoria] ?? a.categoria} — {a.titulo}
-                  </span>
-                  <span className="whitespace-nowrap text-xs font-medium">
-                    {a.status === "aprovado" ? "Confirmado" : "Não confirmado"}
-                  </span>
-                </p>
-                {a.descricao && (
-                  <p className="text-sm text-neutral-600 dark:text-neutral-300">{a.descricao}</p>
-                )}
-                <p className="text-xs text-neutral-500">Informado {tempoDesde(a.criado_em)}</p>
-              </div>
+            {listaAvisos.map((a) => (
+              <AvisoCard
+                key={a.id}
+                aviso={a}
+                onRemovido={() => setListaAvisos((l) => l.filter((x) => x.id !== a.id))}
+              />
             ))}
           </div>
         </section>
@@ -229,13 +220,30 @@ export default function TrajetoClient({
         <h2 className="mb-3 text-lg font-bold text-amber-800 dark:text-amber-500">
           Pontos de check-in por cidade
         </h2>
+        <button
+          onClick={fazerCheckin}
+          disabled={carregando || concluidos === pontosCheckin.length}
+          className="btn-primary mb-1 flex w-full items-center justify-center gap-2 disabled:opacity-50"
+        >
+          <CheckCircle2 size={18} />
+          {carregando
+            ? "Registrando..."
+            : concluidos === pontosCheckin.length
+              ? "Todos os check-ins feitos"
+              : "Fazer check-in onde estou"}
+        </button>
+        <p className="mb-3 text-xs text-neutral-500" style={{ textAlign: "left" }}>
+          O app registra a cidade onde você está, mesmo que tenha passado por
+          outra sem fazer check-in.
+        </p>
+        {msg && <p className="mb-3 text-center text-sm text-green-700">{msg}</p>}
         <div className="flex flex-col gap-2">
           {pontosCheckin.map((p) => {
             const feito = checkinsFeitos.has(p.id);
             return (
               <div
                 key={p.id}
-                className={`card flex items-center justify-between gap-3 ${
+                className={`card flex items-center gap-3 ${
                   feito ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/20" : ""
                 }`}
               >
@@ -256,15 +264,7 @@ export default function TrajetoClient({
                     {p.descricao && <p className="text-xs text-neutral-500">{p.descricao}</p>}
                   </div>
                 </div>
-                {!feito && (
-                  <button
-                    onClick={() => fazerCheckin(p)}
-                    disabled={loadingId === p.id}
-                    className="btn-secondary whitespace-nowrap text-xs"
-                  >
-                    {loadingId === p.id ? "..." : "Fazer check-in"}
-                  </button>
-                )}
+
               </div>
             );
           })}
@@ -375,4 +375,82 @@ function KmCidade({
     );
   }
   return null;
+}
+
+// Rodada 47 — aviso com os botões "Ainda está lá" / "Já não existe" e o
+// mostrador de confirmações de outros peregrinos.
+function AvisoCard({ aviso, onRemovido }: { aviso: RiscoInformado; onRemovido: () => void }) {
+  const [confirmacoes, setConfirmacoes] = useState(aviso.confirmacoes ?? 0);
+  const [enviando, setEnviando] = useState(false);
+  const [retorno, setRetorno] = useState<{ ok: boolean; texto: string } | null>(null);
+
+  async function votar(tipo: TipoVotoAviso) {
+    setEnviando(true);
+    setRetorno(null);
+    const r = await votarAviso(aviso.id, tipo);
+    setEnviando(false);
+    if ("erro" in r) {
+      setRetorno({ ok: false, texto: r.erro });
+      return;
+    }
+    setConfirmacoes(r.confirmacoes);
+    if (r.removido) {
+      setRetorno({ ok: true, texto: `Obrigado! ${LIMITE_NAO_EXISTE} peregrinos informaram que já não existe — o aviso saiu.` });
+      window.setTimeout(onRemovido, 2500);
+      return;
+    }
+    setRetorno({
+      ok: true,
+      texto: r.ja_tinha_votado
+        ? "Você já tinha respondido este aviso."
+        : tipo === "confirma"
+          ? "Obrigado por confirmar!"
+          : `Obrigado! Já não existe: ${r.nao_existe} de ${LIMITE_NAO_EXISTE} para o aviso sair.`,
+    });
+  }
+
+  return (
+    <div className="card border-orange-200 dark:border-orange-900">
+      {confirmacoes > 0 && (
+        <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-800 dark:bg-green-950 dark:text-green-300">
+          <ThumbsUp size={12} /> {confirmacoes === 1 ? "Confirmado por 1 peregrino" : `Confirmado por ${confirmacoes} peregrinos`}
+        </span>
+      )}
+      <p className="flex items-center justify-between gap-2 font-semibold text-orange-700" style={{ textAlign: "left" }}>
+        <span>
+          {CATEGORIA_SINISTRO_LABELS[aviso.categoria] ?? aviso.categoria} — {aviso.titulo}
+        </span>
+        <span className="whitespace-nowrap text-xs font-medium">
+          {aviso.status === "aprovado" ? "Confirmado pela adm." : "Não confirmado pela adm."}
+        </span>
+      </p>
+      {aviso.descricao && (
+        <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
+          {aviso.descricao}
+        </p>
+      )}
+      <p className="text-xs text-neutral-500">Informado {tempoDesde(aviso.criado_em)}</p>
+      <div className="mt-2 flex gap-2">
+        <button
+          type="button"
+          disabled={enviando}
+          onClick={() => votar("confirma")}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-2 py-2 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+        >
+          <ThumbsUp size={14} /> Ainda está lá
+        </button>
+        <button
+          type="button"
+          disabled={enviando}
+          onClick={() => votar("nao_existe")}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-300 px-2 py-2 text-xs font-bold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+        >
+          <Ban size={14} /> Já não existe
+        </button>
+      </div>
+      {retorno && (
+        <p className={`mt-1 text-xs ${retorno.ok ? "text-green-700" : "text-red-600"}`}>{retorno.texto}</p>
+      )}
+    </div>
+  );
 }

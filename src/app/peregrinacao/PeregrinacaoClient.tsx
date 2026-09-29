@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -20,20 +20,19 @@ import {
   LocateFixed,
   Sparkles,
   Tent,
-  TriangleAlert,
   Megaphone,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
 import AlertaProximidade from "@/components/AlertaProximidade";
 import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
-import { kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
+import { cidadeMaisProxima } from "@/lib/checkin-cidade";
+import { votarAviso } from "@/lib/avisos-votos";
 import type { PapPreCadastroMapa, PontoTrajeto } from "@/components/MapView";
 import type {
   Peregrinacao,
   PontoApoio,
   PontoCheckin,
-  PontoRisco,
   RiscoInformado,
   Profile,
   Rota,
@@ -55,7 +54,6 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 // qualquer balão aberto) toda vez que a posição do GPS atualiza.
 const SEM_PAP: PontoApoio[] = [];
 const SEM_PRE: PapPreCadastroMapa[] = [];
-const SEM_RISCO: PontoRisco[] = [];
 const SEM_AVISO: RiscoInformado[] = [];
 
 // Coordenadas aproximadas da Basílica de Nossa Senhora Aparecida — usadas
@@ -66,13 +64,6 @@ const APARECIDA_LAT = -22.8494;
 const APARECIDA_LNG = -45.2317;
 const DISTANCIA_AVISO_KM = 5;
 
-// Raio de tolerância para o check-in em cada cidade — o ponto cadastrado
-// costuma ser um local de referência (praça, prefeitura, etc.), não o exato
-// lugar por onde a Dutra passa nem onde o peregrino está caminhando, então
-// alguns km de folga evitam bloquear check-ins legítimos por um GPS
-// impreciso. Acima disso, avisa mas ainda deixa confirmar mesmo assim —
-// mesmo padrão já usado em finalizarPeregrinacao().
-const RAIO_CHECKIN_KM = 5;
 
 function distanciaKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
@@ -98,7 +89,6 @@ interface Props {
   // Rodada 46 — PAP do pré-cadastro (ainda sem gerente) ativos hoje, já
   // posicionados no servidor, para o mapa mostrar todos os PAP ativos.
   papsPreCadastro: PapPreCadastroMapa[];
-  pontosRisco: PontoRisco[];
   avisos: RiscoInformado[];
   rotas: Rota[];
   checkinsCount: number;
@@ -132,29 +122,38 @@ function gerarCodigoCertificado() {
 }
 
 // Contador de tempo total decorrido desde o início da peregrinação —
-// atualiza a cada meio minuto para mostrar dias/horas/minutos de caminhada
+// atualiza a cada segundo (Rodada 47: passou a mostrar os segundos) com
+// dias/horas/minutos/segundos de caminhada
 // em andamento, em destaque (maior e com hora:minuto sempre visíveis,
 // mesmo quando zerados) — item pedido pelo usuário.
 function ContadorTempoTotal({ dataInicio }: { dataInicio: string | null }) {
-  const [agora, setAgora] = useState(() => new Date());
+  // Começa vazio e só passa a contar no navegador: com os segundos na
+  // tela, a hora calculada no servidor nunca bate com a do aparelho, e o
+  // React reclamaria da diferença ao montar a página.
+  const [agora, setAgora] = useState<Date | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => setAgora(new Date()), 30000);
-    return () => clearInterval(id);
+    const primeiro = setTimeout(() => setAgora(new Date()), 0);
+    const id = setInterval(() => setAgora(new Date()), 1000);
+    return () => {
+      clearTimeout(primeiro);
+      clearInterval(id);
+    };
   }, []);
 
   if (!dataInicio) return null;
-  const duracao = intervalToDuration({ start: new Date(dataInicio), end: agora });
+  const duracao = intervalToDuration({ start: new Date(dataInicio), end: agora ?? new Date(dataInicio) });
   const dias = duracao.days ?? 0;
   const horas = duracao.hours ?? 0;
   const minutos = duracao.minutes ?? 0;
+  const segundos = duracao.seconds ?? 0;
 
   return (
-    <div className="mx-auto my-2 flex w-full max-w-[260px] flex-col items-center rounded-2xl bg-green-600 px-6 py-4 text-white shadow-sm dark:bg-green-700">
+    <div className="mx-auto my-2 flex w-full max-w-[300px] flex-col items-center rounded-2xl bg-green-600 px-6 py-4 text-white shadow-sm dark:bg-green-700">
       <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-green-100 uppercase">
         <Radio size={13} /> Tempo de caminhada
       </p>
-      <div className="mt-1 flex items-end gap-4">
+      <div className="mt-1 flex items-end gap-4" style={{ visibility: agora ? "visible" : "hidden" }}>
         {dias > 0 && (
           <div className="flex flex-col items-center">
             <span className="text-4xl leading-none font-black tabular-nums">{dias}</span>
@@ -168,9 +167,11 @@ function ContadorTempoTotal({ dataInicio }: { dataInicio: string | null }) {
             {String(horas).padStart(2, "0")}
             <span className="text-green-200">:</span>
             {String(minutos).padStart(2, "0")}
+            <span className="text-green-200">:</span>
+            {String(segundos).padStart(2, "0")}
           </span>
           <span className="mt-0.5 text-[10px] font-semibold tracking-wide text-green-100 uppercase">
-            horas : minutos
+            horas : min : seg
           </span>
         </div>
       </div>
@@ -198,7 +199,6 @@ export default function PeregrinacaoClient({
   peregrinacoesConcluidas,
   pontosApoio,
   papsPreCadastro,
-  pontosRisco,
   avisos,
   rotas,
   checkinsCount: checkinsCountInicial,
@@ -208,11 +208,11 @@ export default function PeregrinacaoClient({
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
-  // Filtros do mapa de "Minha peregrinação" (Rodada 20) — os 3 vêm ativos
-  // por padrão (mesma convenção da página de trajeto), com opção de
-  // desativar cada camada individualmente.
+  // Filtros do mapa de "Minha peregrinação" (Rodada 20) — vêm ativos por
+  // padrão, com opção de desativar cada camada. Rodada 47: o mapa daqui não
+  // mostra mais os pontos de risco, só PAP ativos e avisos (os riscos que
+  // faltam continuam listados, com foto, na página do trajeto).
   const [mostrarPapMapa, setMostrarPapMapa] = useState(true);
-  const [mostrarRiscoMapa, setMostrarRiscoMapa] = useState(true);
   const [mostrarAvisosMapa, setMostrarAvisosMapa] = useState(true);
 
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
@@ -319,16 +319,6 @@ export default function PeregrinacaoClient({
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [emAndamento]);
-
-  const rotaSlugAtual = rotas.find((r) => r.id === peregrinacao?.rota_id)?.slug ?? null;
-
-  // Rodada 46 — só os pontos de risco que ainda faltam até Aparecida: do km
-  // da entrada da cidade do último check-in (ou da cidade de início) em
-  // diante, dentro da rota do peregrino.
-  const riscosAFrente = useMemo(() => {
-    const kmAtual = kmReferenciaAtual(rotaSlugAtual, pontosCheckin, checkinsFeitosIds);
-    return pontosRisco.filter((r) => riscoAindaAFrente(r, rotaSlugAtual, kmAtual));
-  }, [pontosRisco, rotaSlugAtual, pontosCheckin, checkinsFeitosIds]);
 
   // Cidades de check-in no mapa: as já feitas ganham o número da sequência
   // em que foram feitas (1º, 2º...), as pendentes ficam sem número.
@@ -466,17 +456,22 @@ export default function PeregrinacaoClient({
   // partir da cidade de início escolhida — o primeiro da lista é o ponto de
   // partida real. Rodada 46: confere no banco antes (para não duplicar) e
   // usa o user_id da própria peregrinação, com o erro tratado.
-  async function registrarCheckinInicial(p: Peregrinacao) {
-    if (!p.rota_id) return;
+  // Devolve o nome da cidade registrada, ou null quando não havia o que
+  // registrar (já feito, ou rota sem pontos).
+  async function registrarCheckinInicial(p: Peregrinacao): Promise<string | null> {
+    if (!p.rota_id) return null;
     const primeiroPonto = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem)[0];
-    if (!primeiroPonto) return;
+    if (!primeiroPonto) return null;
     const { data: jaFeito } = await supabase
       .from("checkins")
       .select("id")
       .eq("peregrinacao_id", p.id)
       .eq("ponto_checkin_id", primeiroPonto.id)
       .limit(1);
-    if (jaFeito && jaFeito.length > 0) return;
+    if (jaFeito && jaFeito.length > 0) {
+      setCheckinsFeitosIds((ids) => (ids.includes(primeiroPonto.id) ? ids : [primeiroPonto.id, ...ids]));
+      return null;
+    }
     const pos = await obterPosicaoAtual();
     const { error } = await supabase.from("checkins").insert({
       peregrinacao_id: p.id,
@@ -485,11 +480,35 @@ export default function PeregrinacaoClient({
       latitude: pos?.coords.latitude ?? primeiroPonto.latitude,
       longitude: pos?.coords.longitude ?? primeiroPonto.longitude,
     });
-    if (!error) {
-      setCheckinsCount((c) => c + 1);
-      setCheckinsFeitosIds((ids) => (ids.includes(primeiroPonto.id) ? ids : [...ids, primeiroPonto.id]));
+    if (error) {
+      setErro(`Não foi possível registrar o check-in inicial: ${error.message}`);
+      return null;
     }
+    setCheckinsCount((c) => c + 1);
+    // O inicial é sempre o 1º da sequência no mapa.
+    setCheckinsFeitosIds((ids) => (ids.includes(primeiroPonto.id) ? ids : [primeiroPonto.id, ...ids]));
+    return primeiroPonto.cidade;
   }
+
+  // Rodada 47 — rede de segurança: uma caminhada em andamento sem nenhum
+  // check-in (iniciada antes desta versão, ou se o registro falhou na hora
+  // por falta de internet) ganha o check-in inicial ao abrir esta página.
+  const checkinInicialConferidoRef = useRef(false);
+  useEffect(() => {
+    if (checkinInicialConferidoRef.current) return;
+    if (!peregrinacao || peregrinacao.status !== "em_andamento") return;
+    if (checkinsFeitosIdsInicial.length > 0 || pontosCheckin.length === 0) return;
+    const p = peregrinacao;
+    const timer = window.setTimeout(() => {
+      if (checkinInicialConferidoRef.current) return;
+      checkinInicialConferidoRef.current = true;
+      registrarCheckinInicial(p).then((cidade) => {
+        if (cidade) setMsg(`Check-in inicial em ${cidade} registrado.`);
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peregrinacao?.id, peregrinacao?.status]);
 
   async function iniciarCaminhada() {
     if (!peregrinacao) return;
@@ -504,10 +523,10 @@ export default function PeregrinacaoClient({
       .eq("id", peregrinacao.id)
       .maybeSingle();
     if (atual && (atual as Peregrinacao).status === "em_andamento") {
+      checkinInicialConferidoRef.current = true;
       await registrarCheckinInicial(atual as Peregrinacao);
       setLoading(false);
       setPeregrinacao(atual as Peregrinacao);
-      router.push("/peregrinacao/trajeto");
       return;
     }
 
@@ -526,10 +545,21 @@ export default function PeregrinacaoClient({
     }
 
     const atualizada = data as Peregrinacao;
-    await registrarCheckinInicial(atualizada);
+    // Rodada 47 — o check-in inicial é registrado aqui mesmo e a pessoa
+    // continua nesta tela, já vendo a cidade de início marcada com o "1" no
+    // mapa (antes ia direto para a página do trajeto).
+    checkinInicialConferidoRef.current = true;
+    const cidade = await registrarCheckinInicial(atualizada);
 
     setLoading(false);
-    router.push("/peregrinacao/trajeto");
+    setCompartilhando(true);
+    setPeregrinacao(atualizada);
+    setMsg(
+      cidade
+        ? `Caminhada iniciada! Check-in inicial em ${cidade} registrado.`
+        : "Caminhada iniciada!"
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function pararCompartilhamento() {
@@ -561,51 +591,25 @@ export default function PeregrinacaoClient({
     setMsg(null);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        let alvoId = pontoCheckinId;
-        let alvoPonto = alvoId ? pontosCheckin.find((p) => p.id === alvoId) : undefined;
+        // Rodada 47 — vale a cidade onde o peregrino está (a mais próxima
+        // da localização atual), em qualquer ordem: se pulou uma cidade, o
+        // registro já cai direto na atual, sem pedir confirmação de
+        // distância (o ponto de referência de algumas cidades fica na sede,
+        // fora da rodovia, e o check-in é feito quase sempre na Dutra). O
+        // sino de proximidade (AlertaProximidade) já passa a cidade certa.
+        const alvoPonto = pontoCheckinId
+          ? pontosCheckin.find((p) => p.id === pontoCheckinId) ?? null
+          : cidadeMaisProxima(pos.coords.latitude, pos.coords.longitude, pontosCheckin);
 
-        // Botão principal, sem cidade pré-definida (Rodada 34, a pedido do
-        // usuário): em vez de sempre apontar para "a próxima cidade" na
-        // ordem cadastrada da rota, descobre pela localização atual qual
-        // ponto pendente está mais perto — o mesmo critério já usado pelo
-        // sino de alertas (AlertaProximidade), que chama esta função já
-        // passando o pontoCheckinId (e por isso pula este bloco).
-        if (!alvoId) {
-          const pendentes = pontosCheckin.filter((p) => !checkinsFeitosIds.includes(p.id));
-          let melhor: { ponto: PontoCheckin; distancia: number } | null = null;
-          for (const p of pendentes) {
-            const d = distanciaKm(pos.coords.latitude, pos.coords.longitude, p.latitude, p.longitude);
-            if (!melhor || d < melhor.distancia) melhor = { ponto: p, distancia: d };
-          }
-          if (melhor) {
-            alvoPonto = melhor.ponto;
-            alvoId = melhor.ponto.id;
-          }
+        if (alvoPonto && checkinsFeitosIds.includes(alvoPonto.id)) {
+          setMsg(`Você está em ${alvoPonto.cidade}, e o check-in desta cidade já foi feito.`);
+          return;
         }
 
-        // Confere se a localização reportada está mesmo perto da cidade do
-        // check-in — antes qualquer check-in era aceito sem checar isso,
-        // então dava para "check-in" em várias cidades em segundos, sem
-        // nunca ter chegado perto delas. Se não bater, avisa mas permite
-        // confirmar mesmo assim (GPS impreciso, ponto de referência um
-        // pouco distante da rota real, etc.).
-        if (alvoPonto) {
-          const dist = distanciaKm(pos.coords.latitude, pos.coords.longitude, alvoPonto.latitude, alvoPonto.longitude);
-          if (dist > RAIO_CHECKIN_KM) {
-            const distTexto = dist < 10 ? dist.toFixed(1) : Math.round(dist).toString();
-            if (
-              !confirm(
-                `Não conseguimos confirmar que você está perto de ${alvoPonto.cidade} pela sua localização atual (você parece estar a aproximadamente ${distTexto} km). Deseja fazer o check-in em ${alvoPonto.cidade} mesmo assim?`
-              )
-            ) {
-              return;
-            }
-          }
-        }
         const { error } = await supabase.from("checkins").insert({
           peregrinacao_id: peregrinacao.id,
           user_id: peregrinacao.user_id,
-          ponto_checkin_id: alvoId || null,
+          ponto_checkin_id: alvoPonto?.id ?? null,
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
         });
@@ -614,12 +618,13 @@ export default function PeregrinacaoClient({
           return;
         }
         setCheckinsCount((c) => c + 1);
-        if (alvoId) {
-          setCheckinsFeitosIds((ids) => [...ids, alvoId!]);
+        if (alvoPonto) {
+          setCheckinsFeitosIds((ids) => (ids.includes(alvoPonto.id) ? ids : [...ids, alvoPonto.id]));
         }
         setMsg(alvoPonto ? `Check-in em ${alvoPonto.cidade} registrado com sucesso!` : "Check-in registrado com sucesso!");
       },
-      () => setErro("Não foi possível acessar sua localização para o check-in.")
+      () => setErro("Não foi possível acessar sua localização para o check-in."),
+      { enableHighAccuracy: true, timeout: 15000 }
     );
   }
 
@@ -1122,12 +1127,14 @@ export default function PeregrinacaoClient({
             para depois do mapa, ver abaixo). */}
         <div className="card">
           <h2 className="mb-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
-            Fazer check-in ({checkinsCount})
+            Fazer check-in
           </h2>
-          <p className="mb-3 text-justify text-xs text-neutral-500">
-            O check-in da cidade de início já foi feito ao iniciar a
-            caminhada. Faça pelo menos mais um entre a origem e a cidade de
-            Aparecida para receber o certificado.
+          <p className="mb-3 text-xs text-neutral-500" style={{ textAlign: "left" }}>
+            O check-in inicial foi feito ao iniciar a caminhada. O
+            certificado sai com ele e o check-in final em Aparecida; os
+            check-ins nas cidades do caminho ficam como registro da sua
+            peregrinação. O app registra a cidade onde você está, mesmo que
+            tenha passado por outra sem fazer check-in.
           </p>
           <button
             onClick={() => fazerCheckin()}
@@ -1145,7 +1152,7 @@ export default function PeregrinacaoClient({
             para desligar cada camada (Rodada 20 — antes só mostrava PAP). */}
         <div className="card">
           <h2 className="mb-3 flex items-center justify-center gap-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
-            <MapPinned size={18} /> PAP, riscos e avisos na rota
+            <MapPinned size={18} /> PAP e avisos na rota
           </h2>
           <div className="mb-3 flex flex-wrap justify-center gap-4 text-sm font-medium">
             <label className="flex items-center gap-2">
@@ -1159,14 +1166,6 @@ export default function PeregrinacaoClient({
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={mostrarRiscoMapa}
-                onChange={(e) => setMostrarRiscoMapa(e.target.checked)}
-              />
-              <TriangleAlert size={16} className="text-red-600" /> Riscos à frente ({riscosAFrente.length})
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
                 checked={mostrarAvisosMapa}
                 onChange={(e) => setMostrarAvisosMapa(e.target.checked)}
               />
@@ -1175,16 +1174,17 @@ export default function PeregrinacaoClient({
           </div>
           <p className="mb-2 text-center text-xs text-neutral-500" style={{ textAlign: "center" }}>
             Ponto azul: você. Cidades com número: seus check-ins, na ordem
-            em que foram feitos.
+            em que foram feitos. Toque num aviso para confirmar que ainda
+            está lá ou informar que já não existe.
           </p>
           <MapView
             pontosApoio={mostrarPapMapa ? pontosApoio : SEM_PAP}
             papsPreCadastro={mostrarPapMapa ? papsPreCadastro : SEM_PRE}
-            pontosRisco={mostrarRiscoMapa ? riscosAFrente : SEM_RISCO}
             avisos={mostrarAvisosMapa ? avisos : SEM_AVISO}
             trajeto={trajetoMapa}
             minhaPosicao={minhaPosicao}
-            height="340px"
+            onVotarAviso={votarAviso}
+            height="400px"
             zoom={8}
           />
         </div>

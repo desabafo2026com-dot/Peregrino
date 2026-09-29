@@ -242,6 +242,11 @@ export interface RiscoInformado {
   observacao_admin: string | null;
   ponto_risco_id: string | null;
   criado_em: string;
+  // Rodada 47 (Migration 41) — votos de outros peregrinos. Opcionais para
+  // não quebrar antes da migration rodar.
+  confirmacoes?: number;
+  nao_existe?: number;
+  ultima_confirmacao_em?: string | null;
 }
 
 export interface Peregrinacao {

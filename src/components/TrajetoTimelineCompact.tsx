@@ -26,7 +26,14 @@ export default function TrajetoTimelineCompact({ pontosCheckin, checkinsFeitosId
 
   const feitosSet = new Set(checkinsFeitosIds);
   const ordenados = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem);
-  const indiceProximo = ordenados.findIndex((p) => !feitosSet.has(p.id));
+  // Rodada 47 — o check-in pode pular cidades: a "próxima" é a primeira
+  // pendente depois da cidade mais adiantada já feita (as puladas ficam
+  // cinza, sem destaque).
+  let ultimoFeito = -1;
+  ordenados.forEach((p, i) => {
+    if (feitosSet.has(p.id)) ultimoFeito = i;
+  });
+  const indiceProximo = ordenados.findIndex((p, i) => i > ultimoFeito && !feitosSet.has(p.id));
 
   return (
     <div className="overflow-x-auto pb-1">

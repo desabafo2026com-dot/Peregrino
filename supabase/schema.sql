@@ -3658,3 +3658,130 @@ grant select on public.avisos_gerais to anon, authenticated;
 grant insert, update, delete on public.avisos_gerais to authenticated;
 
 -- FIM DA MIGRATION 40
+
+-- =====================================================================
+-- MIGRATION 41 — Rodada 47: outros peregrinos confirmam ou derrubam avisos
+-- ---------------------------------------------------------------------
+-- Ao tocar num aviso (riscos_informados), o peregrino pode dizer "Ainda
+-- está lá" (confirma) ou "Já não existe". Um voto por pessoa por aviso
+-- (pode trocar de ideia). Com 5 "já não existe" o aviso sai do ar
+-- (status 'rejeitado', com observação automática). Cada confirmação
+-- renova o prazo de 1 hora em que o aviso fica visível.
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+alter table public.riscos_informados add column if not exists confirmacoes integer not null default 0;
+alter table public.riscos_informados add column if not exists nao_existe integer not null default 0;
+alter table public.riscos_informados add column if not exists ultima_confirmacao_em timestamptz;
+
+comment on column public.riscos_informados.confirmacoes is 'Quantos peregrinos confirmaram que o aviso ainda existe (Rodada 47).';
+comment on column public.riscos_informados.nao_existe is 'Quantos peregrinos informaram que o aviso já não existe — com 5 ele sai do ar (Rodada 47).';
+comment on column public.riscos_informados.ultima_confirmacao_em is 'Última confirmação de um peregrino — renova o prazo de 1 hora de visibilidade.';
+
+create table if not exists public.avisos_votos (
+  aviso_id uuid not null references public.riscos_informados(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  tipo text not null check (tipo in ('confirma', 'nao_existe')),
+  criado_em timestamptz not null default now(),
+  primary key (aviso_id, user_id)
+);
+
+alter table public.avisos_votos enable row level security;
+
+-- Cada pessoa vê só os próprios votos; administração vê todos. Gravação só
+-- pela função votar_aviso abaixo (nenhuma política de insert/update).
+drop policy if exists "avisos_votos_select_own_ou_admin" on public.avisos_votos;
+create policy "avisos_votos_select_own_ou_admin" on public.avisos_votos for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+drop function if exists public.votar_aviso(uuid, text);
+create or replace function public.votar_aviso(p_aviso_id uuid, p_tipo text)
+returns table (confirmacoes integer, nao_existe integer, removido boolean, ja_tinha_votado boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_autor uuid;
+  v_status text;
+  v_criado timestamptz;
+  v_ultima timestamptz;
+  v_anterior text;
+  v_conf integer;
+  v_nao integer;
+begin
+  if v_uid is null then
+    raise exception 'Entre na sua conta para responder ao aviso.';
+  end if;
+  if p_tipo not in ('confirma', 'nao_existe') then
+    raise exception 'Resposta inválida.';
+  end if;
+
+  select r.user_id, r.status, r.criado_em, r.ultima_confirmacao_em
+    into v_autor, v_status, v_criado, v_ultima
+  from public.riscos_informados r
+  where r.id = p_aviso_id
+  for update;
+
+  if not found
+     or v_status = 'rejeitado'
+     or greatest(v_criado, coalesce(v_ultima, v_criado)) <= now() - interval '1 hour' then
+    raise exception 'Este aviso não está mais ativo.';
+  end if;
+  if v_autor = v_uid then
+    raise exception 'Você não pode responder ao seu próprio aviso.';
+  end if;
+
+  select v.tipo into v_anterior
+  from public.avisos_votos v
+  where v.aviso_id = p_aviso_id and v.user_id = v_uid;
+
+  if v_anterior is null then
+    insert into public.avisos_votos (aviso_id, user_id, tipo) values (p_aviso_id, v_uid, p_tipo);
+  elsif v_anterior <> p_tipo then
+    update public.avisos_votos set tipo = p_tipo, criado_em = now()
+    where aviso_id = p_aviso_id and user_id = v_uid;
+  end if;
+
+  select count(*) filter (where v.tipo = 'confirma'), count(*) filter (where v.tipo = 'nao_existe')
+    into v_conf, v_nao
+  from public.avisos_votos v
+  where v.aviso_id = p_aviso_id;
+
+  update public.riscos_informados r
+  set confirmacoes = v_conf,
+      nao_existe = v_nao,
+      ultima_confirmacao_em = case
+        when p_tipo = 'confirma' and v_anterior is distinct from 'confirma' then now()
+        else r.ultima_confirmacao_em
+      end,
+      status = case when v_nao >= 5 then 'rejeitado' else r.status end,
+      observacao_admin = case
+        when v_nao >= 5 then coalesce(r.observacao_admin || ' | ', '') || 'Removido automaticamente: 5 peregrinos informaram que já não existe.'
+        else r.observacao_admin
+      end
+  where r.id = p_aviso_id;
+
+  return query select v_conf, v_nao, (v_nao >= 5), (v_anterior is not distinct from p_tipo);
+end;
+$$;
+
+revoke all on function public.votar_aviso(uuid, text) from public;
+grant execute on function public.votar_aviso(uuid, text) to authenticated;
+
+-- Visibilidade pública: mesma regra da Migration 26, com o prazo de 1 hora
+-- contado a partir da última confirmação de peregrino (se houver).
+drop policy if exists "riscos_informados_select_publicos" on public.riscos_informados;
+create policy "riscos_informados_select_publicos" on public.riscos_informados for select
+  using (
+    status <> 'rejeitado'
+    and greatest(criado_em, coalesce(ultima_confirmacao_em, criado_em)) > now() - interval '1 hour'
+    and (
+      status = 'aprovado'
+      or categoria = 'chuva'
+      or criado_em <= now() - interval '30 minutes'
+    )
+  );
+
+-- FIM DA MIGRATION 41
