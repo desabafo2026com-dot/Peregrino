@@ -48,7 +48,15 @@ export default function TrajetoTimelineCompact({ pontosCheckin, checkinsFeitosId
                         : "bg-neutral-200 text-neutral-400 dark:bg-neutral-800"
                   }`}
                 >
-                  {feito ? <Check size={13} /> : p.ordem}
+                  {/* Rodada 46 — sem numeração das cidades: feito mostra o
+                      visto, pendente só a bolinha. */}
+                  {feito ? (
+                    <Check size={13} />
+                  ) : (
+                    <span
+                      className={`h-2 w-2 rounded-full ${proximo ? "bg-amber-500" : "bg-neutral-400 dark:bg-neutral-600"}`}
+                    />
+                  )}
                 </div>
                 <p
                   className={`mt-1 text-center text-[10px] font-bold uppercase tracking-wide ${

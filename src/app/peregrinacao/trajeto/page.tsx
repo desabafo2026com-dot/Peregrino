@@ -47,7 +47,8 @@ export default async function TrajetoPage() {
         .from("checkins")
         .select("ponto_checkin_id")
         .eq("peregrinacao_id", peregrinacao.id)
-        .not("ponto_checkin_id", "is", null),
+        .not("ponto_checkin_id", "is", null)
+        .order("criado_em", { ascending: true }),
     ]);
 
   const riscos = rota

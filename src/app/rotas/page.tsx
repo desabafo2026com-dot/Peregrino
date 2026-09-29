@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, nomeRota, kmPertenceARota } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
+import QuadroResumoRiscos from "@/components/QuadroResumoRiscos";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
 import type { PontoRisco, Rota, PontoCheckin } from "@/types/database";
@@ -136,6 +137,9 @@ export default async function RotasPage({
           </ul>
         </div>
       </section>
+
+      {/* Rodada 46 — quadro resumo pedido pelo usuário, logo abaixo das dicas. */}
+      <QuadroResumoRiscos />
 
       {/* Rodada 44 — a pedido do usuário, o mapa sobe para logo abaixo das
           dicas de segurança (antes ficava no fim da página, depois da

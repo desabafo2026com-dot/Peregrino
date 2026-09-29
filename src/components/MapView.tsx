@@ -45,6 +45,10 @@ export interface PontoTrajeto {
   lat: number;
   lng: number;
   feito: boolean;
+  // Rodada 46 — posição do check-in na sequência em que o peregrino fez
+  // (1º, 2º, 3º...). Só os já feitos têm número no mapa; os pendentes
+  // aparecem como um ponto simples, sem numeração.
+  sequencia?: number | null;
 }
 
 // Uma rota inteira (Norte ou Sul), para destacar no mapa geral com uma cor
@@ -164,6 +168,7 @@ export default function MapView({
   const markersRef = useRef<Marker[]>([]);
   const papMarkersRef = useRef<Map<string, Marker>>(new Map());
   const trajetoMarkersRef = useRef<Marker[]>([]);
+  const trajetoEnquadradoRef = useRef(false);
   const previewMarkerRef = useRef<Marker | null>(null);
   const minhaPosicaoMarkerRef = useRef<Marker | null>(null);
   const rotasLayerIdsRef = useRef<string[]>([]);
@@ -490,57 +495,77 @@ export default function MapView({
       trajetoMarkersRef.current = [];
 
       if (trajeto.length === 0) {
-        if (map!.getLayer("trajeto-linha")) map!.removeLayer("trajeto-linha");
-        if (map!.getSource("trajeto-linha")) map!.removeSource("trajeto-linha");
+        if (map!.isStyleLoaded()) {
+          if (map!.getLayer("trajeto-linha")) map!.removeLayer("trajeto-linha");
+          if (map!.getSource("trajeto-linha")) map!.removeSource("trajeto-linha");
+        }
         return;
       }
 
       const ordenado = [...trajeto].sort((a, b) => a.ordem - b.ordem);
-      const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "LineString",
-          coordinates: ordenado.map((p) => [p.lng, p.lat]),
-        },
-      };
-
-      const source = map!.getSource("trajeto-linha") as maplibregl.GeoJSONSource | undefined;
-      if (source) {
-        source.setData(geojson);
-      } else {
-        map!.addSource("trajeto-linha", { type: "geojson", data: geojson });
-        map!.addLayer({
-          id: "trajeto-linha",
-          type: "line",
-          source: "trajeto-linha",
-          paint: {
-            "line-color": "#92400e",
-            "line-width": 3,
-            "line-dasharray": [2, 1.5],
+      // A linha precisa do estilo do mapa carregado; os marcadores não —
+      // eles aparecem na hora (Rodada 46), sem esperar os blocos do mapa.
+      function desenharLinha() {
+        const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: ordenado.map((p) => [p.lng, p.lat]),
           },
-        });
+        };
+
+        const source = map!.getSource("trajeto-linha") as maplibregl.GeoJSONSource | undefined;
+        if (source) {
+          source.setData(geojson);
+        } else {
+          map!.addSource("trajeto-linha", { type: "geojson", data: geojson });
+          map!.addLayer({
+            id: "trajeto-linha",
+            type: "line",
+            source: "trajeto-linha",
+            paint: {
+              "line-color": "#92400e",
+              "line-width": 3,
+              "line-dasharray": [2, 1.5],
+            },
+          });
+        }
       }
+      if (map!.isStyleLoaded()) desenharLinha();
+      else map!.once("load", desenharLinha);
 
       ordenado.forEach((p) => {
         const el = document.createElement("div");
-        const cor = p.feito ? "#16a34a" : "#d97706";
-        el.style.cssText = `width:18px;height:18px;border-radius:50%;background:${cor};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:700`;
-        el.textContent = String(p.ordem);
+        const numero = p.feito && p.sequencia ? p.sequencia : null;
+        if (numero) {
+          el.style.cssText =
+            "width:24px;height:24px;border-radius:50%;background:#16a34a;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:800";
+          el.textContent = String(numero);
+        } else {
+          const cor = p.feito ? "#16a34a" : "#d97706";
+          el.style.cssText = `width:14px;height:14px;border-radius:50%;background:${cor};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4)`;
+        }
+        const status = numero
+          ? `${numero}º check-in feito`
+          : p.feito
+            ? "Check-in feito"
+            : "Check-in pendente";
         const marker = new maplibregl.Marker({ element: el })
           .setLngLat([p.lng, p.lat])
           .setPopup(
             new maplibregl.Popup({ offset: 14 }).setHTML(
-              `<div style="font-family:sans-serif"><strong>${p.ordem}. ${p.cidade}</strong><br/>${
-                p.feito ? "Check-in feito ✓" : "Pendente"
-              }</div>`
+              `<div style="font-family:sans-serif"><strong>${p.cidade}</strong><br/>${status}</div>`
             )
           )
           .addTo(map!);
         trajetoMarkersRef.current.push(marker);
       });
 
-      if (ordenado.length > 1) {
+      // Só enquadra o trajeto na primeira vez — depois de um check-in (que
+      // redesenha os marcadores) o mapa fica onde a pessoa deixou.
+      if (ordenado.length > 1 && !trajetoEnquadradoRef.current) {
+        trajetoEnquadradoRef.current = true;
         const lons = ordenado.map((p) => p.lng);
         const lats = ordenado.map((p) => p.lat);
         map!.fitBounds(
@@ -553,11 +578,7 @@ export default function MapView({
       }
     }
 
-    if (map.isStyleLoaded()) {
-      desenhar();
-    } else {
-      map.once("load", desenhar);
-    }
+    desenhar();
   }, [trajeto]);
 
   // Rotas Norte/Sul destacadas no mapa geral — uma linha clara por rota, a
@@ -700,6 +721,13 @@ export default function MapView({
     const map = mapRef.current;
     if (!map) return;
 
+    // Rodada 46 — a posição chega várias vezes por minuto (watchPosition):
+    // só move o marcador existente, em vez de recriar (o que fechava o
+    // balão "Você está aqui" a cada atualização).
+    if (minhaPosicao && minhaPosicaoMarkerRef.current) {
+      minhaPosicaoMarkerRef.current.setLngLat([minhaPosicao.lng, minhaPosicao.lat]);
+      return;
+    }
     if (minhaPosicaoMarkerRef.current) {
       minhaPosicaoMarkerRef.current.remove();
       minhaPosicaoMarkerRef.current = null;

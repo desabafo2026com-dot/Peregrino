@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
 import { kmPertenceARota, avisoVisivelPublicamente, hojeISO } from "@/lib/constants";
-import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota } from "@/types/database";
+import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
+import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota, PapPreCadastro } from "@/types/database";
 
 export default async function PeregrinacaoPage() {
   const supabase = await createClient();
@@ -70,6 +71,8 @@ export default async function PeregrinacaoPage() {
     { data: pontosApoio },
     { data: rotas },
     { data: todosPontosCheckinData },
+    { data: papsPreAtivosData },
+    { data: basePapsPre },
   ] = await Promise.all([
     supabase
       .from("peregrinacoes")
@@ -100,8 +103,24 @@ export default async function PeregrinacaoPage() {
     // quanto, já filtrados pela cidade de início escolhida, para a
     // caminhada ativa.
     supabase.from("pontos_checkin").select("*").order("ordem"),
+    // Rodada 46 — PAP do pré-cadastro ainda sem gerente e ativos hoje (a
+    // mesma regra do contador "Ativos" do painel e do filtro do mapa do
+    // admin), para o mapa daqui mostrar todos os PAP ativos, não só os já
+    // vinculados por um gerente.
+    supabase
+      .from("paps_pre_cadastro")
+      .select("*")
+      .is("reivindicado_por", null)
+      .contains("datas_funcionamento", [hojeISOStr]),
+    supabase.from("paps_pre_cadastro").select("cidade, km"),
   ]);
   const todosPontosCheckin = (todosPontosCheckinData ?? []) as PontoCheckin[];
+  const papsPreCadastro = posicionarPapsPreCadastro({
+    paps: (papsPreAtivosData ?? []) as PapPreCadastro[],
+    baseCidadeKm: (basePapsPre ?? []) as { cidade: string | null; km: number | null }[],
+    rotas: (rotas ?? []) as Rota[],
+    pontosCheckin: todosPontosCheckin,
+  });
 
   // Mapa peregrinacao_id -> certificado_id — usado tanto para "Ver
   // certificado" quanto para o link do Certificado Plus (Rodada 16, movido
@@ -191,7 +210,10 @@ export default async function PeregrinacaoPage() {
         .from("checkins")
         .select("ponto_checkin_id")
         .eq("peregrinacao_id", peregrinacao.id)
-        .not("ponto_checkin_id", "is", null),
+        .not("ponto_checkin_id", "is", null)
+        // Na ordem em que foram feitos — o mapa numera os check-ins nessa
+        // sequência (Rodada 46).
+        .order("criado_em", { ascending: true }),
     ]);
     checkinsCount = count ?? 0;
 
@@ -228,6 +250,7 @@ export default async function PeregrinacaoPage() {
         peregrinacaoInicial={peregrinacao as Peregrinacao | null}
         peregrinacoesConcluidas={peregrinacoesConcluidas}
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
+        papsPreCadastro={papsPreCadastro}
         pontosRisco={pontosRisco}
         avisos={avisos}
         rotas={(rotas ?? []) as Rota[]}

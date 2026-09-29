@@ -7,6 +7,7 @@ import { CheckCircle2, Circle, TriangleAlert, Megaphone } from "lucide-react";
 import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
 import { distanciaMetros } from "@/lib/geo";
 import InformarSinistro from "@/components/InformarSinistro";
+import { KM_DUTRA_APARECIDA, kmDutraEntrada, kmFaltamAparecida, kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
 import type { Peregrinacao, PontoCheckin, PontoRisco, RiscoInformado, Rota } from "@/types/database";
 
 // Mesma tolerância usada em /peregrinacao para o check-in principal — o
@@ -124,34 +125,45 @@ export default function TrajetoClient({
 
   const concluidos = pontosCheckin.filter((p) => checkinsFeitos.has(p.id)).length;
 
-  // Distância aproximada que falta até Aparecida, calculada a partir do
-  // km_aproximado já cadastrado (distância acumulada desde a origem da
-  // rota) — o maior valor da lista representa o próprio ponto de Aparecida.
+  // Fallback (cidade sem km da Dutra conhecido): distância que falta pelo
+  // km_aproximado já cadastrado (acumulado desde a origem da rota) — o
+  // maior valor da lista é o próprio ponto de Aparecida.
   const kmAparecida = pontosCheckin.reduce(
     (max, p) => (p.km_aproximado != null && p.km_aproximado > max ? p.km_aproximado : max),
     -Infinity
   );
   const temKmAparecida = kmAparecida !== -Infinity;
 
+  // Rodada 46 — só os pontos de risco que ainda faltam até Aparecida (do
+  // km da entrada da cidade do último check-in, ou da cidade de início, em
+  // diante), dentro da rota do peregrino.
+  const kmAtual = kmReferenciaAtual(rota?.slug, pontosCheckin, Array.from(checkinsFeitos));
+  const riscosAFrente = riscos.filter((r) => riscoAindaAFrente(r, rota?.slug, kmAtual));
+
   // Mesma ordem de leitura usada em /rotas: sentido Norte (km decrescente),
   // sentido Sul (km crescente) — sem km cadastrado, fica por último.
-  const riscosOrdenados = [...riscos].sort((a, b) => {
+  const riscosOrdenados = [...riscosAFrente].sort((a, b) => {
     if (a.km_referencia == null) return 1;
     if (b.km_referencia == null) return -1;
     return rota?.slug === "sul" ? a.km_referencia - b.km_referencia : b.km_referencia - a.km_referencia;
   });
 
+  // Os já feitos ganham no mapa o número da sequência em que foram feitos
+  // (o Set guarda a ordem de inserção: primeiro os que vieram do servidor,
+  // em ordem de horário, depois os feitos nesta tela).
+  const sequencia = new Map(Array.from(checkinsFeitos).map((id, i) => [id, i + 1]));
   const trajeto = pontosCheckin.map((p) => ({
     ordem: p.ordem,
     cidade: p.cidade,
     lat: p.latitude,
     lng: p.longitude,
     feito: checkinsFeitos.has(p.id),
+    sequencia: sequencia.get(p.id) ?? null,
   }));
 
   return (
     <div className="flex flex-col gap-6">
-      <InformarSinistro rotaId={peregrinacao.rota_id} />
+      <InformarSinistro rotaId={peregrinacao.rota_id} destaque />
 
       {avisos.length > 0 && (
         <section>
@@ -234,17 +246,13 @@ export default function TrajetoClient({
                     <Circle className="text-neutral-300" size={22} />
                   )}
                   <div>
-                    <p className="font-semibold">
-                      {p.ordem}. {p.cidade}
-                    </p>
-                    {p.km_aproximado != null && (
-                      <p className="text-xs text-neutral-500">
-                        ≈ km {p.km_aproximado} da rota
-                        {temKmAparecida && p.km_aproximado < kmAparecida && (
-                          <> — faltam ≈ {Math.round(kmAparecida - p.km_aproximado)} km até Aparecida</>
-                        )}
-                      </p>
-                    )}
+                    <p className="font-semibold">{p.cidade}</p>
+                    <KmCidade
+                      cidade={p.cidade}
+                      rotaSlug={rota?.slug}
+                      kmAproximado={p.km_aproximado}
+                      kmAparecidaFallback={temKmAparecida ? kmAparecida : null}
+                    />
                     {p.descricao && <p className="text-xs text-neutral-500">{p.descricao}</p>}
                   </div>
                 </div>
@@ -269,39 +277,103 @@ export default function TrajetoClient({
         {erro && <p className="mt-2 text-sm text-red-600">{erro}</p>}
       </section>
 
-      {riscosOrdenados.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-700">
-            <TriangleAlert size={20} /> Pontos de risco ao longo da rota
-          </h2>
-          <div className="card overflow-x-auto">
-            <table className="w-full min-w-[480px] text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-neutral-500 dark:border-neutral-800">
-                  <th className="pb-2 pr-4">Km / sentido</th>
-                  <th className="pb-2 pr-4">Local</th>
-                  <th className="pb-2 pr-4">Risco</th>
-                  <th className="pb-2">Observações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {riscosOrdenados.map((r) => (
-                  <tr key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="py-2 pr-4 whitespace-nowrap">
-                      {kmSentidoLabel(r.km_referencia, r.sentido)}
-                    </td>
-                    <td className="py-2 pr-4 font-medium">{r.titulo}</td>
-                    <td className={`py-2 pr-4 font-medium ${riscoColor(r.nivel_risco)}`}>
-                      {NIVEL_RISCO_LABELS[r.nivel_risco]}
-                    </td>
-                    <td className="py-2 text-neutral-600 dark:text-neutral-300">{r.descricao ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section>
+        <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-red-700">
+          <TriangleAlert size={20} /> Pontos de risco que faltam até Aparecida
+        </h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          Só os que ainda estão à sua frente na rota, a partir da cidade do seu
+          último check-in. Toque na foto para ampliar.
+        </p>
+        {riscosOrdenados.length === 0 ? (
+          <p className="text-sm text-neutral-400">
+            Nenhum ponto de risco cadastrado à sua frente até Aparecida.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {riscosOrdenados.map((r) => (
+              <div key={r.id} className="card flex gap-3 border-red-100 p-3 dark:border-red-950">
+                {r.foto_url ? (
+                  <a href={r.foto_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={r.foto_url}
+                      alt={`Foto de ${r.titulo}`}
+                      loading="lazy"
+                      className="rounded-lg object-cover"
+                      style={{ width: 64, height: 64 }}
+                    />
+                  </a>
+                ) : (
+                  <div
+                    className="flex shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-300 dark:bg-red-950/40"
+                    style={{ width: 64, height: 64 }}
+                  >
+                    <TriangleAlert size={24} />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold leading-tight" style={{ textAlign: "left" }}>{r.titulo}</p>
+                  <p className="text-xs text-neutral-500" style={{ textAlign: "left" }}>
+                    {kmSentidoLabel(r.km_referencia, r.sentido)}
+                    {r.km_referencia != null && ` — faltam ≈ ${kmFaltamAparecida(r.km_referencia)} km até Aparecida`}
+                  </p>
+                  <p className={`text-xs font-semibold ${riscoColor(r.nivel_risco)}`}>
+                    Risco {NIVEL_RISCO_LABELS[r.nivel_risco]?.toLowerCase()}
+                  </p>
+                  {r.descricao && (
+                    <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
+                      {r.descricao}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
     </div>
   );
+}
+
+// Rodada 46 — em vez do "km X da rota" (distância desde a origem, que não
+// bate com nenhuma placa), mostra o km real da Dutra na entrada da cidade
+// e quantos km faltam dali até Aparecida. Sem km da Dutra conhecido para a
+// cidade, volta ao cálculo antigo só para o "faltam".
+function KmCidade({
+  cidade,
+  rotaSlug,
+  kmAproximado,
+  kmAparecidaFallback,
+}: {
+  cidade: string;
+  rotaSlug: string | null | undefined;
+  kmAproximado: number | null;
+  kmAparecidaFallback: number | null;
+}) {
+  const kmEntrada = kmDutraEntrada(rotaSlug, cidade);
+  const ehAparecida = cidade.trim().toLowerCase() === "aparecida";
+  if (ehAparecida) {
+    return (
+      <p className="text-xs text-neutral-500" style={{ textAlign: "left" }}>
+        {kmEntrada != null ? `Entrada da cidade ≈ km ${kmEntrada} da Dutra — ` : ""}
+        Basílica ≈ km {KM_DUTRA_APARECIDA}
+      </p>
+    );
+  }
+  if (kmEntrada != null) {
+    return (
+      <p className="text-xs text-neutral-500" style={{ textAlign: "left" }}>
+        Entrada da cidade ≈ km {kmEntrada} da Dutra — faltam ≈ {kmFaltamAparecida(kmEntrada)} km até Aparecida
+      </p>
+    );
+  }
+  if (kmAproximado != null && kmAparecidaFallback != null && kmAproximado < kmAparecidaFallback) {
+    return (
+      <p className="text-xs text-neutral-500" style={{ textAlign: "left" }}>
+        Faltam ≈ {Math.round(kmAparecidaFallback - kmAproximado)} km até Aparecida
+      </p>
+    );
+  }
+  return null;
 }

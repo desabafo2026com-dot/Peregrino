@@ -27,6 +27,8 @@ import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTO
 import AlertaProximidade from "@/components/AlertaProximidade";
 import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
+import { kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
+import type { PapPreCadastroMapa, PontoTrajeto } from "@/components/MapView";
 import type {
   Peregrinacao,
   PontoApoio,
@@ -47,6 +49,14 @@ const MapView = dynamic(() => import("@/components/MapView"), {
     </div>
   ),
 });
+
+// Listas vazias fixas para as camadas desligadas do mapa — um `[]` novo a
+// cada render faria o mapa apagar e recriar todos os marcadores (fechando
+// qualquer balão aberto) toda vez que a posição do GPS atualiza.
+const SEM_PAP: PontoApoio[] = [];
+const SEM_PRE: PapPreCadastroMapa[] = [];
+const SEM_RISCO: PontoRisco[] = [];
+const SEM_AVISO: RiscoInformado[] = [];
 
 // Coordenadas aproximadas da Basílica de Nossa Senhora Aparecida — usadas
 // como referência para confirmar, por geolocalização, que o peregrino está
@@ -85,6 +95,9 @@ interface Props {
   peregrinacaoInicial: Peregrinacao | null;
   peregrinacoesConcluidas: PeregrinacaoConcluida[];
   pontosApoio: PontoApoio[];
+  // Rodada 46 — PAP do pré-cadastro (ainda sem gerente) ativos hoje, já
+  // posicionados no servidor, para o mapa mostrar todos os PAP ativos.
+  papsPreCadastro: PapPreCadastroMapa[];
   pontosRisco: PontoRisco[];
   avisos: RiscoInformado[];
   rotas: Rota[];
@@ -184,6 +197,7 @@ export default function PeregrinacaoClient({
   peregrinacaoInicial,
   peregrinacoesConcluidas,
   pontosApoio,
+  papsPreCadastro,
   pontosRisco,
   avisos,
   rotas,
@@ -291,6 +305,44 @@ export default function PeregrinacaoClient({
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // Rodada 46 — posição do peregrino no mapa, acompanhando enquanto ele
+  // anda (só durante a caminhada em andamento e com a página aberta).
+  const [minhaPosicao, setMinhaPosicao] = useState<{ lat: number; lng: number } | null>(null);
+  const emAndamento = peregrinacao?.status === "em_andamento";
+  useEffect(() => {
+    if (!emAndamento || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setMinhaPosicao({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [emAndamento]);
+
+  const rotaSlugAtual = rotas.find((r) => r.id === peregrinacao?.rota_id)?.slug ?? null;
+
+  // Rodada 46 — só os pontos de risco que ainda faltam até Aparecida: do km
+  // da entrada da cidade do último check-in (ou da cidade de início) em
+  // diante, dentro da rota do peregrino.
+  const riscosAFrente = useMemo(() => {
+    const kmAtual = kmReferenciaAtual(rotaSlugAtual, pontosCheckin, checkinsFeitosIds);
+    return pontosRisco.filter((r) => riscoAindaAFrente(r, rotaSlugAtual, kmAtual));
+  }, [pontosRisco, rotaSlugAtual, pontosCheckin, checkinsFeitosIds]);
+
+  // Cidades de check-in no mapa: as já feitas ganham o número da sequência
+  // em que foram feitas (1º, 2º...), as pendentes ficam sem número.
+  const trajetoMapa = useMemo<PontoTrajeto[]>(() => {
+    const sequencia = new Map(checkinsFeitosIds.map((id, i) => [id, i + 1]));
+    return pontosCheckin.map((p) => ({
+      ordem: p.ordem,
+      cidade: p.cidade,
+      lat: p.latitude,
+      lng: p.longitude,
+      feito: sequencia.has(p.id),
+      sequencia: sequencia.get(p.id) ?? null,
+    }));
+  }, [pontosCheckin, checkinsFeitosIds]);
 
   async function salvarDadosPeregrino() {
     const {
@@ -409,6 +461,36 @@ export default function PeregrinacaoClient({
     setPeregrinacao(data as Peregrinacao);
   }
 
+  // O primeiro check-in (cidade de início) é feito automaticamente ao
+  // iniciar a caminhada. pontosCheckin já vem filtrado (do servidor) a
+  // partir da cidade de início escolhida — o primeiro da lista é o ponto de
+  // partida real. Rodada 46: confere no banco antes (para não duplicar) e
+  // usa o user_id da própria peregrinação, com o erro tratado.
+  async function registrarCheckinInicial(p: Peregrinacao) {
+    if (!p.rota_id) return;
+    const primeiroPonto = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem)[0];
+    if (!primeiroPonto) return;
+    const { data: jaFeito } = await supabase
+      .from("checkins")
+      .select("id")
+      .eq("peregrinacao_id", p.id)
+      .eq("ponto_checkin_id", primeiroPonto.id)
+      .limit(1);
+    if (jaFeito && jaFeito.length > 0) return;
+    const pos = await obterPosicaoAtual();
+    const { error } = await supabase.from("checkins").insert({
+      peregrinacao_id: p.id,
+      user_id: p.user_id,
+      ponto_checkin_id: primeiroPonto.id,
+      latitude: pos?.coords.latitude ?? primeiroPonto.latitude,
+      longitude: pos?.coords.longitude ?? primeiroPonto.longitude,
+    });
+    if (!error) {
+      setCheckinsCount((c) => c + 1);
+      setCheckinsFeitosIds((ids) => (ids.includes(primeiroPonto.id) ? ids : [...ids, primeiroPonto.id]));
+    }
+  }
+
   async function iniciarCaminhada() {
     if (!peregrinacao) return;
     setLoading(true);
@@ -422,6 +504,7 @@ export default function PeregrinacaoClient({
       .eq("id", peregrinacao.id)
       .maybeSingle();
     if (atual && (atual as Peregrinacao).status === "em_andamento") {
+      await registrarCheckinInicial(atual as Peregrinacao);
       setLoading(false);
       setPeregrinacao(atual as Peregrinacao);
       router.push("/peregrinacao/trajeto");
@@ -443,25 +526,7 @@ export default function PeregrinacaoClient({
     }
 
     const atualizada = data as Peregrinacao;
-
-    if (atualizada.rota_id) {
-      // pontosCheckin já vem filtrado (do servidor) a partir da cidade de
-      // início escolhida — o primeiro da lista é o ponto de partida real.
-      const primeiroPonto = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem)[0];
-      if (primeiroPonto && !checkinsFeitosIds.includes(primeiroPonto.id)) {
-        const pos = await obterPosicaoAtual();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        await supabase.from("checkins").insert({
-          peregrinacao_id: atualizada.id,
-          user_id: user!.id,
-          ponto_checkin_id: primeiroPonto.id,
-          latitude: pos?.coords.latitude ?? primeiroPonto.latitude,
-          longitude: pos?.coords.longitude ?? primeiroPonto.longitude,
-        });
-      }
-    }
+    await registrarCheckinInicial(atualizada);
 
     setLoading(false);
     router.push("/peregrinacao/trajeto");
@@ -1060,8 +1125,9 @@ export default function PeregrinacaoClient({
             Fazer check-in ({checkinsCount})
           </h2>
           <p className="mb-3 text-justify text-xs text-neutral-500">
-            Aviso: você deve fazer pelo menos um check-in entre a origem e a
-            cidade de Aparecida para receber o certificado.
+            O check-in da cidade de início já foi feito ao iniciar a
+            caminhada. Faça pelo menos mais um entre a origem e a cidade de
+            Aparecida para receber o certificado.
           </p>
           <button
             onClick={() => fazerCheckin()}
@@ -1088,7 +1154,7 @@ export default function PeregrinacaoClient({
                 checked={mostrarPapMapa}
                 onChange={(e) => setMostrarPapMapa(e.target.checked)}
               />
-              <Tent size={16} className="text-green-600" /> PAP ativos ({pontosApoio.length})
+              <Tent size={16} className="text-green-600" /> PAP ativos hoje ({pontosApoio.length + papsPreCadastro.length})
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -1096,7 +1162,7 @@ export default function PeregrinacaoClient({
                 checked={mostrarRiscoMapa}
                 onChange={(e) => setMostrarRiscoMapa(e.target.checked)}
               />
-              <TriangleAlert size={16} className="text-red-600" /> Riscos ({pontosRisco.length})
+              <TriangleAlert size={16} className="text-red-600" /> Riscos à frente ({riscosAFrente.length})
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -1107,30 +1173,31 @@ export default function PeregrinacaoClient({
               <Megaphone size={16} className="text-orange-600" /> Avisos ({avisos.length})
             </label>
           </div>
-          {pontosApoio.length === 0 && pontosRisco.length === 0 && avisos.length === 0 ? (
-            <p className="text-center text-sm text-neutral-500">
-              Nada para mostrar no mapa no momento.
-            </p>
-          ) : (
-            <MapView
-              pontosApoio={mostrarPapMapa ? pontosApoio : []}
-              pontosRisco={mostrarRiscoMapa ? pontosRisco : []}
-              avisos={mostrarAvisosMapa ? avisos : []}
-              height="300px"
-              zoom={8}
-            />
-          )}
+          <p className="mb-2 text-center text-xs text-neutral-500" style={{ textAlign: "center" }}>
+            Ponto azul: você. Cidades com número: seus check-ins, na ordem
+            em que foram feitos.
+          </p>
+          <MapView
+            pontosApoio={mostrarPapMapa ? pontosApoio : SEM_PAP}
+            papsPreCadastro={mostrarPapMapa ? papsPreCadastro : SEM_PRE}
+            pontosRisco={mostrarRiscoMapa ? riscosAFrente : SEM_RISCO}
+            avisos={mostrarAvisosMapa ? avisos : SEM_AVISO}
+            trajeto={trajetoMapa}
+            minhaPosicao={minhaPosicao}
+            height="340px"
+            zoom={8}
+          />
         </div>
 
-        {/* Módulo 4 — Informe sinistro ou suspeita, agora abaixo do mapa
-            (Rodada 20), com título e botão centralizados. */}
-        <div className="card">
-          <h2 className="mb-3 text-center text-base font-bold text-red-700">
-            Informe sinistro ou suspeita
-          </h2>
-          <div className="flex justify-center">
-            <InformarSinistro rotaId={peregrinacao.rota_id} />
-          </div>
+        {/* Módulo 4 — Informe sinistro ou suspeita, abaixo do mapa (Rodada
+            20). Rodada 46: botão grande, vermelho forte, ocupando a largura
+            toda — é o que precisa ser achado rápido numa emergência. */}
+        <div className="card border-red-200 dark:border-red-900">
+          <InformarSinistro rotaId={peregrinacao.rota_id} destaque />
+          <p className="mt-2 text-center text-xs text-neutral-500" style={{ textAlign: "center" }}>
+            Acidente, pessoa em perigo, algo suspeito ou chuva forte no
+            caminho? Avise os outros peregrinos — usamos sua localização.
+          </p>
         </div>
 
         {erro && <p className="text-center text-sm text-red-600">{erro}</p>}

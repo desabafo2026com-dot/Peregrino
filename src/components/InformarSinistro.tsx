@@ -8,6 +8,9 @@ import { TriangleAlert, X } from "lucide-react";
 
 interface Props {
   rotaId: string | null;
+  // Rodada 46 — em "Minha peregrinação" e no trajeto o botão fechado fica
+  // grande e vermelho forte, na largura toda, para ser achado rápido.
+  destaque?: boolean;
 }
 
 // Mensagem mostrada após o envio, explicando quando o relato fica visível
@@ -22,7 +25,7 @@ function mensagemPublicacao(categoria: CategoriaSinistro) {
   return "Obrigado! Seu relato foi enviado para revisão da administração. Se ninguém revisar antes, ele é publicado automaticamente como \"não confirmado\" em até 30 minutos, e fica visível por até 1 hora.";
 }
 
-export default function InformarSinistro({ rotaId }: Props) {
+export default function InformarSinistro({ rotaId, destaque = false }: Props) {
   const [aberto, setAberto] = useState(false);
   const [categoria, setCategoria] = useState<CategoriaSinistro>("sinistro");
   const [tipo, setTipo] = useState(TIPOS_POR_CATEGORIA.sinistro[0].value);
@@ -103,6 +106,18 @@ export default function InformarSinistro({ rotaId }: Props) {
       setAberto(false);
       setSucesso(null);
     }, 4000);
+  }
+
+  if (!aberto && destaque) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        className="flex w-full items-center justify-center gap-3 rounded-2xl bg-red-600 px-4 py-5 text-lg font-extrabold uppercase tracking-wide text-white shadow-lg ring-4 ring-red-600/25 hover:bg-red-700 active:scale-[0.99]"
+      >
+        <TriangleAlert size={28} strokeWidth={2.5} /> Informar sinistro ou suspeita
+      </button>
+    );
   }
 
   if (!aberto) {
