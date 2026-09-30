@@ -867,11 +867,14 @@ export default function RomariaPlusView({
     if (evento === "download") setContadorDownloads((n) => n + 1);
     else setContadorCompartilhamentos((n) => n + 1);
     const supabase = createClient();
-    void supabase.rpc("registrar_evento_foto_romaria_plus", {
+    // Rodada 50: antes era "void supabase.rpc(...)", que nunca enviava a
+    // chamada (o supabase só executa quando alguém espera o resultado) —
+    // por isso os contadores de download/compartilhamento não eram gravados.
+    supabase.rpc("registrar_evento_foto_romaria_plus", {
       p_compra_id: compraId,
       p_indice: indice,
       p_evento: evento,
-    });
+    }).then(() => {});
   }
 
   // Salva a posição/tamanho só depois de a pessoa parar de mexer por um

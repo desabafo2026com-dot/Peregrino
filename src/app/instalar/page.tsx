@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import VoltarButton from "@/components/VoltarButton";
+import BotaoInstalarApp from "@/components/BotaoInstalarApp";
 import { Share2, Smartphone, Apple, Copy, Check, Download } from "lucide-react";
 
 type SistemaDetectado = "ios" | "android" | "outro";
@@ -76,6 +77,12 @@ export default function InstalarPage() {
         ícone na tela inicial do seu celular, como um app normal, sem ocupar
         espaço de uma loja de aplicativos.
       </p>
+
+      {!jaInstalado && (
+        <BotaoInstalarApp className="btn-primary mb-5 flex w-full items-center justify-center gap-2 py-3 text-base">
+          <Smartphone size={20} /> Instalar agora
+        </BotaoInstalarApp>
+      )}
 
       {jaInstalado && (
         <div className="card mb-5 border-green-200 bg-green-50 text-sm text-green-800 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300">

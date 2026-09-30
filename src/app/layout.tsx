@@ -7,6 +7,8 @@ import LocationSharingManager from "@/components/LocationSharingManager";
 import { AuthRoleProvider } from "@/components/AuthRoleProvider";
 import TermosGate from "@/components/TermosGate";
 import CompletarCadastroGate from "@/components/CompletarCadastroGate";
+import RegistrarAcesso from "@/components/RegistrarAcesso";
+import { SCRIPT_CAPTURA_INSTALACAO } from "@/lib/instalar-app";
 
 // Rodada 40 — prévia do link ao ser colado no WhatsApp/Facebook/Telegram.
 // Antes não havia imagem nem textos de compartilhamento (Open Graph), então
@@ -48,6 +50,13 @@ export const metadata: Metadata = {
     description: descricaoCompartilhamento,
   },
   manifest: "/manifest.json",
+  // Rodada 50 — no iPhone, o ícone adicionado à tela inicial abre em tela
+  // cheia, como app, com este nome embaixo do ícone.
+  appleWebApp: {
+    capable: true,
+    title: "O Peregrino",
+    statusBarStyle: "default",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -78,6 +87,10 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
+        {/* Rodada 50 — guarda o aviso "pode instalar" do Android assim que a
+            página abre (ver src/lib/instalar-app.ts) e registra o service
+            worker que torna o site instalável. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_CAPTURA_INSTALACAO }} />
         {/* Aplica o tema salvo antes da primeira pintura, evitando flash de tela clara/escura errada. */}
         <script
           dangerouslySetInnerHTML={{
@@ -97,6 +110,7 @@ export default function RootLayout({
           <BottomNav />
         </AuthRoleProvider>
         <LocationSharingManager />
+        <RegistrarAcesso />
       </body>
     </html>
   );

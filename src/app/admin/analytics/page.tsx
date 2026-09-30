@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nomeRota } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
+import AcessosSiteResumo, { type EstatisticasAcessos } from "@/components/AcessosSiteResumo";
 import AdminAnalyticsClient, {
   type PeregrinacaoAnalytics,
   type CheckinAnalytics,
@@ -59,6 +60,7 @@ export default async function AdminAnalyticsPage() {
     { data: pontosRiscoData },
     { data: riscosInformadosData },
     { data: certificadosData },
+    { data: acessosData, error: erroAcessos },
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -72,6 +74,7 @@ export default async function AdminAnalyticsPage() {
     supabase.from("pontos_risco").select("*"),
     supabase.from("riscos_informados").select("*"),
     supabase.from("certificados").select("peregrinacao_id"),
+    supabase.rpc("estatisticas_acessos"),
   ]);
 
   const rotas = (rotasData ?? []) as Rota[];
@@ -180,6 +183,8 @@ export default async function AdminAnalyticsPage() {
   return (
     <div className="flex flex-col gap-6">
       <VoltarButton href="/admin" />
+      {/* Rodada 50 — acessos ao site, com ou sem cadastro (Migration 44). */}
+      <AcessosSiteResumo dados={erroAcessos ? null : ((acessosData ?? null) as EstatisticasAcessos | null)} />
       <AdminAnalyticsClient
         peregrinacoes={peregrinacoesReais}
         checkins={checkins}

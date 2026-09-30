@@ -3,6 +3,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, Smartphone, ShieldCheck } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
+import BotaoInstalarApp from "@/components/BotaoInstalarApp";
 import DoacaoCard from "@/components/DoacaoCard";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
 import MensagensConquistaCarrossel from "@/components/MensagensConquistaCarrossel";
@@ -210,15 +211,14 @@ export default async function Home() {
               check-ins realizados
             </p>
           </div>
-          <Link
-            href="/instalar"
-            className="col-span-2 flex flex-col items-center justify-center gap-1 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-2 py-3 text-white shadow-sm transition hover:from-amber-700 hover:to-amber-900 sm:col-span-1 dark:from-amber-700 dark:to-amber-900"
-          >
+          {/* Rodada 50 — instala direto (Android) ou abre o passo a passo na
+              própria tela (iPhone), em vez de levar para /instalar. */}
+          <BotaoInstalarApp className="col-span-2 flex flex-col items-center justify-center gap-1 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-2 py-3 text-white shadow-sm transition hover:from-amber-700 hover:to-amber-900 sm:col-span-1 dark:from-amber-700 dark:to-amber-900">
             <Smartphone size={22} />
             <span className="text-sm leading-tight font-bold" style={{ textAlign: "center" }}>
               Instalar no telefone
             </span>
-          </Link>
+          </BotaoInstalarApp>
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <MapPin size={20} /> {stats.pontos_apoio_ativos}

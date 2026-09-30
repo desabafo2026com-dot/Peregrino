@@ -1,3 +1,4 @@
+import AcessosSiteResumo, { type EstatisticasAcessos } from "@/components/AcessosSiteResumo";
 import { createClient } from "@/lib/supabase/server";
 import { nomeRota, avisoVisivelPublicamente, papAtivoHoje } from "@/lib/constants";
 import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
@@ -133,6 +134,8 @@ export default async function AdminDashboardPage() {
   // posição no mapa, para o filtro "PAP ativos" do mapa do painel bater com
   // o contador "Ativos" (que desde a Rodada 37 conta esses também).
   let papsPreCadastroAtivosMapa: PapPreCadastroMapa[] = [];
+  // Rodada 50 — contador de acessos ao site (Migration 44).
+  let acessos: EstatisticasAcessos | null = null;
 
   if (isAdmin) {
     const [
@@ -148,6 +151,7 @@ export default async function AdminDashboardPage() {
       { data: cadastrosData, error: erroCadastros },
       { data: pontosCheckinData },
       { data: basePreCadastroCidadeKm },
+      { data: acessosData, error: erroAcessos },
     ] = await Promise.all([
       supabase.from("profiles").select("id, nome_completo, cidade, uf, is_admin, is_agente"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
@@ -176,7 +180,9 @@ export default async function AdminDashboardPage() {
       // ativos hoje (mesmo cálculo do /mapa, ver lib/pap-pre-cadastro-mapa).
       supabase.from("pontos_checkin").select("*").order("ordem"),
       supabase.from("paps_pre_cadastro").select("cidade, km"),
+      supabase.rpc("estatisticas_acessos"),
     ]);
+    acessos = erroAcessos ? null : ((acessosData ?? null) as EstatisticasAcessos | null);
 
     papsPreCadastroAtivosMapa = posicionarPapsPreCadastro({
       paps: ((preCadastro ?? []) as PapPreCadastro[]).filter((p) => papAtivoHoje(p.datas_funcionamento)),
@@ -537,6 +543,8 @@ export default async function AdminDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <VoltarButton href="/" />
+
+      {isAdmin && <AcessosSiteResumo dados={acessos} />}
 
       {isAdmin && (
         <AdminDrilldownClient

@@ -3906,3 +3906,124 @@ alter table public.compras_romaria_plus
                     'basilica', 'terco', 'postal', 'credencial'));
 
 -- FIM DA MIGRATION 43
+
+-- =====================================================================
+-- MIGRATION 44 — Rodada 50: contador de acessos ao site
+-- ---------------------------------------------------------------------
+-- Conta quem abre o site/app, com ou sem cadastro, para o administrador
+-- acompanhar o movimento no Painel e no Dashboard. Cada aparelho tem um
+-- código aleatório gerado no próprio navegador (sem nome, e-mail nem IP).
+-- Um acesso = uma abertura do site; aberturas repetidas do mesmo aparelho
+-- em menos de 30 minutos não contam de novo.
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+create table if not exists public.acessos_site (
+  id bigint generated always as identity primary key,
+  visitante_id uuid not null,
+  criado_em timestamptz not null default now(),
+  dia date not null default ((now() at time zone 'America/Sao_Paulo')::date),
+  pagina text,
+  logado boolean not null default false,
+  app_instalado boolean not null default false,
+  dispositivo text not null default 'outro'
+);
+
+create index if not exists idx_acessos_site_dia on public.acessos_site(dia);
+create index if not exists idx_acessos_site_visitante on public.acessos_site(visitante_id, criado_em desc);
+
+alter table public.acessos_site enable row level security;
+
+-- Leitura direta só para administradores; gravação só pela função abaixo.
+drop policy if exists "acessos_site_select_admin" on public.acessos_site;
+create policy "acessos_site_select_admin" on public.acessos_site for select to authenticated
+  using (public.is_admin());
+
+create or replace function public.registrar_acesso(
+  p_visitante uuid,
+  p_pagina text default null,
+  p_app_instalado boolean default false,
+  p_dispositivo text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_visitante is null then
+    return;
+  end if;
+
+  if exists (
+    select 1 from public.acessos_site a
+    where a.visitante_id = p_visitante
+      and a.criado_em > now() - interval '30 minutes'
+  ) then
+    return;
+  end if;
+
+  insert into public.acessos_site (visitante_id, pagina, logado, app_instalado, dispositivo)
+  values (
+    p_visitante,
+    left(coalesce(p_pagina, '/'), 200),
+    auth.uid() is not null,
+    coalesce(p_app_instalado, false),
+    case when p_dispositivo in ('android', 'ios', 'computador') then p_dispositivo else 'outro' end
+  );
+end;
+$$;
+
+revoke all on function public.registrar_acesso(uuid, text, boolean, text) from public;
+grant execute on function public.registrar_acesso(uuid, text, boolean, text) to anon, authenticated;
+
+-- Resumo para o Painel/Dashboard — só administradores.
+create or replace function public.estatisticas_acessos()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores.';
+  end if;
+
+  return jsonb_build_object(
+    'hoje', (select count(*) from public.acessos_site where dia = v_hoje),
+    'visitantes_hoje', (select count(distinct visitante_id) from public.acessos_site where dia = v_hoje),
+    'ontem', (select count(*) from public.acessos_site where dia = v_hoje - 1),
+    'visitantes_ontem', (select count(distinct visitante_id) from public.acessos_site where dia = v_hoje - 1),
+    'ultimos_7', (select count(*) from public.acessos_site where dia > v_hoje - 7),
+    'visitantes_7', (select count(distinct visitante_id) from public.acessos_site where dia > v_hoje - 7),
+    'ultimos_30', (select count(*) from public.acessos_site where dia > v_hoje - 30),
+    'visitantes_30', (select count(distinct visitante_id) from public.acessos_site where dia > v_hoje - 30),
+    'total', (select count(*) from public.acessos_site),
+    'visitantes_total', (select count(distinct visitante_id) from public.acessos_site),
+    'sem_cadastro_7', (select count(*) from public.acessos_site where dia > v_hoje - 7 and not logado),
+    'app_instalado_7', (select count(*) from public.acessos_site where dia > v_hoje - 7 and app_instalado),
+    'por_dispositivo_7', coalesce((
+      select jsonb_object_agg(dispositivo, n)
+      from (select dispositivo, count(*) as n from public.acessos_site where dia > v_hoje - 7 group by dispositivo) x
+    ), '{}'::jsonb),
+    'por_dia', (
+      select jsonb_agg(jsonb_build_object('dia', d::date, 'acessos', coalesce(c.n, 0), 'visitantes', coalesce(c.v, 0)) order by d)
+      from generate_series(v_hoje - 13, v_hoje, interval '1 day') as d
+      left join (
+        select dia, count(*) as n, count(distinct visitante_id) as v
+        from public.acessos_site
+        where dia > v_hoje - 14
+        group by dia
+      ) c on c.dia = d::date
+    )
+  );
+end;
+$$;
+
+revoke all on function public.estatisticas_acessos() from public;
+grant execute on function public.estatisticas_acessos() to authenticated;
+
+-- FIM DA MIGRATION 44
