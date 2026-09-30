@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, UserRound, ChevronDown, Tent, UserCog } from "lucide-react";
+import { LogOut, UserRound, ChevronDown, Tent, UserCog, LayoutGrid } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthRole } from "./AuthRoleProvider";
 import ThemeToggle from "./ThemeToggle";
@@ -97,6 +97,13 @@ export default function Navbar() {
                           peregrino, em vez de escondida neste menu perto da
                           foto. */}
                       <Link
+                        href="/painel"
+                        onClick={() => setMenuAberto(false)}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                      >
+                        <LayoutGrid size={16} className="text-amber-700 dark:text-amber-500" /> Meu painel
+                      </Link>
+                      <Link
                         href="/gerente-pap"
                         onClick={() => setMenuAberto(false)}
                         className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
@@ -115,9 +122,9 @@ export default function Navbar() {
                 </div>
               ) : (
                 <Link
-                  href={isGerente ? "/gerente-pap" : "/perfil"}
+                  href={isGerente ? "/gerente-pap" : "/painel"}
                   className="flex items-center gap-2 rounded-full pr-1 hover:bg-neutral-100 dark:hover:bg-neutral-900"
-                  title={isGerente ? "Meu PAP" : "Editar perfil"}
+                  title={isGerente ? "Meu PAP" : "Meu painel"}
                 >
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -132,7 +139,7 @@ export default function Navbar() {
                     </span>
                   )}
                   <span className="hidden max-w-[8rem] truncate text-sm font-medium text-neutral-700 sm:inline dark:text-neutral-200">
-                    {nomeCompleto ?? (isGerente ? "Meu PAP" : "Editar perfil")}
+                    {nomeCompleto ?? (isGerente ? "Meu PAP" : "Meu painel")}
                   </span>
                 </Link>
               )}

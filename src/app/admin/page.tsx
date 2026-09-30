@@ -379,6 +379,9 @@ export default async function AdminDashboardPage() {
         id: p.id,
         nome: perfilPeregrino?.nome_completo ?? "—",
         local,
+        // Rodada 56 — cidade de onde a peregrinação sai (mais útil para o
+        // adm do que o nome da rota, a pedido do usuário).
+        origem: p.cidade_origem ?? p.cidade_inicio ?? null,
         status: p.status,
         rotaNome: p.rota_id ? nomeDaRota.get(p.rota_id) ?? null : null,
         meioTransporte: (p.meio_transporte as MeioTransporte) ?? null,

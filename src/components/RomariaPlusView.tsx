@@ -198,6 +198,18 @@ async function enviarFotoParaStorage(caminho: string, arquivo: File) {
   return `${data.publicUrl}?v=${Date.now()}`;
 }
 
+// Rodada 56 — guarda a arte pronta (PNG) no mesmo bucket, ao lado da foto.
+async function enviarArteParaStorage(caminho: string, dataUrl: string) {
+  const blob = await (await fetch(dataUrl)).blob();
+  const supabase = createClient();
+  const { error } = await supabase.storage
+    .from("romaria-plus-fotos")
+    .upload(caminho, blob, { upsert: true, contentType: "image/png" });
+  if (error) throw error;
+  const { data } = supabase.storage.from("romaria-plus-fotos").getPublicUrl(caminho);
+  return `${data.publicUrl}?v=${Date.now()}`;
+}
+
 // Painel de texto arrastável e redimensionável, usado pelos modelos
 // "classico" e "painel" (Rodada 17). Posição (x/y, % do tamanho da arte) e
 // tamanho (escala, %) vêm controlados pelo componente pai — este componente
@@ -654,6 +666,9 @@ interface Props {
   // Rodada 54 — libera os modelos marcados como soAdmin.
   ehAdmin?: boolean;
   onSalvo?: (dados: { indice: number; foto_url: string; modelo: Modelo; ajuste_overlay: AjusteOverlayRomariaPlus | null }) => void;
+  // Rodada 56 — avisa a galeria que a arte desta foto foi salva (primeiro
+  // download/compartilhamento), para ela passar para a próxima foto.
+  onArteSalva?: (dados: { indice: number; arte_url: string; evento: "download" | "compartilhamento" }) => void;
 }
 
 export default function RomariaPlusView({
@@ -669,6 +684,7 @@ export default function RomariaPlusView({
   cidadesCheckin = [],
   ehAdmin = false,
   onSalvo,
+  onArteSalva,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -696,6 +712,7 @@ export default function RomariaPlusView({
   // ativo por vez (ver alternarEdicaoTexto/alternarEdicaoFoto).
   const [editandoFoto, setEditandoFoto] = useState(false);
   const [gerando, setGerando] = useState<"baixar" | "compartilhar" | null>(null);
+  const [salvandoArte, setSalvandoArte] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [avisoSalvar, setAvisoSalvar] = useState<string | null>(null);
   const [contadorDownloads, setContadorDownloads] = useState(contadorDownloadsInicial);
@@ -982,12 +999,14 @@ export default function RomariaPlusView({
     });
   }
 
+  // Rodada 56 — captura com tamanho fixo (1080 px de largura, igual em
+  // qualquer celular) e conferência de corte; ver src/lib/gerar-imagem.ts.
   async function gerarPng(): Promise<string | null> {
     if (!ref.current) return null;
     const imagens = Array.from(ref.current.querySelectorAll("img"));
     await Promise.all(imagens.map(aguardarImagem));
-    const { toPng } = await import("html-to-image");
-    return toPng(ref.current, { pixelRatio: 2 });
+    const { gerarPngDoElemento } = await import("@/lib/gerar-imagem");
+    return gerarPngDoElemento(ref.current, { larguraFinal: ARTE_LARGURA, alturaFinal: ARTE_ALTURA });
   }
 
   // Sai do modo de ajuste antes de gerar a imagem final, para a moldura
@@ -1015,6 +1034,7 @@ export default function RomariaPlusView({
       link.href = dataUrl;
       link.click();
       registrarEvento("download");
+      await guardarArte(dataUrl, "download");
     } catch {
       setErro("Não foi possível gerar a arte agora. Tente novamente.");
     } finally {
@@ -1022,13 +1042,45 @@ export default function RomariaPlusView({
     }
   }
 
+  // Rodada 56 — depois do primeiro download/compartilhamento, a arte pronta
+  // fica guardada (Migration 46): conta como 1 das fotos, não pode mais ser
+  // editada, e a galeria passa para a próxima foto. Se falhar, a pessoa já
+  // tem a imagem no celular; só avisa e deixa tentar de novo.
+  async function guardarArte(dataUrl: string, evento: "download" | "compartilhamento") {
+    setSalvandoArte(true);
+    try {
+      if (ajusteTimeoutRef.current) {
+        clearTimeout(ajusteTimeoutRef.current);
+        ajusteTimeoutRef.current = null;
+      }
+      await persistirFoto(modelo, ajuste);
+      const url = await enviarArteParaStorage(`${userId}/${compraId}/arte-${indice}.png`, dataUrl);
+      const supabase = createClient();
+      const { error } = await supabase.rpc("salvar_arte_romaria_plus", {
+        p_compra_id: compraId,
+        p_indice: indice,
+        p_arte_url: url,
+      });
+      if (error) throw error;
+      onArteSalva?.({ indice, arte_url: url, evento });
+    } catch {
+      setAvisoSalvar(
+        "A imagem foi gerada, mas não deu para guardá-la na sua galeria agora. Verifique a internet e toque em baixar ou compartilhar de novo."
+      );
+    } finally {
+      setSalvandoArte(false);
+    }
+  }
+
   async function compartilhar() {
     setErro(null);
     setGerando("compartilhar");
+    let dataUrlGerada: string | null = null;
     try {
       await sairDoModoAjuste();
       const dataUrl = await gerarPng();
-      if (!dataUrl) return;
+      if (!dataUrl) throw new Error("sem arte");
+      dataUrlGerada = dataUrl;
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], `romaria-plus-${c.codigo}-${indice}.png`, { type: "image/png" });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
@@ -1046,6 +1098,13 @@ export default function RomariaPlusView({
       registrarEvento("compartilhamento");
     } catch {
       // Cancelado pelo usuário ou sem suporte — sem problema.
+      if (!dataUrlGerada) setErro("Não foi possível gerar a arte agora. Tente novamente.");
+    }
+    // Mesmo se a pessoa fechar a janela de compartilhar, a arte já gerada
+    // fica guardada na galeria (pedido do usuário: "ao clicar em baixar ou
+    // compartilhar essa imagem tem que ser salva").
+    try {
+      if (dataUrlGerada) await guardarArte(dataUrlGerada, "compartilhamento");
     } finally {
       setGerando(null);
     }
@@ -2162,20 +2221,29 @@ export default function RomariaPlusView({
 
           {finalizado && (
             <div className="flex flex-col items-center gap-2">
+              <p
+                className="max-w-xs rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                style={{ textAlign: "center" }}
+              >
+                Ao baixar ou compartilhar, esta arte fica <strong>guardada na sua galeria como Foto {indice}</strong>{" "}
+                (para baixar de novo quando quiser) e não pode mais ser editada.
+              </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <button
                   onClick={compartilhar}
                   disabled={gerando !== null}
                   className="btn-primary flex items-center gap-2"
                 >
-                  <Share2 size={16} /> {gerando === "compartilhar" ? "Gerando..." : "Compartilhar"}
+                  <Share2 size={16} />{" "}
+                  {gerando === "compartilhar" ? (salvandoArte ? "Salvando..." : "Gerando...") : "Compartilhar"}
                 </button>
                 <button
                   onClick={baixar}
                   disabled={gerando !== null}
                   className="btn-secondary flex items-center gap-2"
                 >
-                  <Download size={16} /> {gerando === "baixar" ? "Gerando..." : "Baixar imagem"}
+                  <Download size={16} />{" "}
+                  {gerando === "baixar" ? (salvandoArte ? "Salvando..." : "Gerando...") : "Baixar imagem"}
                 </button>
                 <button
                   onClick={editarNovamente}

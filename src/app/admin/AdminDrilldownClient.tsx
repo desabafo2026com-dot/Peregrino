@@ -14,6 +14,7 @@ import {
   CalendarClock,
   Award,
   CalendarCheck,
+  MapPin,
   MapPinned,
   Link2,
   Sun,
@@ -82,6 +83,7 @@ export interface PeregrinacaoLinha {
   id: string;
   nome: string;
   local: string;
+  origem?: string | null;
   status: "planejada" | "em_andamento" | "concluida" | "cancelada";
   rotaNome: string | null;
   meioTransporte: string | null;
@@ -379,8 +381,10 @@ export default function AdminDrilldownClient({
       const telefone = (d.telefone as string) ?? (d.organizadorTelefone as string) ?? "";
       const email = (d.email as string) ?? "";
       const papNomes = ((d.papNomes as string[]) ?? []).join(" ");
+      const origem = (d.origem as string) ?? "";
       return (
         nome.toLowerCase().includes(termo) ||
+        origem.toLowerCase().includes(termo) ||
         local.toLowerCase().includes(termo) ||
         telefone.toLowerCase().includes(termo) ||
         email.toLowerCase().includes(termo) ||
@@ -873,9 +877,12 @@ export default function AdminDrilldownClient({
                         {p.temCertificado && <Award size={16} className="text-amber-700" />}
                         {p.nome}
                       </p>
+                      <p className="flex items-center gap-1 text-sm font-medium text-amber-800 dark:text-amber-500">
+                        <MapPin size={14} className="shrink-0" />
+                        Origem: {p.origem ?? "não informada"} → Aparecida
+                      </p>
                       <p className="text-xs text-neutral-500">
-                        Local: {p.local}
-                        {p.rotaNome ? ` — ${p.rotaNome}` : ""}
+                        Mora em: {p.local}
                         {p.meioTransporte ? ` — ${meioLabel(p.meioTransporte, p.meioTransporteOutroDesc)}` : ""}
                       </p>
                       {p.status === "planejada" ? (

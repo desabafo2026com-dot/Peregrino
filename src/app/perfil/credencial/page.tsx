@@ -23,7 +23,7 @@ export default async function CredencialPage() {
   if (!perfil) {
     return (
       <div className="mx-auto max-w-md text-center">
-        <VoltarButton href="/perfil" />
+        <VoltarButton href="/painel" />
         <p className="mb-4 text-neutral-600 dark:text-neutral-300">
           Complete seu perfil de peregrino antes de gerar a credencial.
         </p>
@@ -38,7 +38,7 @@ export default async function CredencialPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <VoltarButton href="/perfil" />
+      <VoltarButton href="/painel" />
       <h1 className="mb-1 text-2xl font-bold">Minha credencial de peregrino</h1>
       <p className="mb-6 text-sm text-neutral-500">
         Um crachá para imprimir e pendurar na mochila, com os dados que você escolher e um código só

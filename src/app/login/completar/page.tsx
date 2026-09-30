@@ -51,7 +51,7 @@ function CompletarForm() {
       ]);
       if (!ativo) return;
       if (perfil || gerente || user.user_metadata?.tipo_conta) {
-        router.replace(gerente || user.user_metadata?.tipo_conta === "gerente_pap" ? "/gerente-pap" : "/perfil");
+        router.replace(gerente || user.user_metadata?.tipo_conta === "gerente_pap" ? "/gerente-pap" : "/painel");
         return;
       }
       const meta = user.user_metadata ?? {};

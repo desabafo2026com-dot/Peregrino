@@ -6,7 +6,9 @@ import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
 import RomariaPlusCompra from "@/components/RomariaPlusCompra";
 import MensagemConquistaForm from "@/components/MensagemConquistaForm";
 import VoltarButton from "@/components/VoltarButton";
-import type { Certificado, CompraRomariaPlus, MensagemConquista } from "@/types/database";
+import HistoricoPeregrinacoes, { type PeregrinacaoHistorico } from "@/components/HistoricoPeregrinacoes";
+import { nomeRota } from "@/lib/constants";
+import type { Certificado, CompraRomariaPlus, MensagemConquista, MeioTransporte, Peregrinacao } from "@/types/database";
 
 export default async function CertificadoPage() {
   const supabase = await createClient();
@@ -15,20 +17,57 @@ export default async function CertificadoPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?redirect=/certificado");
 
-  const { data: certificados } = await supabase
-    .from("certificados")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("emitido_em", { ascending: false });
+  const [{ data: certificados }, { data: concluidasData }, { data: ativa }, { data: rotasData }, { data: comprasPagasData }] =
+    await Promise.all([
+      supabase.from("certificados").select("*").eq("user_id", user.id).order("emitido_em", { ascending: false }),
+      // Rodada 56 — "Peregrinações concluídas" (antes em Minha peregrinação).
+      supabase
+        .from("peregrinacoes")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "concluida")
+        .order("data_fim", { ascending: false }),
+      supabase
+        .from("peregrinacoes")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("status", ["planejada", "em_andamento"])
+        .limit(1)
+        .maybeSingle(),
+      supabase.from("rotas").select("id, slug, nome"),
+      supabase.from("compras_romaria_plus").select("certificado_id").eq("user_id", user.id).eq("status", "pago"),
+    ]);
+
+  const certificadoPorPeregrinacao = new Map<string, string>();
+  ((certificados ?? []) as Certificado[]).forEach((c) => certificadoPorPeregrinacao.set(c.peregrinacao_id, c.id));
+  const certificadosComPlus = new Set((comprasPagasData ?? []).map((c) => c.certificado_id as string));
+  const rotaPorId = new Map((rotasData ?? []).map((r) => [r.id as string, r as { slug: string; nome: string }]));
+  const historico: PeregrinacaoHistorico[] = ((concluidasData ?? []) as Peregrinacao[]).map((p) => {
+    const certificadoId = certificadoPorPeregrinacao.get(p.id) ?? null;
+    return {
+      id: p.id,
+      meioTransporte: (p.meio_transporte as MeioTransporte) ?? null,
+      meioTransporteOutroDesc: p.meio_transporte_outro_desc ?? null,
+      rotaNome: p.rota_id ? nomeRota(rotaPorId.get(p.rota_id)) || null : null,
+      origem: p.cidade_origem ?? p.cidade_inicio ?? null,
+      dataInicio: p.data_inicio,
+      dataFim: p.data_fim,
+      temCertificado: !!certificadoId,
+      certificadoId,
+      plusPago: certificadoId ? certificadosComPlus.has(certificadoId) : false,
+    };
+  });
 
   if (!certificados?.length) {
     return (
-      <div className="mx-auto max-w-md text-center text-neutral-500">
-        <VoltarButton href="/peregrinacao" />
-        <p>
-          Você ainda não concluiu nenhuma peregrinação. Ao finalizar, o
-          certificado aparece aqui automaticamente.
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <VoltarButton href="/painel" />
+        <h1 className="text-2xl font-bold">Meus certificados</h1>
+        <p className="card text-center text-neutral-500" style={{ textAlign: "center" }}>
+          Você ainda não tem certificado. Ao concluir uma peregrinação em Aparecida, ele aparece aqui
+          automaticamente.
         </p>
+        <HistoricoPeregrinacoes lista={historico} temPeregrinacaoAtiva={!!ativa} />
       </div>
     );
   }
@@ -73,13 +112,13 @@ export default async function CertificadoPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
-      <VoltarButton href="/peregrinacao" />
+      <VoltarButton href="/painel" />
       <h1 className="text-2xl font-bold">Meus certificados</h1>
       {certificadosLista.map((c) => {
         const compra = compraPorCertificado.get(c.id) ?? null;
         const pago = compra?.status === "pago";
         return (
-          <div key={c.id} className="flex flex-col gap-4">
+          <div key={c.id} id={`certificado-${c.id}`} className="flex scroll-mt-6 flex-col gap-4">
             {/* O link "Certificado Plus →" que ficava aqui, ao lado deste
                 título, foi movido (Rodada 16) para o lado direito de cada
                 peregrinação concluída, na lista de "Minha peregrinação" —
@@ -118,6 +157,8 @@ export default async function CertificadoPage() {
           </div>
         );
       })}
+
+      <HistoricoPeregrinacoes lista={historico} temPeregrinacaoAtiva={!!ativa} />
     </div>
   );
 }

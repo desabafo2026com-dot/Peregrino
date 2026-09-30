@@ -1,0 +1,10 @@
+Pasta das imagens de exemplo da Romaria Plus (Rodada 56).
+
+Elas aparecem no "Meu painel", no módulo "Minhas fotos (Plus)", para quem
+ainda não comprou a Romaria Plus.
+
+Como colocar:
+- Nomeie as imagens como modelo-1, modelo-2, modelo-3 ... até modelo-10.
+- Pode ser .jpg, .jpeg, .png ou .webp (ex.: modelo-1.jpg, modelo-2.png).
+- Tamanho sugerido: em pé (retrato), por exemplo 1080 x 1920, até ~500 KB cada.
+- Os números que não existirem são simplesmente ignorados.

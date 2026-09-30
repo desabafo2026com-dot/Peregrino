@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPin, Route, Footprints, ShieldCheck, MapPinPlus } from "lucide-react";
+import { Home, MapPin, Route, Footprints, ShieldCheck, MapPinPlus, LayoutGrid } from "lucide-react";
 import { useAuthRole } from "./AuthRoleProvider";
 
 // Ordem alterada na Rodada 18 (a pedido do usuário): "Mapa" à esquerda e
@@ -51,9 +51,16 @@ const LINKS_GERENTE_DUPLO = [
 // lembrando a faixa de pista da rodovia.
 export default function BottomNav() {
   const pathname = usePathname();
-  const { isAdmin, isGerente, temPerfilPeregrino } = useAuthRole();
+  const { isAdmin, isGerente, temPerfilPeregrino, loggedIn } = useAuthRole();
 
-  const base = isGerente ? (temPerfilPeregrino ? LINKS_GERENTE_DUPLO : LINKS_GERENTE) : LINKS_PEREGRINO;
+  const baseOriginal = isGerente ? (temPerfilPeregrino ? LINKS_GERENTE_DUPLO : LINKS_GERENTE) : LINKS_PEREGRINO;
+  // Rodada 56 — para quem já entrou e tem perfil de peregrino, o primeiro
+  // item vira "Meu painel" (a página inicial com Perfil, Credencial,
+  // Certificados, Fotos e Meu PAP). A página pública "/" continua no logo.
+  const base =
+    loggedIn && temPerfilPeregrino
+      ? baseOriginal.map((l) => (l.href === "/" ? { href: "/painel", label: "Meu painel", icon: LayoutGrid } : l))
+      : baseOriginal;
   const links = isAdmin ? [...base, { href: "/admin", label: "Adm", icon: ShieldCheck }] : base;
 
   return (

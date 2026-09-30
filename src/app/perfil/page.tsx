@@ -52,7 +52,7 @@ export default async function PerfilPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <VoltarButton href="/" />
+      <VoltarButton href={perfilCompleto ? "/painel" : "/"} />
       <h1 className="mb-1 text-2xl font-bold">
         {perfilCompleto ? "Meu perfil" : "Complete seu cadastro"}
       </h1>

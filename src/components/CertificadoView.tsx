@@ -77,8 +77,8 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
     setErro(null);
     setBaixando(true);
     try {
-      const { toPng } = await import("html-to-image");
-      const dataUrl = await toPng(ref.current, { pixelRatio: 2 });
+      const { gerarPngDoElemento } = await import("@/lib/gerar-imagem");
+      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.max(1600, Math.round(ref.current.getBoundingClientRect().width * 2)) });
       const link = document.createElement("a");
       link.download = `certificado-peregrino-${c.codigo}.png`;
       link.href = dataUrl;
@@ -95,11 +95,8 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
     setErro(null);
     setGerandoPdf(true);
     try {
-      const [{ toPng }, { jsPDF }] = await Promise.all([
-        import("html-to-image"),
-        import("jspdf"),
-      ]);
-      const dataUrl = await toPng(ref.current, { pixelRatio: 2 });
+      const [{ gerarPngDoElemento }, { jsPDF }] = await Promise.all([import("@/lib/gerar-imagem"), import("jspdf")]);
+      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.max(1600, Math.round(ref.current.getBoundingClientRect().width * 2)) });
       // Página do PDF com a mesma proporção do certificado, na largura de
       // uma A4 paisagem — a imagem preenche a página inteira, sem margens.
       const larguraMm = 297;

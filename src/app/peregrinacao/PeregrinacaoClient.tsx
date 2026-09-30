@@ -15,10 +15,7 @@ import {
   Award,
   Footprints,
   Bike,
-  RotateCcw,
-  Trash2,
   LocateFixed,
-  Sparkles,
   Tent,
   Megaphone,
   TriangleAlert,
@@ -79,16 +76,9 @@ function distanciaKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-interface PeregrinacaoConcluida extends Peregrinacao {
-  temCertificado: boolean;
-  certificadoId: string | null;
-  plusPago: boolean;
-}
-
 interface Props {
   perfil: Profile;
   peregrinacaoInicial: Peregrinacao | null;
-  peregrinacoesConcluidas: PeregrinacaoConcluida[];
   pontosApoio: PontoApoio[];
   // Rodada 46 — PAP do pré-cadastro (ainda sem gerente) ativos hoje, já
   // posicionados no servidor, para o mapa mostrar todos os PAP ativos.
@@ -201,7 +191,6 @@ function obterPosicaoAtual(): Promise<GeolocationPosition | null> {
 export default function PeregrinacaoClient({
   perfil,
   peregrinacaoInicial,
-  peregrinacoesConcluidas,
   pontosApoio,
   papsPreCadastro,
   pontosRisco,
@@ -225,7 +214,6 @@ export default function PeregrinacaoClient({
   const [mostrarAvisosMapa, setMostrarAvisosMapa] = useState(true);
 
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
-  const [loadingConcluidaId, setLoadingConcluidaId] = useState<string | null>(null);
   const [checkinsCount, setCheckinsCount] = useState(checkinsCountInicial);
   const [checkinsFeitosIds, setCheckinsFeitosIds] = useState(checkinsFeitosIdsInicial);
   const [diasPrevistos, setDiasPrevistos] = useState("");
@@ -820,49 +808,6 @@ export default function PeregrinacaoClient({
     setParabens(true);
   }
 
-  async function reabrirConcluida(id: string) {
-    if (peregrinacao) {
-      setErro(
-        "Finalize ou exclua a peregrinação atual antes de reabrir uma peregrinação concluída anterior."
-      );
-      return;
-    }
-    if (
-      !confirm(
-        "Reabrir esta peregrinação? Ela voltará para 'em andamento' e o certificado emitido (se houver) deixa de ser válido."
-      )
-    )
-      return;
-    setLoadingConcluidaId(id);
-    const { error } = await supabase
-      .from("peregrinacoes")
-      .update({ status: "em_andamento", data_fim: null })
-      .eq("id", id);
-    setLoadingConcluidaId(null);
-    if (error) {
-      setErro(error.message);
-      return;
-    }
-    router.refresh();
-  }
-
-  async function excluirConcluida(id: string) {
-    if (
-      !confirm(
-        "Excluir esta peregrinação? Essa ação não pode ser desfeita e apaga também seus check-ins e certificado."
-      )
-    )
-      return;
-    setLoadingConcluidaId(id);
-    const { error } = await supabase.from("peregrinacoes").delete().eq("id", id);
-    setLoadingConcluidaId(null);
-    if (error) {
-      setErro(error.message);
-      return;
-    }
-    router.refresh();
-  }
-
   let principal: ReactNode;
 
   if (!peregrinacao) {
@@ -1316,78 +1261,6 @@ export default function PeregrinacaoClient({
       {parabens && <ParabensConclusao onReceber={() => router.push("/certificado")} />}
       {principal}
 
-      {peregrinacoesConcluidas.length > 0 && (
-        <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
-            <Award size={20} /> Peregrinações concluídas
-          </h2>
-          <div className="flex flex-col gap-3">
-            {peregrinacoesConcluidas.map((p) => {
-              const rota = rotas.find((r) => r.id === p.rota_id);
-              return (
-                <div key={p.id} className="card flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-500">
-                      {p.meio_transporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
-                      {labelMeioTransporte(p.meio_transporte, p.meio_transporte_outro_desc)}
-                      {rota ? ` — ${nomeRota(rota)}` : ""}
-                    </p>
-                    {/* Movido para cá na Rodada 16 (antes ficava dentro da
-                        página de certificado, ao lado do certificado grátis)
-                        — só faz sentido quando esta peregrinação já tem
-                        certificado emitido. */}
-                    {p.certificadoId && (
-                      <a
-                        href={
-                          p.plusPago
-                            ? `/certificado/plus/${p.certificadoId}`
-                            : `/certificado#romaria-plus-${p.certificadoId}`
-                        }
-                        className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-700 hover:underline dark:text-amber-500"
-                      >
-                        <Sparkles size={12} />
-                        {p.plusPago ? "Minhas fotos da Romaria Plus →" : "Adquirir Certificado Plus + arte de 5 fotos →"}
-                      </a>
-                    )}
-                  </div>
-                  <p className="text-sm text-neutral-600 dark:text-neutral-300">
-                    {p.data_inicio ? new Date(p.data_inicio).toLocaleDateString("pt-BR") : "-"}
-                    {" a "}
-                    {p.data_fim ? new Date(p.data_fim).toLocaleDateString("pt-BR") : "-"}
-                    {!p.temCertificado && " — sem certificado"}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {p.temCertificado && (
-                      <a href="/certificado" className="btn-secondary text-xs">
-                        Ver certificado
-                      </a>
-                    )}
-                    <button
-                      disabled={loadingConcluidaId === p.id || !!peregrinacao}
-                      onClick={() => reabrirConcluida(p.id)}
-                      title={
-                        peregrinacao
-                          ? "Finalize ou exclua a peregrinação atual antes de reabrir esta"
-                          : undefined
-                      }
-                      className="btn-secondary flex items-center gap-2 text-xs"
-                    >
-                      <RotateCcw size={14} /> Reabrir
-                    </button>
-                    <button
-                      disabled={loadingConcluidaId === p.id}
-                      onClick={() => excluirConcluida(p.id)}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                    >
-                      <Trash2 size={14} /> Excluir
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

@@ -425,6 +425,10 @@ export interface RomariaPlusFoto {
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
   contador_downloads: number;
   contador_compartilhamentos: number;
+  // Rodada 56 (Migration 46) — PNG final guardado no primeiro
+  // download/compartilhamento; com ele a foto conta como usada e fica travada.
+  arte_url?: string | null;
+  arte_salva_em?: string | null;
   criado_em: string;
   atualizado_em: string;
 }

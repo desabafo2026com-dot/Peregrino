@@ -30,8 +30,8 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
     setErro(null);
     setGerando("imagem");
     try {
-      const { toPng } = await import("html-to-image");
-      const dataUrl = await toPng(ref.current, { pixelRatio: 2 });
+      const { gerarPngDoElemento } = await import("@/lib/gerar-imagem");
+      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.round(ref.current.getBoundingClientRect().width * 2) });
       const link = document.createElement("a");
       link.download = `pap-qrcode-${ponto.nome.toLowerCase().replace(/\s+/g, "-")}.png`;
       link.href = dataUrl;
@@ -48,11 +48,8 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
     setErro(null);
     setGerando("pdf");
     try {
-      const [{ toPng }, { jsPDF }] = await Promise.all([
-        import("html-to-image"),
-        import("jspdf"),
-      ]);
-      const dataUrl = await toPng(ref.current, { pixelRatio: 2 });
+      const [{ gerarPngDoElemento }, { jsPDF }] = await Promise.all([import("@/lib/gerar-imagem"), import("jspdf")]);
+      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.round(ref.current.getBoundingClientRect().width * 2) });
       const larguraMm = 148; // A5
       const alturaMm = (larguraMm * CARTAZ_ALTURA) / CARTAZ_LARGURA;
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [larguraMm, alturaMm] });

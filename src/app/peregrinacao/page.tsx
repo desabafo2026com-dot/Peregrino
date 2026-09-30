@@ -66,8 +66,6 @@ export default async function PeregrinacaoPage() {
   const hojeISOStr = hojeISO();
   const [
     { data: peregrinacao },
-    { data: concluidasData },
-    { data: certificadosData },
     { data: pontosApoio },
     { data: rotas },
     { data: todosPontosCheckinData },
@@ -81,13 +79,6 @@ export default async function PeregrinacaoPage() {
       .in("status", ["planejada", "em_andamento"])
       .order("criado_em", { ascending: false })
       .maybeSingle(),
-    supabase
-      .from("peregrinacoes")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "concluida")
-      .order("data_fim", { ascending: false }),
-    supabase.from("certificados").select("id, peregrinacao_id").eq("user_id", user.id),
     // PAPs ativos hoje (para o módulo de mapa em "Minha peregrinação") — só
     // entram os que estão marcados como ativos, aprovados e com a data de
     // hoje no calendário de funcionamento.
@@ -121,36 +112,6 @@ export default async function PeregrinacaoPage() {
     rotas: (rotas ?? []) as Rota[],
     pontosCheckin: todosPontosCheckin,
   });
-
-  // Mapa peregrinacao_id -> certificado_id — usado tanto para "Ver
-  // certificado" quanto para o link do Certificado Plus (Rodada 16, movido
-  // para esta lista) de cada peregrinação concluída.
-  const certificadoIdPorPeregrinacao = new Map<string, string>();
-  (certificadosData ?? []).forEach((c) => {
-    certificadoIdPorPeregrinacao.set(c.peregrinacao_id as string, c.id as string);
-  });
-
-  // Quais desses certificados já têm a Romaria Plus paga (Rodada 18) — o
-  // link muda de "adquirir" para "ver minhas fotos" quando já paga, em vez
-  // de mandar de novo para a tela de compra.
-  const idsCertificados = Array.from(certificadoIdPorPeregrinacao.values());
-  const { data: comprasPagas } = idsCertificados.length
-    ? await supabase
-        .from("compras_romaria_plus")
-        .select("certificado_id")
-        .eq("status", "pago")
-        .in("certificado_id", idsCertificados)
-    : { data: [] as { certificado_id: string }[] | null };
-  const certificadosComPlusPago = new Set((comprasPagas ?? []).map((c) => c.certificado_id as string));
-
-  const peregrinacoesConcluidas = (concluidasData ?? []).map((p) => ({
-    ...(p as Peregrinacao),
-    temCertificado: certificadoIdPorPeregrinacao.has(p.id as string),
-    certificadoId: certificadoIdPorPeregrinacao.get(p.id as string) ?? null,
-    plusPago: certificadoIdPorPeregrinacao.has(p.id as string)
-      ? certificadosComPlusPago.has(certificadoIdPorPeregrinacao.get(p.id as string) as string)
-      : false,
-  }));
 
   let checkinsCount = 0;
   let pontosCheckin: PontoCheckin[] = [];
@@ -248,7 +209,6 @@ export default async function PeregrinacaoPage() {
       <PeregrinacaoClient
         perfil={perfil as Profile}
         peregrinacaoInicial={peregrinacao as Peregrinacao | null}
-        peregrinacoesConcluidas={peregrinacoesConcluidas}
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
         papsPreCadastro={papsPreCadastro}
         pontosRisco={pontosRisco}

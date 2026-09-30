@@ -43,7 +43,7 @@ export default function RedefinirSenhaPage() {
 
     setSucesso("Senha redefinida com sucesso! Redirecionando...");
     setTimeout(() => {
-      router.push("/perfil");
+      router.push("/painel");
       router.refresh();
     }, 1500);
   }

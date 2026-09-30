@@ -64,8 +64,10 @@ export default function CredencialEditor({ cracha, perfil }: { cracha: CrachaPer
     if (!crachaRef.current) return;
     setGerando(true);
     try {
-      const { toPng } = await import("html-to-image");
-      const url = await toPng(crachaRef.current, { pixelRatio: 3 });
+      const { gerarPngDoElemento } = await import("@/lib/gerar-imagem");
+      const url = await gerarPngDoElemento(crachaRef.current, {
+        larguraFinal: Math.round(crachaRef.current.getBoundingClientRect().width * 3),
+      });
       const link = document.createElement("a");
       link.download = `credencial-${cracha.codigo}.png`;
       link.href = url;

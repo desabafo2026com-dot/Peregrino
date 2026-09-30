@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
   }
 
   const ehGerente = !!gerente || tipoMetadata === "gerente_pap";
-  let destino = redirectParam || "/perfil";
+  let destino = redirectParam || "/painel";
   if (ehGerente) {
     destino = tipoPreset === "peregrino" && !perfil ? "/perfil" : "/gerente-pap";
   } else if (tipoPreset === "gerente_pap") {

@@ -7,7 +7,6 @@ import { SEXO_OPTIONS, RELIGIOES, AVATARES_PEREGRINO, normalizarReligiaoAntiga }
 import { CIDADES_POR_UF, UF_OPTIONS } from "@/lib/cidades";
 import { validarNomeCompleto } from "@/lib/validation";
 import { Upload, ShieldCheck } from "lucide-react";
-import { useAuthRole } from "./AuthRoleProvider";
 import type { Profile } from "@/types/database";
 
 interface Props {
@@ -26,7 +25,6 @@ export default function ProfileForm({
   perfilExistente,
 }: Props) {
   const router = useRouter();
-  const { recarregar } = useAuthRole();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -157,8 +155,13 @@ export default function ProfileForm({
     // o novo papel de uma vez. Numa edição normal (perfil já existia antes)
     // isso não muda nada relevante para o menu, então mantém o comportamento
     // já existente (sem reload, com a mensagem de sucesso visível).
-    if (!perfilExistente) {
-      recarregar();
+    // Rodada 56 — ao completar o perfil pela primeira vez (sem linha antes,
+    // ou com a linha mínima do cadastro, ainda sem cidade), vai para o
+    // painel inicial (/painel), com recarga completa pelo mesmo motivo acima.
+    if (!perfilExistente?.cidade) {
+      // Recarga completa de propósito (atualiza o menu, ver acima).
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/painel";
       return;
     }
 

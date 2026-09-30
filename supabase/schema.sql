@@ -4181,3 +4181,132 @@ revoke all on function public.cracha_publico(text) from public;
 grant execute on function public.cracha_publico(text) to anon, authenticated;
 
 -- FIM DA MIGRATION 45
+
+-- =====================================================================
+-- MIGRATION 46 — Rodada 56: arte do Romaria Plus fica salva ao baixar
+-- ---------------------------------------------------------------------
+-- Ao baixar ou compartilhar uma arte do Romaria Plus, a imagem pronta
+-- (PNG) é guardada no bucket romaria-plus-fotos e fica ligada à foto
+-- (arte_url). A partir daí aquela foto conta como usada (1 das 5), não
+-- pode mais ser editada, e a pessoa pode baixar/compartilhar de novo
+-- quando quiser pela galeria.
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+alter table public.romaria_plus_fotos
+  add column if not exists arte_url text,
+  add column if not exists arte_salva_em timestamptz;
+
+comment on column public.romaria_plus_fotos.arte_url is 'Rodada 56 — PNG final da arte, salvo no primeiro download/compartilhamento. Com arte salva, a foto fica travada (não pode mais ser editada nem excluída).';
+
+-- Guarda a arte pronta de uma foto (só da própria compra, já paga).
+create or replace function public.salvar_arte_romaria_plus(
+  p_compra_id uuid,
+  p_indice int,
+  p_arte_url text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_arte_url is null or p_arte_url = '' then
+    raise exception 'arte vazia';
+  end if;
+
+  if not exists (
+    select 1 from public.compras_romaria_plus
+    where id = p_compra_id and user_id = auth.uid() and status = 'pago' and tipo = 'inicial'
+  ) then
+    raise exception 'compra não encontrada, não paga, ou não pertence a este usuário';
+  end if;
+
+  update public.romaria_plus_fotos
+  set arte_url = p_arte_url,
+      arte_salva_em = coalesce(arte_salva_em, now()),
+      atualizado_em = now()
+  where compra_id = p_compra_id and indice = p_indice and user_id = auth.uid();
+
+  if not found then
+    raise exception 'foto % não encontrada nesta compra', p_indice;
+  end if;
+end;
+$$;
+
+grant execute on function public.salvar_arte_romaria_plus(uuid, int, text) to authenticated;
+
+-- Mesma função da Migration 33, agora recusando mexer numa foto cuja arte
+-- já foi salva (baixada/compartilhada).
+create or replace function public.salvar_foto_romaria_plus_slot(
+  p_compra_id uuid,
+  p_indice int,
+  p_foto_url text,
+  p_modelo text,
+  p_ajuste_overlay jsonb default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_pacotes_extra int;
+  v_max_permitido int;
+begin
+  select user_id into v_user_id
+  from public.compras_romaria_plus
+  where id = p_compra_id and user_id = auth.uid() and status = 'pago' and tipo = 'inicial';
+
+  if v_user_id is null then
+    raise exception 'compra não encontrada, não paga, ou não pertence a este usuário';
+  end if;
+
+  select count(*) into v_pacotes_extra
+  from public.compras_romaria_plus
+  where compra_pai_id = p_compra_id and status = 'pago' and tipo = 'extra';
+
+  v_max_permitido := 5 + 5 * v_pacotes_extra;
+
+  if p_indice < 1 or p_indice > v_max_permitido then
+    raise exception 'índice % fora do limite permitido para esta compra (máximo %)', p_indice, v_max_permitido;
+  end if;
+
+  if exists (
+    select 1 from public.romaria_plus_fotos
+    where compra_id = p_compra_id and indice = p_indice and arte_url is not null
+  ) then
+    raise exception 'a arte da foto % já foi salva e não pode mais ser alterada', p_indice;
+  end if;
+
+  insert into public.romaria_plus_fotos (compra_id, user_id, indice, foto_url, modelo, ajuste_overlay)
+  values (p_compra_id, v_user_id, p_indice, p_foto_url, p_modelo, p_ajuste_overlay)
+  on conflict (compra_id, indice) do update
+    set foto_url = excluded.foto_url,
+        modelo = excluded.modelo,
+        ajuste_overlay = excluded.ajuste_overlay,
+        atualizado_em = now();
+end;
+$$;
+
+grant execute on function public.salvar_foto_romaria_plus_slot(uuid, int, text, text, jsonb) to authenticated;
+
+-- Foto com arte salva também não pode ser apagada (senão o espaço dela
+-- voltaria a ficar livre).
+create or replace function public.excluir_foto_romaria_plus_slot(p_compra_id uuid, p_indice int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.romaria_plus_fotos
+  where compra_id = p_compra_id and indice = p_indice and user_id = auth.uid()
+    and arte_url is null;
+end;
+$$;
+
+grant execute on function public.excluir_foto_romaria_plus_slot(uuid, int) to authenticated;
+
+-- FIM DA MIGRATION 46

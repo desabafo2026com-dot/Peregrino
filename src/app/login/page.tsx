@@ -92,7 +92,7 @@ function LoginForm() {
     // Contas de Gerente de PAP têm sua própria área e nunca devem cair no
     // fluxo de peregrino — verificamos o papel da conta antes de decidir
     // para onde ir, ignorando o parâmetro de redirect quando for o caso.
-    let destino = searchParams.get("redirect") || "/perfil";
+    let destino = searchParams.get("redirect") || "/painel";
     if (data.user) {
       const [{ data: gerente }, { data: perfilPeregrino }] = await Promise.all([
         supabase.from("gerentes_pap").select("id").eq("id", data.user.id).maybeSingle(),
