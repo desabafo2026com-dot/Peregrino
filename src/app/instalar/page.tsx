@@ -47,7 +47,7 @@ export default function InstalarPage() {
       try {
         await navigator.share({
           title: "O Peregrino",
-          text: "App de apoio para quem caminha pela Rodovia Dutra até Aparecida-SP",
+          text: "Planeje sua peregrinação, registre e receba um certificado para compartilhar! Crie sua identificação de Peregrino. Receba e mande mensagens de ocorrências no trajeto.",
           url,
         });
       } catch {

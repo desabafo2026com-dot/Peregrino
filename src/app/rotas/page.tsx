@@ -172,10 +172,11 @@ export default async function RotasPage({
           </Link>
         </div>
         <div className="card overflow-x-auto">
-          <table className="w-full min-w-[500px] text-sm">
+          <table className="w-full min-w-[580px] text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-neutral-500 dark:border-neutral-800">
                 <th className="pb-2 pr-4">Km / sentido</th>
+                <th className="pb-2 pr-4">Foto</th>
                 <th className="pb-2 pr-4">Local</th>
                 <th className="pb-2 pr-4">Risco</th>
                 <th className="pb-2">Observações</th>
@@ -187,17 +188,19 @@ export default async function RotasPage({
                   <td className="py-2 pr-4 whitespace-nowrap">
                     {kmSentidoLabel(r.km_referencia, r.sentido)}
                   </td>
-                  <td className="py-2 pr-4 font-medium">
-                    {r.titulo}
-                    {/* Rodada 57 — foto do local (toque para ampliar), logo abaixo do nome. */}
-                    {r.foto_url && (
+                  {/* Rodada 58 — foto do local numa coluna própria, logo depois do km (toque para ampliar). */}
+                  <td className="py-2 pr-4">
+                    {r.foto_url ? (
                       <FotoAmpliavel
                         src={r.foto_url}
                         alt={`Foto do local: ${r.titulo}`}
-                        className="mt-1.5 block h-16 w-24 overflow-hidden rounded-lg"
+                        className="block h-14 w-20 overflow-hidden rounded-lg"
                       />
+                    ) : (
+                      <span className="text-neutral-300 dark:text-neutral-700">—</span>
                     )}
                   </td>
+                  <td className="py-2 pr-4 font-medium">{r.titulo}</td>
                   <td className={`py-2 pr-4 font-medium ${riscoColor(r.nivel_risco)}`}>
                     {NIVEL_RISCO_LABELS[r.nivel_risco]}
                   </td>
@@ -208,7 +211,7 @@ export default async function RotasPage({
               ))}
               {riscosOrdenados.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-neutral-400">
+                  <td colSpan={5} className="py-4 text-center text-neutral-400">
                     Nenhum ponto de risco cadastrado ainda nesta rota.
                   </td>
                 </tr>

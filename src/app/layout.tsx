@@ -29,8 +29,9 @@ const urlDoSite =
     : "http://localhost:3000");
 
 const tituloCompartilhamento = "O Peregrino — apoio a quem caminha até Aparecida";
+// Rodada 58 — texto novo pedido pelo usuário (o título e a imagem continuam iguais).
 const descricaoCompartilhamento =
-  "Gratuito. Pontos de apoio no mapa, rotas, alertas de risco e botão de emergência para quem caminha pela Via Dutra até o Santuário de Aparecida. Abre direto no navegador — não precisa baixar nada da loja.";
+  "Planeje sua peregrinação, registre e receba um certificado para compartilhar! Crie sua identificação de Peregrino. Receba e mande mensagens de ocorrências no trajeto.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(urlDoSite),

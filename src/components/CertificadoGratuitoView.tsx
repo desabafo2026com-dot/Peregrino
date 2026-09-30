@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { Printer, Download, FileText, Award } from "lucide-react";
-import { MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
+import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado } from "@/lib/certificado-texto";
 import type { Certificado } from "@/types/database";
 
 // Tamanho de página A4 paisagem, em mm — mesma orientação/proporção usada
@@ -47,22 +47,8 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const meioLabel =
-    c.meio_transporte === "outros"
-      ? c.meio_transporte_outro_desc || "outro meio de transporte"
-      : c.meio_transporte
-        ? MEIO_TRANSPORTE_LABELS[c.meio_transporte]
-        : "a pé";
-
-  // Até a Rodada 22, isto vinha de uma extração por regex de rota_nome
-  // ("Nome da rota (Origem → Aparecida)") que já não batia com nenhum
-  // certificado desde a Rodada 10, quando nomeRota() passou a mostrar só o
-  // nome da rota, sem essa parte entre parênteses — na prática, "origem"
-  // sempre dava null e a frase caía sempre no "até..." sem "de [origem]".
-  // Rodada 23: c.origem é a cidade de origem declarada pelo peregrino,
-  // gravada direto no certificado no momento da emissão.
-  const origem = c.origem;
-  const trajetoTexto = origem ? `de ${origem} até` : "até";
+  // Rodada 58 — texto no formato pedido pelo usuário.
+  const meio = meioNaFrase(c.meio_transporte, c.meio_transporte_outro_desc);
 
   function imprimir() {
     ref.current?.classList.add("print-alvo");
@@ -117,15 +103,12 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
 
   const dados = [
     { label: "Início", valor: formatarDataCurta(c.data_inicio) },
-    { label: "Término", valor: formatarDataCurta(c.data_fim) },
-    { label: "Tempo total", valor: c.duracao_texto || "—" },
-    { label: "Check-ins", valor: String(c.total_checkins ?? 0) },
-    // Só aparece em certificados emitidos depois da Rodada 22 — os
-    // anteriores não têm distância calculada e continuam com 4 colunas.
-    ...(c.distancia_km != null
-      ? [{ label: "Distância", valor: `≈ ${c.distancia_km} km` }]
-      : []),
+    { label: "Origem", valor: c.origem || "—" },
+    { label: "Chegada", valor: formatarDataCurta(c.data_fim) },
+    { label: "Tempo", valor: c.duracao_texto || "—" },
+    { label: "Check-ins", valor: String(checkinsNoCertificado(c.total_checkins)) },
   ];
+
 
   return (
     <div>
@@ -170,14 +153,14 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
                 className="border-b-2 border-amber-200 px-[2cqw] pb-[0.4cqw] font-serif font-bold text-neutral-900"
                 style={{ fontSize: "3cqw", lineHeight: 1.15 }}
               >
-                {c.nome_peregrino}
+                {nomeNoCertificado(c.nome_peregrino)}
               </p>
               <p
-                className="mx-auto max-w-[85%] text-justify text-neutral-700"
-                style={{ fontSize: "1.35cqw", lineHeight: 1.4, marginTop: "0.6cqw" }}
+                className="mx-auto max-w-[85%] text-neutral-700"
+                style={{ fontSize: "1.45cqw", lineHeight: 1.45, marginTop: "0.6cqw", textAlign: "center" }}
               >
-                concluiu {meioLabel} sua peregrinação {trajetoTexto} a Basílica
-                de Nossa Senhora Aparecida-SP, conforme os dados abaixo.
+                concluiu com êxito a peregrinação{meio ? ` ${meio}` : ""} até a Basílica de Nossa Senhora
+                Aparecida-SP, conforme os dados abaixo.
               </p>
             </div>
 

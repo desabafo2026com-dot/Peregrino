@@ -146,7 +146,7 @@ export default async function CertificadoPage() {
             return (
               <div key={c.id} id={`certificado-${c.id}`} className="flex scroll-mt-6 flex-col gap-4">
                 <h3 className="text-lg font-bold text-amber-800 dark:text-amber-500">Certificado</h3>
-                <CertificadoGratuitoView certificado={c} />
+                <CertificadoGratuitoView certificado={comOrigem} />
 
                 <div
                   id={`romaria-plus-${c.id}`}

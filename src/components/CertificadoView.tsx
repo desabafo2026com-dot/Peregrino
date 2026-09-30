@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Printer, Download, FileText } from "lucide-react";
-import { MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
+import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado } from "@/lib/certificado-texto";
 import type { Certificado } from "@/types/database";
 
 // Proporção real da imagem-modelo (public/certificado/modelo-certificado.jpg),
@@ -27,35 +27,13 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const meioLabel =
-    c.meio_transporte === "outros"
-      ? c.meio_transporte_outro_desc || "outro meio de transporte"
-      : c.meio_transporte
-        ? MEIO_TRANSPORTE_LABELS[c.meio_transporte]
-        : "a pé";
-
-  // Até a Rodada 22, isto vinha de uma extração por regex de rota_nome
-  // ("Nome da rota (Origem → Aparecida)") que já não batia com nenhum
-  // certificado desde a Rodada 10, quando nomeRota() passou a mostrar só o
-  // nome da rota, sem essa parte entre parênteses — na prática, "origem"
-  // sempre dava null e a frase caía sempre no "até..." sem "de [origem]".
-  // Rodada 23: c.origem é a cidade de origem declarada pelo peregrino,
-  // gravada direto no certificado no momento da emissão.
+  // Rodada 58 — texto no formato pedido pelo usuário: "concluiu com êxito,
+  // nesta data, sua peregrinação (meio) até a Basílica..., saindo de
+  // (origem) no dia (data), com (x) check-in(s) ... e um tempo total de (tempo)."
+  const meio = meioNaFrase(c.meio_transporte, c.meio_transporte_outro_desc);
   const origem = c.origem;
   const dataInicio = formatarData(c.data_inicio);
-  const dataFim = formatarData(c.data_fim);
-  const mesmoDia = !!(c.data_inicio && c.data_fim && dataInicio === dataFim);
-
-  const trajetoTexto = origem ? `de ${origem} até` : "até";
-
-  let periodoTexto: string;
-  if (mesmoDia && dataInicio) {
-    periodoTexto = `no dia ${dataInicio}`;
-  } else if (dataInicio && dataFim) {
-    periodoTexto = `no período de ${dataInicio} a ${dataFim}${c.duracao_texto ? ` (${c.duracao_texto})` : ""}`;
-  } else {
-    periodoTexto = c.duracao_texto ? `em ${c.duracao_texto}` : "";
-  }
+  const checkins = checkinsNoCertificado(c.total_checkins);
 
   function imprimir() {
     // Marca só este certificado (útil quando há vários na mesma página) para
@@ -133,31 +111,36 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
 
         <div
           className="absolute flex flex-col items-center justify-center text-center"
-          style={{ top: "61%", bottom: "15%", left: "10%", right: "10%" }}
+          style={{ top: "44%", bottom: "13%", left: "10%", right: "10%" }}
         >
           <p
             className="text-neutral-600"
-            style={{ fontSize: "2.1cqw", letterSpacing: "0.05em" }}
+            style={{ fontSize: "2.3cqw", letterSpacing: "0.05em" }}
           >
             Certificamos que
           </p>
           <p
             className="font-serif font-bold text-neutral-900"
-            style={{ fontSize: "4cqw", lineHeight: 1.15, margin: "0.3cqw 0" }}
+            style={{ fontSize: "4.2cqw", lineHeight: 1.15, margin: "0.4cqw 0 1cqw", letterSpacing: "0.02em" }}
           >
-            {c.nome_peregrino}
+            {nomeNoCertificado(c.nome_peregrino)}
           </p>
           <p
             className="text-justify text-neutral-700"
-            style={{ fontSize: "1.9cqw", lineHeight: 1.35, maxWidth: "95%" }}
+            style={{ fontSize: "2.1cqw", lineHeight: 1.45, maxWidth: "95%" }}
           >
-            concluiu {meioLabel} sua peregrinação {trajetoTexto} a Basílica de
-            Nossa Senhora Aparecida-SP {periodoTexto}, com{" "}
-            <strong>{c.total_checkins}</strong> check-in(s) confirmados ao
-            longo da rota
-            {c.distancia_km != null && (
+            concluiu com êxito, nesta data, sua peregrinação{meio ? ` ${meio}` : ""} até a Basílica de
+            Nossa Senhora Aparecida-SP
+            {origem && (
               <>
-                , percorrendo aproximadamente <strong>{c.distancia_km} km</strong>
+                , saindo de <strong>{origem}</strong>
+              </>
+            )}
+            {dataInicio && <> no dia {dataInicio}</>}, com <strong>{checkins}</strong> check-in(s) confirmados
+            ao longo da rota
+            {c.duracao_texto && (
+              <>
+                {" "}e um tempo total de <strong>{c.duracao_texto}</strong>
               </>
             )}
             .
