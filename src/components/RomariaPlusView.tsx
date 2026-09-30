@@ -42,7 +42,18 @@ const FONTE_TITULO = '"Playfair Display", serif';
 const ARTE_LARGURA = 1080;
 const ARTE_ALTURA = 1920;
 
-export type Modelo = "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo";
+export type Modelo =
+  | "classico"
+  | "destaque"
+  | "painel"
+  | "moldura"
+  | "itinerario"
+  | "selo"
+  // Rodada 49 — quatro modelos novos (Migration 43 libera no banco).
+  | "basilica"
+  | "terco"
+  | "postal"
+  | "credencial";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -97,6 +108,10 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean }[] = [
   { id: "moldura", nome: "Moldura dourada", temAjuste: false },
   { id: "itinerario", nome: "Itinerário", temAjuste: true },
   { id: "selo", nome: "Selo de conquista", temAjuste: true },
+  { id: "basilica", nome: "Basílica de Aparecida", temAjuste: true },
+  { id: "terco", nome: "Terço", temAjuste: false },
+  { id: "postal", nome: "Cartão-postal", temAjuste: false },
+  { id: "credencial", nome: "Credencial do peregrino", temAjuste: false },
 ];
 
 // Transparência do fundo escurecido do "Selo de conquista" (Rodada 30, a
@@ -136,6 +151,10 @@ const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   // bloco único arrastável/redimensionável, centralizado por padrão.
   itinerario: { x: 50, y: 55, escala: 100 },
   selo: { x: 50, y: 56, escala: 100 },
+  basilica: { x: 50, y: 72, escala: 100 },
+  terco: null,
+  postal: null,
+  credencial: null,
 };
 
 // Posição/zoom padrão da FOTO em si dentro do recorte de cada modelo (Rodada
@@ -182,6 +201,10 @@ function PainelAjustavel({
   className?: string;
   children: React.ReactNode;
 }) {
+  // Rodada 49 — transparência do bloco de texto (0 = sólido, até 70 = bem
+  // transparente), a pedido do usuário para o "Selo de conquista" e
+  // oferecida em todos os modelos com texto ajustável.
+  const opacidade = 1 - Math.min(70, Math.max(0, ajuste.transparenciaTexto ?? 0)) / 100;
   const arrastandoRef = useRef(false);
 
   function aoPressionar(e: React.PointerEvent<HTMLDivElement>) {
@@ -229,6 +252,7 @@ function PainelAjustavel({
         top: `${ajuste.y}%`,
         transform: `translate(-50%, -50%) scale(${ajuste.escala / 100})`,
         touchAction: "none",
+        opacity: opacidade,
       }}
       onPointerDown={aoPressionar}
       onPointerMove={aoMover}
@@ -435,6 +459,249 @@ function FotoComPanZoom({
   );
 }
 
+// ---------------------------------------------------------------------
+// Rodada 49 — peças desenhadas dos 4 modelos novos. Todas em SVG/HTML
+// próprios (nada de imagem externa), para a arte sempre sair igual no PNG.
+// ---------------------------------------------------------------------
+
+// Silhueta estilizada da Basílica (desenho próprio, simplificado): nave
+// longa, cúpula central com lanterna e cruz, e a torre alta ao lado.
+function SilhuetaBasilica({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 200 104" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="ouroBasilica" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fde68a" />
+          <stop offset="55%" stopColor="#fbbf24" />
+          <stop offset="100%" stopColor="#b45309" />
+        </linearGradient>
+      </defs>
+      <g fill="url(#ouroBasilica)">
+        {/* cruz, lanterna e cúpula */}
+        <rect x="99" y="4" width="2" height="14" />
+        <rect x="95" y="8" width="10" height="2" />
+        <rect x="95.5" y="18" width="9" height="11" rx="1" />
+        <path d="M76,52 C78,30 90,24 100,24 C110,24 122,30 124,52 Z" />
+        <rect x="78" y="50" width="44" height="14" />
+        {/* corpo central e nave */}
+        <rect x="66" y="62" width="68" height="20" />
+        <path d="M22,82 L66,70 L66,82 Z" />
+        <path d="M178,82 L134,70 L134,82 Z" />
+        <rect x="16" y="80" width="168" height="16" />
+        <rect x="6" y="92" width="188" height="8" rx="1" />
+        {/* torre */}
+        <rect x="150" y="30" width="15" height="52" />
+        <path d="M148,31 L157.5,13 L167,31 Z" />
+        <rect x="156.5" y="3" width="2" height="12" />
+        <rect x="153.5" y="6" width="8" height="2" />
+      </g>
+      {/* janelas em arco, recortadas no tom escuro */}
+      <g fill="#0b1a3d" fillOpacity="0.55">
+        {[28, 40, 52, 136, 172].map((x) => (
+          <path key={x} d={`M${x},96 L${x},88 Q${x + 3},84 ${x + 6},88 L${x + 6},96 Z`} />
+        ))}
+        {[84, 94, 104, 114].map((x) => (
+          <path key={x} d={`M${x},80 L${x},70 Q${x + 2.5},66.5 ${x + 5},70 L${x + 5},80 Z`} />
+        ))}
+        <path d="M154,62 L154,46 Q157.5,41 161,46 L161,62 Z" />
+      </g>
+    </svg>
+  );
+}
+
+// Terço completo em volta da foto: 5 dezenas (10 contas pequenas + 1 maior
+// entre elas) formando o círculo, a medalha embaixo e o pingente com a cruz.
+// Coordenadas no viewBox 100 x 132; o círculo da foto é desenhado por fora,
+// em HTML, alinhado a este mesmo centro (50,50) e raio 39.
+function ContasTerco() {
+  const cx = 50;
+  const cy = 50;
+  const r = 45;
+  const inicio = 90 + 9;
+  const fim = 90 + 351;
+  const total = 55;
+  const contas = Array.from({ length: total }, (_, i) => {
+    const ang = ((inicio + ((fim - inicio) * i) / (total - 1)) * Math.PI) / 180;
+    const grande = i % 11 === 10;
+    return { x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang), grande };
+  });
+  return (
+    <svg viewBox="0 0 100 132" className="absolute inset-0 h-full w-full" aria-hidden="true">
+      <defs>
+        <radialGradient id="contaOuro" cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stopColor="#fff7d6" />
+          <stop offset="45%" stopColor="#fbbf24" />
+          <stop offset="100%" stopColor="#92400e" />
+        </radialGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#fcd34d" strokeOpacity="0.55" strokeWidth="0.35" />
+      <line x1="50" y1="97" x2="50" y2="123" stroke="#fcd34d" strokeOpacity="0.7" strokeWidth="0.35" />
+      {contas.map((c, i) => (
+        <circle key={i} cx={c.x} cy={c.y} r={c.grande ? 2.3 : 1.55} fill="url(#contaOuro)" />
+      ))}
+      {/* medalha */}
+      <ellipse cx="50" cy="95.5" rx="3.4" ry="4.2" fill="url(#contaOuro)" />
+      <ellipse cx="50" cy="95.5" rx="2.2" ry="2.9" fill="none" stroke="#92400e" strokeWidth="0.4" />
+      {/* pingente */}
+      <circle cx="50" cy="104" r="2.3" fill="url(#contaOuro)" />
+      <circle cx="50" cy="109" r="1.55" fill="url(#contaOuro)" />
+      <circle cx="50" cy="113" r="1.55" fill="url(#contaOuro)" />
+      <circle cx="50" cy="117" r="1.55" fill="url(#contaOuro)" />
+      <circle cx="50" cy="121.5" r="2.3" fill="url(#contaOuro)" />
+      <rect x="49.1" y="124" width="1.8" height="8" rx="0.4" fill="#fbbf24" />
+      <rect x="46.8" y="126" width="6.4" height="1.7" rx="0.4" fill="#fbbf24" />
+    </svg>
+  );
+}
+
+// Selo postal com borda serrilhada, para o "Cartão-postal".
+function SeloPostal({ ano }: { ano: number }) {
+  const furos = Array.from({ length: 9 }, (_, i) => 6 + i * 11);
+  return (
+    <svg viewBox="0 0 100 120" className="h-full w-full drop-shadow" aria-hidden="true">
+      <rect x="2" y="2" width="96" height="116" fill="#fffdf7" />
+      {furos.map((p) => (
+        <g key={p} fill="#f3e9d2">
+          <circle cx={p} cy="2" r="3" />
+          <circle cx={p} cy="118" r="3" />
+        </g>
+      ))}
+      {Array.from({ length: 11 }, (_, i) => 6 + i * 10.8).map((p) => (
+        <g key={p} fill="#f3e9d2">
+          <circle cx="2" cy={p} r="3" />
+          <circle cx="98" cy={p} r="3" />
+        </g>
+      ))}
+      <rect x="10" y="10" width="80" height="100" fill="#1e3a8a" />
+      <g transform="translate(18 26) scale(0.32)">
+        <SilhuetaBasilicaPaths />
+      </g>
+      <text x="50" y="84" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fde68a" fontFamily="sans-serif">
+        APARECIDA
+      </text>
+      <text x="50" y="100" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fbbf24" fontFamily="sans-serif">
+        {ano}
+      </text>
+    </svg>
+  );
+}
+
+// Mesmos traços da silhueta, sem o <svg> em volta — para caber dentro do
+// selo postal.
+function SilhuetaBasilicaPaths() {
+  return (
+    <g fill="#fbbf24">
+      <rect x="99" y="4" width="2" height="14" />
+      <rect x="95" y="8" width="10" height="2" />
+      <rect x="95.5" y="18" width="9" height="11" rx="1" />
+      <path d="M76,52 C78,30 90,24 100,24 C110,24 122,30 124,52 Z" />
+      <rect x="78" y="50" width="44" height="14" />
+      <rect x="66" y="62" width="68" height="20" />
+      <path d="M22,82 L66,70 L66,82 Z" />
+      <path d="M178,82 L134,70 L134,82 Z" />
+      <rect x="16" y="80" width="168" height="16" />
+      <rect x="6" y="92" width="188" height="8" rx="1" />
+      <rect x="150" y="30" width="15" height="52" />
+      <path d="M148,31 L157.5,13 L167,31 Z" />
+      <rect x="156.5" y="3" width="2" height="12" />
+      <rect x="153.5" y="6" width="8" height="2" />
+    </g>
+  );
+}
+
+// Carimbo de cidade da "Credencial do peregrino" — cores, formatos e
+// inclinações alternados pela posição, para parecer carimbado à mão.
+const CORES_CARIMBO = ["#1d4ed8", "#b91c1c", "#15803d", "#7e22ce", "#b45309", "#0f766e"];
+const GIROS_CARIMBO = [-8, 5, -3, 7, -6, 3, -4, 8, -2, 6, -7, 4];
+
+function Carimbo({
+  cidade,
+  rotulo,
+  indice,
+  destaque,
+  largura,
+}: {
+  cidade: string;
+  rotulo: string;
+  indice: number;
+  destaque?: boolean;
+  largura: number;
+}) {
+  // Tamanho da fonte acompanha a largura do carimbo (em % da arte).
+  const fator = largura / 22;
+  const cor = destaque ? "#b45309" : CORES_CARIMBO[indice % CORES_CARIMBO.length];
+  const redondo = destaque || indice % 2 === 0;
+  return (
+    <div
+      className={`relative flex flex-col items-center justify-center text-center ${redondo ? "rounded-full" : "rounded-lg"}`}
+      style={{
+        width: `${largura}%`,
+        aspectRatio: "1 / 1",
+        border: `0.55cqw solid ${cor}`,
+        color: cor,
+        transform: `rotate(${GIROS_CARIMBO[indice % GIROS_CARIMBO.length]}deg)`,
+        opacity: 0.88,
+        background: destaque ? "rgba(251,191,36,0.18)" : "transparent",
+      }}
+    >
+      <div
+        className={`absolute ${redondo ? "rounded-full" : "rounded-md"}`}
+        style={{ inset: "6%", border: `0.25cqw dashed ${cor}` }}
+      />
+      <span className="font-bold uppercase" style={{ fontSize: `${1.4 * fator}cqw`, letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
+        {rotulo}
+      </span>
+      <span
+        className="px-[10%] font-black uppercase leading-tight"
+        style={{
+          fontSize: `${(cidade.length > 12 ? 1.55 : cidade.length > 8 ? 1.85 : 2.3) * fator}cqw`,
+          textAlign: "center",
+          overflowWrap: cidade.length > 12 ? "anywhere" : "normal",
+        }}
+      >
+        {cidade}
+      </span>
+    </div>
+  );
+}
+
+// Trajeto esquemático origem -> Aparecida (Rodada 49): o nome de cada
+// cidade fica colado na sua bolinha — a origem logo abaixo da bolinha branca
+// (esquerda) e "Aparecida-SP" logo acima da bolinha amarela (direita), em
+// vez de os dois nomes ficarem numa linha solta embaixo do desenho. Usado
+// pelo "Itinerário" e pelo "Foto em destaque".
+function TrajetoOrigemAparecida({ origem, tamanhoFonte }: { origem: string; tamanhoFonte: string }) {
+  return (
+    <div className="relative w-full text-white" style={{ fontSize: tamanhoFonte, paddingTop: "1.9em", paddingBottom: "1.9em" }}>
+      <span
+        className="absolute right-0 top-0 flex max-w-[60%] items-center justify-end gap-1 font-bold text-stripe-400"
+        style={{ textAlign: "right", lineHeight: 1.15, textShadow: "0 1px 3px rgba(0,0,0,.6)" }}
+      >
+        <Church size={14} className="shrink-0" style={{ width: "1.1em", height: "1.1em" }} /> Aparecida-SP
+      </span>
+      <svg viewBox="0 0 100 24" className="block w-full" style={{ opacity: 0.9 }}>
+        <path
+          d="M6,19 C30,22 40,3 60,6 C74,8 82,2 94,5"
+          fill="none"
+          stroke="white"
+          strokeOpacity="0.7"
+          strokeWidth="1.5"
+          strokeDasharray="3,3.2"
+          strokeLinecap="round"
+        />
+        <circle cx="6" cy="19" r="3.2" fill="white" fillOpacity="0.95" />
+        <circle cx="94" cy="5" r="3.6" fill="#fbbf24" fillOpacity="0.98" />
+      </svg>
+      <span
+        className="absolute bottom-0 left-0 flex max-w-[60%] items-center gap-1 font-bold"
+        style={{ textAlign: "left", lineHeight: 1.15, textShadow: "0 1px 3px rgba(0,0,0,.6)" }}
+      >
+        <Footprints size={14} className="shrink-0" style={{ width: "1.1em", height: "1.1em" }} /> {origem}
+      </span>
+    </div>
+  );
+}
+
 interface Props {
   certificado: Certificado;
   // Presentes só quando a compra já está paga (ver
@@ -453,6 +720,9 @@ interface Props {
   ajusteInicial?: AjusteOverlayRomariaPlus | null;
   contadorDownloadsInicial?: number;
   contadorCompartilhamentosInicial?: number;
+  // Rodada 49 — cidades com check-in nesta peregrinação, na ordem em que
+  // foram feitos (carimbos da "Credencial do peregrino").
+  cidadesCheckin?: string[];
   onSalvo?: (dados: { indice: number; foto_url: string; modelo: Modelo; ajuste_overlay: AjusteOverlayRomariaPlus | null }) => void;
 }
 
@@ -466,6 +736,7 @@ export default function RomariaPlusView({
   ajusteInicial = null,
   contadorDownloadsInicial = 0,
   contadorCompartilhamentosInicial = 0,
+  cidadesCheckin = [],
   onSalvo,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -533,6 +804,11 @@ export default function RomariaPlusView({
   // pelos modelos "itinerario" (Rodada 27), que mostram de onde a pessoa
   // saiu até Aparecida-SP.
   const origem = c.origem;
+  // Rodada 49: certificados antigos não têm a origem gravada — a página
+  // completa com a cidade de origem da própria peregrinação (ver
+  // certificado/plus/[certificadoId]/page.tsx); só sem nenhuma das duas é
+  // que aparece o texto genérico.
+  const nomeOrigem = origem?.trim() || "Origem";
   // Frase do título escolhida (ver FRASES_TITULO acima) — guardada dentro do
   // próprio ajuste, igual a fotoPos/fotoEscala, independente do modelo. Na
   // opção "personalizada" o texto de verdade vem de ajuste.fraseCustom (com
@@ -623,6 +899,7 @@ export default function RomariaPlusView({
           frase: ajuste.frase,
           fraseCustom: ajuste.fraseCustom,
           transparencia: ajuste.transparencia,
+          transparenciaTexto: ajuste.transparenciaTexto,
         }
       : ajuste;
     setAjuste(novoAjuste);
@@ -638,6 +915,7 @@ export default function RomariaPlusView({
       frase: ajuste.frase,
       fraseCustom: ajuste.fraseCustom,
       transparencia: ajuste.transparencia,
+      transparenciaTexto: ajuste.transparenciaTexto,
     };
     setAjuste(novoAjuste);
     void persistirFoto(modelo, novoAjuste);
@@ -841,6 +1119,67 @@ export default function RomariaPlusView({
     </>
   );
 
+  // Rodada 49 — peças repetidas nos modelos novos.
+  function cabecalho(escuro: boolean) {
+    return (
+      <div
+        className={`absolute inset-x-0 top-0 z-[5] flex items-center justify-center gap-2 pt-[5%] ${escuro ? "text-amber-900" : "text-white"}`}
+      >
+        <Image
+          src="/icons/logo-emblema.png"
+          alt=""
+          width={64}
+          height={64}
+          style={{ width: "9%", height: "auto" }}
+          className={`rounded-lg ring-1 ${escuro ? "ring-amber-800/40" : "ring-white/40"}`}
+        />
+        <span className="font-semibold tracking-[0.15em]" style={{ fontSize: "2.6cqw" }}>
+          O PEREGRINO
+        </span>
+      </div>
+    );
+  }
+
+  function dadosLinha(tamanhoIcone: number) {
+    return (
+      <>
+        {periodo && (
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            <CalendarDays size={tamanhoIcone} className="shrink-0" /> {periodo}
+          </span>
+        )}
+        {tempo && (
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            <Clock size={tamanhoIcone} className="shrink-0" /> {tempo}
+          </span>
+        )}
+        {distancia && (
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            <Route size={tamanhoIcone} className="shrink-0" /> {distancia}
+          </span>
+        )}
+      </>
+    );
+  }
+
+  // Carimbos da "Credencial": cada cidade com check-in, na ordem, sem
+  // repetir, e sempre terminando em Aparecida (a chegada). Sem a lista
+  // (certificado antigo), só a origem e Aparecida.
+  const carimbos = (() => {
+    const ehAparecida = (cidade: string) => cidade.trim().toLowerCase() === "aparecida";
+    const vistas = new Set<string>();
+    const lista: string[] = [];
+    for (const cidade of cidadesCheckin) {
+      const chave = cidade.trim().toLowerCase();
+      if (!chave || vistas.has(chave) || ehAparecida(cidade)) continue;
+      vistas.add(chave);
+      lista.push(cidade);
+    }
+    if (lista.length === 0 && origem && !ehAparecida(origem)) lista.push(origem);
+    return lista.slice(0, 11);
+  })();
+  const dataChegada = c.data_fim ? formatarDataCurta(new Date(c.data_fim)).slice(0, 5) : String(ano);
+
   return (
     <div className="flex flex-col gap-4">
       <input
@@ -1032,28 +1371,8 @@ export default function RomariaPlusView({
                     ("o itinerário pode colocar também no modelo foto em
                     destaque, logo abaixo"). Mesma curva esquemática, só que
                     reduzida pra caber no espaço já ocupado pela foto/dados. */}
-                <div className="mt-[3%] w-[85%] text-white/85">
-                  <svg viewBox="0 0 100 22" className="w-full" style={{ opacity: 0.85 }}>
-                    <path
-                      d="M8,17 C32,20 40,3 60,6 C74,8 80,2 92,5"
-                      fill="none"
-                      stroke="white"
-                      strokeOpacity="0.65"
-                      strokeWidth="1.6"
-                      strokeDasharray="3,3.2"
-                      strokeLinecap="round"
-                    />
-                    <circle cx="8" cy="17" r="3.2" fill="white" fillOpacity="0.9" />
-                    <circle cx="92" cy="5" r="3.6" fill="#fbbf24" fillOpacity="0.95" />
-                  </svg>
-                  <div className="mt-[1%] flex items-start justify-between" style={{ fontSize: "2.6cqw" }}>
-                    <span className="flex max-w-[45%] items-center gap-1 text-left">
-                      <Footprints size={13} className="mt-0.5 shrink-0" /> {origem ?? "Início"}
-                    </span>
-                    <span className="flex max-w-[45%] items-center gap-1 text-right text-stripe-400">
-                      <Church size={13} className="mt-0.5 shrink-0" /> Aparecida-SP
-                    </span>
-                  </div>
+                <div className="mt-[2%] w-[85%]">
+                  <TrajetoOrigemAparecida origem={nomeOrigem} tamanhoFonte="2.9cqw" />
                 </div>
                 <div
                   className="mt-[3%] flex w-full flex-col gap-[3%] rounded-xl bg-white/10 py-[4%] backdrop-blur-sm"
@@ -1280,30 +1599,7 @@ export default function RomariaPlusView({
                       baixa opacidade — dá para ver a foto por trás dela o
                       tempo todo. Ainda esquemática (sem dados reais de mapa),
                       só com uma curva suave em vez de uma diagonal reta. */}
-                  <div className="w-full text-white/85">
-                    <svg viewBox="0 0 100 26" className="w-full" style={{ opacity: 0.8 }}>
-                      <path
-                        d="M8,20 C32,23 40,4 60,7 C74,9 80,3 92,6"
-                        fill="none"
-                        stroke="white"
-                        strokeOpacity="0.65"
-                        strokeWidth="1.4"
-                        strokeDasharray="3,3.2"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="8" cy="20" r="3" fill="white" fillOpacity="0.9" />
-                      <circle cx="92" cy="6" r="3.4" fill="#fbbf24" fillOpacity="0.95" />
-                    </svg>
-                    <div className="mt-[1%] flex items-start justify-between" style={{ fontSize: "2.9cqw" }}>
-                      <span className="flex max-w-[45%] items-center gap-1 text-left">
-                        <Footprints size={14} className="mt-0.5 shrink-0" />
-                        {origem ?? "Início"}
-                      </span>
-                      <span className="flex max-w-[45%] items-center gap-1 text-right text-stripe-400">
-                        <Church size={14} className="mt-0.5 shrink-0" /> Aparecida-SP
-                      </span>
-                    </div>
-                  </div>
+                  <TrajetoOrigemAparecida origem={nomeOrigem} tamanhoFonte="3.2cqw" />
                   <div
                     className="flex w-full items-center justify-center gap-[6%] rounded-xl bg-black/45 py-[3%] text-white backdrop-blur-sm"
                     style={{ fontSize: "3.2cqw" }}
@@ -1425,6 +1721,233 @@ export default function RomariaPlusView({
                 </PainelAjustavel>
               </div>
             )}
+
+            {/* "Basílica de Aparecida" (Rodada 49) — a foto inteira ao fundo e,
+                por cima, um bloco móvel/redimensionável com a silhueta
+                dourada da Basílica, o título e os dados. */}
+            {modelo === "basilica" && (
+              <>
+                <FotoComPanZoom
+                  src={fotoUrl}
+                  fotoPos={fotoPos}
+                  fotoEscala={fotoEscala}
+                  editando={editandoFoto}
+                  onArrastar={moverFoto}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                />
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(to top, rgba(11,26,61,0.92) 0%, rgba(11,26,61,0.55) 35%, rgba(0,0,0,0.05) 60%, rgba(0,0,0,0.45) 100%)",
+                  }}
+                />
+                {cabecalho(false)}
+                <PainelAjustavel
+                  ajuste={ajuste}
+                  editando={editando}
+                  containerRef={ref}
+                  onArrastar={setAjuste}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  className="flex w-[86%] flex-col items-center gap-[2.5%] text-center text-white"
+                >
+                  <SilhuetaBasilica className="w-[80%]" />
+                  <div className="h-[2px] w-[70%] bg-gradient-to-r from-transparent via-stripe-400 to-transparent" />
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
+                    {tituloTexto}
+                  </p>
+                  <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
+                    {ano}
+                  </p>
+                  <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
+                    De {nomeOrigem} à Basílica de Aparecida
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1" style={{ fontSize: "3.1cqw" }}>
+                    {dadosLinha(15)}
+                  </div>
+                </PainelAjustavel>
+              </>
+            )}
+
+            {/* "Terço" (Rodada 49) — a foto num círculo no centro, rodeada
+                por um terço dourado (5 dezenas, medalha e cruz), sobre o azul
+                do manto de Nossa Senhora. */}
+            {modelo === "terco" && (
+              <div
+                className="absolute inset-0 flex flex-col items-center px-[6%] pt-[15%] pb-[5%] text-center text-white"
+                style={{ background: "radial-gradient(circle at 50% 42%, #1e3a8a 0%, #0f1f4d 55%, #070f2b 100%)" }}
+              >
+                {cabecalho(false)}
+                <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.2cqw", lineHeight: 1.08, textAlign: "center" }}>
+                  {tituloTexto}
+                </p>
+                <p className="font-bold text-stripe-400" style={{ fontSize: "7.4cqw", textAlign: "center" }}>
+                  {ano}
+                </p>
+                <div className="relative mt-[3%] w-[86%]" style={{ aspectRatio: "100 / 132" }}>
+                  <div
+                    className="absolute overflow-hidden rounded-full ring-2 ring-stripe-300/70"
+                    style={{ left: "11%", top: `${(11 / 132) * 100}%`, width: "78%", height: `${(78 / 132) * 100}%` }}
+                  >
+                    <FotoComPanZoom
+                      src={fotoUrl}
+                      fotoPos={fotoPos}
+                      fotoEscala={fotoEscala}
+                      editando={editandoFoto}
+                      onArrastar={moverFoto}
+                      onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                    />
+                  </div>
+                  <div className="pointer-events-none absolute inset-0">
+                    <ContasTerco />
+                  </div>
+                </div>
+                <p className="mt-[2%] font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
+                  De {nomeOrigem} a Aparecida-SP
+                </p>
+                <div
+                  className="mt-[2%] flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1 text-stripe-200"
+                  style={{ fontSize: "3cqw" }}
+                >
+                  {dadosLinha(14)}
+                </div>
+              </div>
+            )}
+
+            {/* "Cartão-postal" (Rodada 49) — borda de correio aéreo, a foto
+                como um retrato de papel levemente inclinado, carimbo dos
+                correios de Aparecida por cima e o selo com a Basílica. */}
+            {modelo === "postal" && (
+              <div
+                className="absolute inset-0 p-[3%]"
+                style={{
+                  background:
+                    "repeating-linear-gradient(-45deg, #b91c1c 0 3cqw, #fffdf7 3cqw 6cqw, #1d4ed8 6cqw 9cqw, #fffdf7 9cqw 12cqw)",
+                }}
+              >
+                <div className="relative flex h-full w-full flex-col items-center px-[5%] pt-[14%] pb-[5%]" style={{ background: "#f3e9d2" }}>
+                  {cabecalho(true)}
+                  <div className="relative w-[88%] bg-white p-[3%] pb-[9%] shadow-xl" style={{ transform: "rotate(-2.5deg)" }}>
+                    <div className="relative w-full overflow-hidden" style={{ aspectRatio: "5 / 6" }}>
+                      <FotoComPanZoom
+                        src={fotoUrl}
+                        fotoPos={fotoPos}
+                        fotoEscala={fotoEscala}
+                        editando={editandoFoto}
+                        onArrastar={moverFoto}
+                        onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                      />
+                    </div>
+                    <p
+                      className="absolute inset-x-0 bottom-[1.5%] text-neutral-700"
+                      style={{ fontFamily: FONTE_TITULO, fontStyle: "italic", fontSize: "3.6cqw", textAlign: "center" }}
+                    >
+                      Lembrança de Aparecida, {ano}
+                    </p>
+                    {/* carimbo dos correios sobre o canto da foto */}
+                    <div className="pointer-events-none absolute -right-[7%] -top-[5%] z-[11] w-[36%]" style={{ transform: "rotate(12deg)" }}>
+                      <svg viewBox="0 0 120 80" className="w-full" aria-hidden="true">
+                        <g fill="none" stroke="#1e3a8a" strokeOpacity="0.8">
+                          <circle cx="40" cy="40" r="34" strokeWidth="2.4" />
+                          <circle cx="40" cy="40" r="27" strokeWidth="1.2" />
+                          <path d="M78,26 q8,-6 16,0 t16,0" strokeWidth="2" />
+                          <path d="M78,40 q8,-6 16,0 t16,0" strokeWidth="2" />
+                          <path d="M78,54 q8,-6 16,0 t16,0" strokeWidth="2" />
+                        </g>
+                        <g fill="#1e3a8a" fillOpacity="0.85" fontFamily="sans-serif" textAnchor="middle">
+                          <text x="40" y="31" fontSize="7" fontWeight="700">APARECIDA</text>
+                          <text x="40" y="44" fontSize="9" fontWeight="800">{dataChegada}</text>
+                          <text x="40" y="56" fontSize="7" fontWeight="700">SP · {ano}</text>
+                        </g>
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="mt-[4%] flex w-full flex-1 items-center gap-[4%]">
+                    <div className="flex min-w-0 flex-1 flex-col gap-[5%] text-amber-950" style={{ textAlign: "left" }}>
+                      <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.2cqw", lineHeight: 1.1, textAlign: "left" }}>
+                        {tituloTexto}
+                      </p>
+                      <p className="border-b border-amber-900/30 pb-[2%]" style={{ fontSize: "3.6cqw", textAlign: "left" }}>
+                        <span className="font-bold">De:</span> {nomeOrigem}
+                      </p>
+                      <p className="border-b border-amber-900/30 pb-[2%]" style={{ fontSize: "3.6cqw", textAlign: "left" }}>
+                        <span className="font-bold">Para:</span> Aparecida-SP
+                      </p>
+                      <div className="flex flex-wrap gap-x-[6%] gap-y-1 text-amber-900" style={{ fontSize: "3cqw" }}>
+                        {dadosLinha(13)}
+                      </div>
+                    </div>
+                    <div className="w-[30%] shrink-0" style={{ transform: "rotate(3deg)" }}>
+                      <SeloPostal ano={ano} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* "Credencial do peregrino" (Rodada 49) — como a credencial dos
+                caminhos de peregrinação: foto 3x4, dados da caminhada e um
+                carimbo para cada cidade onde houve check-in, até a chegada em
+                Aparecida. */}
+            {modelo === "credencial" && (
+              <div className="absolute inset-0 p-[3%]" style={{ background: "#7c2d12" }}>
+                <div
+                  className="relative flex h-full w-full flex-col items-center px-[5%] pt-[14%] pb-[4%] text-amber-950"
+                  style={{ background: "linear-gradient(180deg, #f7eed8 0%, #efe2c2 100%)", boxShadow: "inset 0 0 0 0.6cqw #b45309" }}
+                >
+                  {cabecalho(true)}
+                  <p className="font-bold tracking-[0.25em] text-amber-800" style={{ fontSize: "2.6cqw", textAlign: "center" }}>
+                    CREDENCIAL DO PEREGRINO
+                  </p>
+                  <p className="mt-[1%]" style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "5.4cqw", lineHeight: 1.1, textAlign: "center" }}>
+                    {tituloTexto} <span className="text-amber-700">{ano}</span>
+                  </p>
+                  <div className="mt-[3%] flex w-full items-stretch gap-[4%]">
+                    <div className="relative w-[46%] shrink-0 overflow-hidden rounded-md ring-2 ring-amber-800/60" style={{ aspectRatio: "3 / 4" }}>
+                      <FotoComPanZoom
+                        src={fotoUrl}
+                        fotoPos={fotoPos}
+                        fotoEscala={fotoEscala}
+                        editando={editandoFoto}
+                        onArrastar={moverFoto}
+                        onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col justify-center gap-[5%]" style={{ fontSize: "3.1cqw", textAlign: "left" }}>
+                      <div>
+                        <p className="font-bold uppercase text-amber-800" style={{ fontSize: "2.2cqw", textAlign: "left" }}>Peregrino(a)</p>
+                        <p className="font-bold leading-tight" style={{ textAlign: "left" }}>{c.nome_peregrino}</p>
+                      </div>
+                      <div>
+                        <p className="font-bold uppercase text-amber-800" style={{ fontSize: "2.2cqw", textAlign: "left" }}>Caminho</p>
+                        <p className="leading-tight" style={{ textAlign: "left" }}>{nomeOrigem} → Aparecida-SP</p>
+                      </div>
+                      <div className="flex flex-col gap-1">{dadosLinha(12)}</div>
+                    </div>
+                  </div>
+                  {/* Até 9 carimbos cabem 3 por linha, maiores; acima disso, 4
+                      por linha. O espaço que sobra é dividido em volta. */}
+                  <div className="flex w-full flex-1 flex-wrap content-center items-center justify-center gap-x-[4%] gap-y-[3%] py-[3%]">
+                    {carimbos.map((cidade, i) => (
+                      <Carimbo
+                        key={cidade + i}
+                        cidade={cidade}
+                        rotulo={i === 0 ? "Início" : "Passagem"}
+                        indice={i}
+                        largura={carimbos.length + 1 <= 9 ? 28 : 21}
+                      />
+                    ))}
+                    <Carimbo
+                      cidade="Aparecida"
+                      rotulo={`Chegada ${dataChegada}`}
+                      indice={carimbos.length}
+                      destaque
+                      largura={carimbos.length + 1 <= 9 ? 28 : 21}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {!finalizado && (
@@ -1531,6 +2054,23 @@ export default function RomariaPlusView({
                         value={ajuste.escala}
                         onChange={(e) => {
                           const novo = { ...ajuste, escala: Number(e.target.value) };
+                          setAjuste(novo);
+                          agendarPersistirAjuste(novo);
+                        }}
+                        className="w-full accent-amber-700"
+                      />
+                      <label htmlFor="transparencia-texto-romaria" className="mt-1 text-xs font-medium text-neutral-500">
+                        Transparência do texto
+                      </label>
+                      <input
+                        id="transparencia-texto-romaria"
+                        type="range"
+                        min={0}
+                        max={70}
+                        step={5}
+                        value={ajuste.transparenciaTexto ?? 0}
+                        onChange={(e) => {
+                          const novo = { ...ajuste, transparenciaTexto: Number(e.target.value) };
                           setAjuste(novo);
                           agendarPersistirAjuste(novo);
                         }}

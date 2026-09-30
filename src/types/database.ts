@@ -355,6 +355,9 @@ export interface AjusteOverlayRomariaPlus {
   // Transparência do fundo escurecido do "Selo de conquista" (Rodada 30) —
   // 0 a 100, quanto maior mais a foto aparece por trás do selo/texto.
   transparencia?: number;
+  // Transparência do bloco de texto (Rodada 49) — 0 a 70, quanto maior mais
+  // transparente o título/dados ficam sobre a foto.
+  transparenciaTexto?: number;
 }
 
 // Compra do produto pago "Romaria Plus" (arte personalizada para
@@ -389,7 +392,7 @@ export interface CompraRomariaPlus {
   // aqui só para compras antigas que ainda não foram migradas na tela
   // (a migration 24 já copia o que existir para a foto de índice 1).
   // "itinerario" e "selo" são os dois modelos novos da Rodada 27.
-  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | null;
+  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | "basilica" | "terco" | "postal" | "credencial" | null;
   // Posição/tamanho customizados do texto, só relevante para "classico" e
   // "painel" (Rodada 17) — null usa a posição padrão do modelo.
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
@@ -412,7 +415,7 @@ export interface RomariaPlusFoto {
   indice: number;
   foto_url: string;
   // "itinerario" e "selo" são os dois modelos novos da Rodada 27.
-  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo";
+  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | "basilica" | "terco" | "postal" | "credencial";
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
   contador_downloads: number;
   contador_compartilhamentos: number;

@@ -3883,3 +3883,26 @@ create trigger trg_checkin_automatico
   for each row execute function public.checkin_automatico_por_localizacao();
 
 -- FIM DA MIGRATION 42
+
+-- =====================================================================
+-- MIGRATION 43 — Rodada 49: quatro modelos novos da arte do Certificado
+-- Plus ("Basílica de Aparecida", "Terço", "Cartão-postal" e "Credencial
+-- do peregrino"). Só amplia a lista de modelos aceitos pelo banco.
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+alter table public.romaria_plus_fotos
+  drop constraint if exists romaria_plus_fotos_modelo_check;
+alter table public.romaria_plus_fotos
+  add constraint romaria_plus_fotos_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo',
+                    'basilica', 'terco', 'postal', 'credencial'));
+
+alter table public.compras_romaria_plus
+  drop constraint if exists compras_romaria_plus_modelo_check;
+alter table public.compras_romaria_plus
+  add constraint compras_romaria_plus_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo',
+                    'basilica', 'terco', 'postal', 'credencial'));
+
+-- FIM DA MIGRATION 43

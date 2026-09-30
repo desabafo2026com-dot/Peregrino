@@ -61,7 +61,8 @@ export default async function CertificadoPlusPage({
   // As duas consultas abaixo dependem só de compraId, não uma da outra —
   // juntas num só Promise.all (Rodada 30, mesma otimização de
   // /peregrinacao e /certificado).
-  const [{ data: fotos }, { data: pacotesExtra }] = await Promise.all([
+  const cert = certificado as Certificado;
+  const [{ data: fotos }, { data: pacotesExtra }, { data: peregrinacao }, { data: checkinsCidades }] = await Promise.all([
     supabase.from("romaria_plus_fotos").select("*").eq("compra_id", compraId).order("indice"),
     // Pacotes extra de +5 fotos (Rodada 30) — quantos já foram pagos
     // (define o limite atual da galeria) e o mais recente ainda pendente,
@@ -73,7 +74,29 @@ export default async function CertificadoPlusPage({
       .eq("compra_pai_id", compraId)
       .eq("tipo", "extra")
       .order("criado_em", { ascending: false }),
+    // Rodada 49 — origem da própria peregrinação, para certificados antigos
+    // que não gravaram a origem (a arte mostrava só "Início"), e as cidades
+    // com check-in, na ordem, para os carimbos da "Credencial do peregrino".
+    supabase
+      .from("peregrinacoes")
+      .select("cidade_origem, cidade_inicio")
+      .eq("id", cert.peregrinacao_id)
+      .maybeSingle(),
+    supabase
+      .from("checkins")
+      .select("criado_em, pontos_checkin(cidade)")
+      .eq("peregrinacao_id", cert.peregrinacao_id)
+      .not("ponto_checkin_id", "is", null)
+      .order("criado_em", { ascending: true }),
   ]);
+
+  const certificadoComOrigem: Certificado = {
+    ...cert,
+    origem: cert.origem ?? peregrinacao?.cidade_origem ?? peregrinacao?.cidade_inicio ?? null,
+  };
+  const cidadesCheckin = ((checkinsCidades ?? []) as { pontos_checkin: { cidade: string } | { cidade: string }[] | null }[])
+    .map((c) => (Array.isArray(c.pontos_checkin) ? c.pontos_checkin[0]?.cidade : c.pontos_checkin?.cidade))
+    .filter((cidade): cidade is string => !!cidade);
 
   const listaPacotesExtra = (pacotesExtra ?? []) as CompraRomariaPlus[];
   const pacotesExtraPagos = listaPacotesExtra.filter((p) => p.status === "pago").length;
@@ -89,9 +112,10 @@ export default async function CertificadoPlusPage({
           ou compartilhar.
         </p>
       </div>
-      <CertificadoView certificado={certificado as Certificado} />
+      <CertificadoView certificado={certificadoComOrigem} />
       <RomariaPlusFotos
-        certificado={certificado as Certificado}
+        certificado={certificadoComOrigem}
+        cidadesCheckin={cidadesCheckin}
         compraId={compraId}
         userId={user.id}
         fotosIniciais={(fotos ?? []) as RomariaPlusFoto[]}

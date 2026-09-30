@@ -17,6 +17,8 @@ interface Props {
   pacotesExtraPagos: number;
   // Pacote extra mais recente ainda pendente (voltando do Mercado Pago).
   pacoteExtraPendente: CompraRomariaPlus | null;
+  // Rodada 49 — cidades com check-in, na ordem (carimbos da "Credencial").
+  cidadesCheckin?: string[];
 }
 
 const MAX_FOTOS_INICIAL = 5;
@@ -37,6 +39,7 @@ export default function RomariaPlusFotos({
   fotosIniciais,
   pacotesExtraPagos,
   pacoteExtraPendente,
+  cidadesCheckin = [],
 }: Props) {
   const MAX_FOTOS = MAX_FOTOS_INICIAL + ROMARIA_PLUS_FOTOS_POR_PACOTE * pacotesExtraPagos;
   const [fotos, setFotos] = useState<Record<number, RomariaPlusFoto>>(() => {
@@ -120,6 +123,7 @@ export default function RomariaPlusFotos({
         ajusteInicial={fotoDoSlotAtivo?.ajuste_overlay ?? null}
         contadorDownloadsInicial={fotoDoSlotAtivo?.contador_downloads ?? 0}
         contadorCompartilhamentosInicial={fotoDoSlotAtivo?.contador_compartilhamentos ?? 0}
+        cidadesCheckin={cidadesCheckin}
         onSalvo={aoSalvar}
       />
 
