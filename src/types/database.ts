@@ -358,6 +358,10 @@ export interface AjusteOverlayRomariaPlus {
   // Transparência do bloco de texto (Rodada 49) — 0 a 70, quanto maior mais
   // transparente o título/dados ficam sobre a foto.
   transparenciaTexto?: number;
+  // Modelo "Basílica de Aparecida" (Rodada 52): estilo do desenho da
+  // Basílica e a transparência dele (0 a 80).
+  estiloDesenho?: "claro" | "escuro" | "papel" | "ilustracao";
+  transparenciaDesenho?: number;
 }
 
 // Compra do produto pago "Romaria Plus" (arte personalizada para

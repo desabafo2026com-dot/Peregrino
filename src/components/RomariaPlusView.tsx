@@ -122,6 +122,21 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean }[] = [
 // cima dela, já que os dois juntos é que determinam quanto da foto aparece.
 const TRANSPARENCIA_SELO_PADRAO = 40;
 
+// Rodada 52 — desenho a lápis da Basílica enviado pelo usuário, tratado
+// para virar só o traço (fundo de papel transparente) em duas cores, mais
+// a versão original em papel. Arquivos em public/arte/. "ilustracao" é o
+// desenho colorido em SVG da Rodada 51.
+type EstiloDesenho = "claro" | "escuro" | "papel" | "ilustracao";
+const ESTILOS_DESENHO: { id: EstiloDesenho; nome: string }[] = [
+  { id: "claro", nome: "Traço claro" },
+  { id: "escuro", nome: "Traço escuro" },
+  { id: "papel", nome: "Desenho no papel" },
+  { id: "ilustracao", nome: "Ilustração colorida" },
+];
+// Fundo do modelo Basílica: começa mais escuro que o do Selo, porque o
+// traço claro precisa de contraste.
+const TRANSPARENCIA_FUNDO_BASILICA_PADRAO = 20;
+
 // Frase do título (Rodada 28, a pedido do usuário) — antes era sempre
 // "Romaria para Aparecida", fixo em todos os modelos. Agora o peregrino
 // escolhe a frase, independente do modelo (igual ao ajuste de foto/zoom) —
@@ -193,6 +208,7 @@ function PainelAjustavel({
   onSoltarArraste,
   className,
   children,
+  transparenciaNoPainel = true,
 }: {
   ajuste: AjusteOverlayRomariaPlus;
   editando: boolean;
@@ -201,6 +217,9 @@ function PainelAjustavel({
   onSoltarArraste: () => void;
   className?: string;
   children: React.ReactNode;
+  // false quando o próprio modelo aplica a transparência só no texto (o
+  // modelo "Basílica" tem transparência separada para o desenho).
+  transparenciaNoPainel?: boolean;
 }) {
   // Rodada 49 — transparência do bloco de texto (0 = sólido, até 70 = bem
   // transparente), a pedido do usuário para o "Selo de conquista" e
@@ -253,7 +272,7 @@ function PainelAjustavel({
         top: `${ajuste.y}%`,
         transform: `translate(-50%, -50%) scale(${ajuste.escala / 100})`,
         touchAction: "none",
-        opacity: opacidade,
+        opacity: transparenciaNoPainel ? opacidade : 1,
       }}
       onPointerDown={aoPressionar}
       onPointerMove={aoMover}
@@ -794,6 +813,13 @@ export default function RomariaPlusView({
   const fotoOpacidadeSelo = 0.2 + (transparenciaSelo / 100) * 0.7;
   const fatorEscuridaoSelo = 1 - (transparenciaSelo / 100) * 0.65;
 
+  // Modelo "Basílica" (Rodada 52): estilo e transparência do desenho, e
+  // quanto o fundo escurece a foto (mesmo campo `transparencia` do Selo).
+  const estiloDesenho: EstiloDesenho = ajuste.estiloDesenho ?? "claro";
+  const opacidadeDesenho = 1 - Math.min(80, Math.max(0, ajuste.transparenciaDesenho ?? 0)) / 100;
+  const transparenciaFundoBasilica = ajuste.transparencia ?? TRANSPARENCIA_FUNDO_BASILICA_PADRAO;
+  const fatorEscuridaoBasilica = 1 - (transparenciaFundoBasilica / 100) * 0.85;
+
   // Envia a foto (se ainda não tiver sido enviada) e/ou salva o modelo e o
   // ajuste de posição/tamanho escolhidos, via a função segura
   // "salvar_foto_romaria_plus_slot" (só funciona para a própria compra, já
@@ -870,6 +896,8 @@ export default function RomariaPlusView({
           fraseCustom: ajuste.fraseCustom,
           transparencia: ajuste.transparencia,
           transparenciaTexto: ajuste.transparenciaTexto,
+          estiloDesenho: ajuste.estiloDesenho,
+          transparenciaDesenho: ajuste.transparenciaDesenho,
         }
       : ajuste;
     setAjuste(novoAjuste);
@@ -886,6 +914,8 @@ export default function RomariaPlusView({
       fraseCustom: ajuste.fraseCustom,
       transparencia: ajuste.transparencia,
       transparenciaTexto: ajuste.transparenciaTexto,
+      estiloDesenho: ajuste.estiloDesenho,
+      transparenciaDesenho: ajuste.transparenciaDesenho,
     };
     setAjuste(novoAjuste);
     void persistirFoto(modelo, novoAjuste);
@@ -1708,8 +1738,7 @@ export default function RomariaPlusView({
                 <div
                   className="pointer-events-none absolute inset-0"
                   style={{
-                    background:
-                      "linear-gradient(to top, rgba(11,26,61,0.92) 0%, rgba(11,26,61,0.55) 35%, rgba(0,0,0,0.05) 60%, rgba(0,0,0,0.45) 100%)",
+                    background: `linear-gradient(to top, rgba(11,26,61,${0.92 * fatorEscuridaoBasilica}) 0%, rgba(11,26,61,${0.62 * fatorEscuridaoBasilica}) 38%, rgba(0,0,0,${0.12 * fatorEscuridaoBasilica}) 62%, rgba(0,0,0,${0.45 * fatorEscuridaoBasilica}) 100%)`,
                   }}
                 />
                 {cabecalho(false)}
@@ -1719,21 +1748,40 @@ export default function RomariaPlusView({
                   containerRef={ref}
                   onArrastar={setAjuste}
                   onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
-                  className="flex w-[86%] flex-col items-center gap-[2.5%] text-center text-white"
+                  className="flex w-[94%] flex-col items-center gap-[2.5%] text-center text-white"
+                  transparenciaNoPainel={false}
                 >
-                  <IlustracaoBasilica className="w-[86%] drop-shadow-lg" />
-                  <div className="h-[2px] w-[70%] bg-gradient-to-r from-transparent via-stripe-400 to-transparent" />
-                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
-                    {tituloTexto}
-                  </p>
-                  <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
-                    {ano}
-                  </p>
-                  <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
-                    De {nomeOrigem} à Basílica de Aparecida
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1" style={{ fontSize: "3.1cqw" }}>
-                    {dadosLinha(15)}
+                  <div className="w-full" style={{ opacity: opacidadeDesenho }}>
+                    {estiloDesenho === "ilustracao" ? (
+                      <IlustracaoBasilica className="mx-auto w-[88%] drop-shadow-lg" />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`/arte/basilica-desenho-${estiloDesenho}.webp`}
+                        alt="Desenho da Basílica de Aparecida"
+                        className="block w-full"
+                        style={estiloDesenho === "claro" ? { filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.55))" } : undefined}
+                        draggable={false}
+                      />
+                    )}
+                  </div>
+                  <div
+                    className="flex w-full flex-col items-center gap-[1.2cqw]"
+                    style={{ opacity: 1 - Math.min(70, Math.max(0, ajuste.transparenciaTexto ?? 0)) / 100 }}
+                  >
+                    <div className="h-[2px] w-[70%] bg-gradient-to-r from-transparent via-stripe-400 to-transparent" />
+                    <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
+                      {tituloTexto}
+                    </p>
+                    <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
+                      {ano}
+                    </p>
+                    <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
+                      De {nomeOrigem} à Basílica de Aparecida
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1" style={{ fontSize: "3.1cqw" }}>
+                      {dadosLinha(15)}
+                    </div>
                   </div>
                 </PainelAjustavel>
               </>
@@ -1974,6 +2022,27 @@ export default function RomariaPlusView({
                     {/* Transparência do fundo (Rodada 30, só no "Selo de
                         conquista" — a pedido do usuário: "tem que...
                         deixar mais transparente"). */}
+                    {modelo === "basilica" && (
+                      <>
+                        <label htmlFor="transparencia-fundo-basilica" className="mt-1 text-xs font-medium text-neutral-500">
+                          Transparência do fundo
+                        </label>
+                        <input
+                          id="transparencia-fundo-basilica"
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={10}
+                          value={transparenciaFundoBasilica}
+                          onChange={(e) => {
+                            const novo = { ...ajuste, transparencia: Number(e.target.value) };
+                            setAjuste(novo);
+                            agendarPersistirAjuste(novo);
+                          }}
+                          className="w-full accent-amber-700"
+                        />
+                      </>
+                    )}
                     {modelo === "selo" && (
                       <>
                         <label htmlFor="transparencia-selo-romaria" className="mt-1 text-xs font-medium text-neutral-500">
@@ -2034,6 +2103,46 @@ export default function RomariaPlusView({
                         }}
                         className="w-full accent-amber-700"
                       />
+                      {modelo === "basilica" && (
+                        <>
+                          <label htmlFor="estilo-desenho-basilica" className="mt-1 text-xs font-medium text-neutral-500">
+                            Desenho da Basílica
+                          </label>
+                          <select
+                            id="estilo-desenho-basilica"
+                            value={estiloDesenho}
+                            onChange={(e) => {
+                              const novo = { ...ajuste, estiloDesenho: e.target.value as EstiloDesenho };
+                              setAjuste(novo);
+                              void persistirFoto(modelo, novo);
+                            }}
+                            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+                          >
+                            {ESTILOS_DESENHO.map((e) => (
+                              <option key={e.id} value={e.id}>
+                                {e.nome}
+                              </option>
+                            ))}
+                          </select>
+                          <label htmlFor="transparencia-desenho-basilica" className="mt-1 text-xs font-medium text-neutral-500">
+                            Transparência do desenho
+                          </label>
+                          <input
+                            id="transparencia-desenho-basilica"
+                            type="range"
+                            min={0}
+                            max={80}
+                            step={5}
+                            value={ajuste.transparenciaDesenho ?? 0}
+                            onChange={(e) => {
+                              const novo = { ...ajuste, transparenciaDesenho: Number(e.target.value) };
+                              setAjuste(novo);
+                              agendarPersistirAjuste(novo);
+                            }}
+                            className="w-full accent-amber-700"
+                          />
+                        </>
+                      )}
                       <label htmlFor="transparencia-texto-romaria" className="mt-1 text-xs font-medium text-neutral-500">
                         Transparência do texto
                       </label>
