@@ -22,6 +22,7 @@ import {
   Medal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import IlustracaoBasilica from "@/components/IlustracaoBasilica";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
 
 // Fonte própria para o título — auto-hospedada como arquivos estáticos em
@@ -464,92 +465,83 @@ function FotoComPanZoom({
 // próprios (nada de imagem externa), para a arte sempre sair igual no PNG.
 // ---------------------------------------------------------------------
 
-// Silhueta estilizada da Basílica (desenho próprio, simplificado): nave
-// longa, cúpula central com lanterna e cruz, e a torre alta ao lado.
-function SilhuetaBasilica({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 200 104" className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="ouroBasilica" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#fde68a" />
-          <stop offset="55%" stopColor="#fbbf24" />
-          <stop offset="100%" stopColor="#b45309" />
-        </linearGradient>
-      </defs>
-      <g fill="url(#ouroBasilica)">
-        {/* cruz, lanterna e cúpula */}
-        <rect x="99" y="4" width="2" height="14" />
-        <rect x="95" y="8" width="10" height="2" />
-        <rect x="95.5" y="18" width="9" height="11" rx="1" />
-        <path d="M76,52 C78,30 90,24 100,24 C110,24 122,30 124,52 Z" />
-        <rect x="78" y="50" width="44" height="14" />
-        {/* corpo central e nave */}
-        <rect x="66" y="62" width="68" height="20" />
-        <path d="M22,82 L66,70 L66,82 Z" />
-        <path d="M178,82 L134,70 L134,82 Z" />
-        <rect x="16" y="80" width="168" height="16" />
-        <rect x="6" y="92" width="188" height="8" rx="1" />
-        {/* torre */}
-        <rect x="150" y="30" width="15" height="52" />
-        <path d="M148,31 L157.5,13 L167,31 Z" />
-        <rect x="156.5" y="3" width="2" height="12" />
-        <rect x="153.5" y="6" width="8" height="2" />
-      </g>
-      {/* janelas em arco, recortadas no tom escuro */}
-      <g fill="#0b1a3d" fillOpacity="0.55">
-        {[28, 40, 52, 136, 172].map((x) => (
-          <path key={x} d={`M${x},96 L${x},88 Q${x + 3},84 ${x + 6},88 L${x + 6},96 Z`} />
-        ))}
-        {[84, 94, 104, 114].map((x) => (
-          <path key={x} d={`M${x},80 L${x},70 Q${x + 2.5},66.5 ${x + 5},70 L${x + 5},80 Z`} />
-        ))}
-        <path d="M154,62 L154,46 Q157.5,41 161,46 L161,62 Z" />
-      </g>
-    </svg>
-  );
-}
+// Terço de madeira servindo de moldura da foto (Rodada 51 — a pedido do
+// usuário, no lugar das contas douradas finas da Rodada 49): as 5 dezenas
+// (10 contas + 1 maior entre elas) encostadas umas nas outras em volta da
+// foto, a medalha embaixo e o pingente com a cruz de madeira. Coordenadas
+// no viewBox 100 x 142; o círculo da foto é desenhado por fora, em HTML,
+// alinhado ao mesmo centro (50,50) com raio RAIO_FOTO_TERCO — as contas
+// ficam por cima da borda da foto, como uma moldura.
+const RAIO_FOTO_TERCO = 42;
 
-// Terço completo em volta da foto: 5 dezenas (10 contas pequenas + 1 maior
-// entre elas) formando o círculo, a medalha embaixo e o pingente com a cruz.
-// Coordenadas no viewBox 100 x 132; o círculo da foto é desenhado por fora,
-// em HTML, alinhado a este mesmo centro (50,50) e raio 39.
 function ContasTerco() {
   const cx = 50;
   const cy = 50;
   const r = 45;
-  const inicio = 90 + 9;
-  const fim = 90 + 351;
-  const total = 55;
-  const contas = Array.from({ length: total }, (_, i) => {
-    const ang = ((inicio + ((fim - inicio) * i) / (total - 1)) * Math.PI) / 180;
-    const grande = i % 11 === 10;
-    return { x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang), grande };
+  const rPequena = 2.35;
+  const rGrande = 3.1;
+  const folga = 0.22;
+  // 55 contas no círculo: [10 pequenas + 1 grande] x 5. Distribuídas pelo
+  // tamanho de cada uma (as grandes ocupam mais arco), deixando embaixo o
+  // espaço da medalha.
+  const tipos = Array.from({ length: 55 }, (_, i) => (i % 11 === 10 ? "grande" : "pequena"));
+  const arcoTotal = tipos.reduce((soma, t) => soma + 2 * (t === "grande" ? rGrande : rPequena) + folga, 0);
+  const anguloDisponivel = arcoTotal / r;
+  const inicio = Math.PI / 2 + (2 * Math.PI - anguloDisponivel) / 2;
+  let andado = 0;
+  const contas = tipos.map((t) => {
+    const raio = t === "grande" ? rGrande : rPequena;
+    const ang = inicio + (andado + raio) / r;
+    andado += 2 * raio + folga;
+    return { x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang), raio };
   });
+  const pingente = [
+    { y: 104.5, raio: rGrande },
+    { y: 110.2, raio: rPequena },
+    { y: 115.2, raio: rPequena },
+    { y: 120.2, raio: rPequena },
+    { y: 126, raio: rGrande },
+  ];
   return (
-    <svg viewBox="0 0 100 132" className="absolute inset-0 h-full w-full" aria-hidden="true">
+    <svg viewBox="0 0 100 142" className="absolute inset-0 h-full w-full" aria-hidden="true">
       <defs>
-        <radialGradient id="contaOuro" cx="35%" cy="35%" r="65%">
-          <stop offset="0%" stopColor="#fff7d6" />
-          <stop offset="45%" stopColor="#fbbf24" />
-          <stop offset="100%" stopColor="#92400e" />
+        <radialGradient id="contaMadeira" cx="35%" cy="32%" r="70%">
+          <stop offset="0%" stopColor="#e7b77c" />
+          <stop offset="35%" stopColor="#b27437" />
+          <stop offset="75%" stopColor="#7a4619" />
+          <stop offset="100%" stopColor="#4a2a0e" />
         </radialGradient>
+        <linearGradient id="cruzMadeira" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#6b3d16" />
+          <stop offset="45%" stopColor="#a8692f" />
+          <stop offset="100%" stopColor="#5a3211" />
+        </linearGradient>
       </defs>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#fcd34d" strokeOpacity="0.55" strokeWidth="0.35" />
-      <line x1="50" y1="97" x2="50" y2="123" stroke="#fcd34d" strokeOpacity="0.7" strokeWidth="0.35" />
+      {/* cordão */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#3b2410" strokeOpacity="0.8" strokeWidth="0.6" />
+      <line x1="50" y1="99" x2="50" y2="129" stroke="#3b2410" strokeOpacity="0.8" strokeWidth="0.6" />
       {contas.map((c, i) => (
-        <circle key={i} cx={c.x} cy={c.y} r={c.grande ? 2.3 : 1.55} fill="url(#contaOuro)" />
+        <g key={i}>
+          <circle cx={c.x} cy={c.y} r={c.raio} fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.25" />
+          <circle cx={c.x - c.raio * 0.35} cy={c.y - c.raio * 0.38} r={c.raio * 0.28} fill="#fff4e0" fillOpacity="0.35" />
+        </g>
       ))}
       {/* medalha */}
-      <ellipse cx="50" cy="95.5" rx="3.4" ry="4.2" fill="url(#contaOuro)" />
-      <ellipse cx="50" cy="95.5" rx="2.2" ry="2.9" fill="none" stroke="#92400e" strokeWidth="0.4" />
+      <ellipse cx="50" cy="96" rx="4" ry="4.9" fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.35" />
+      <ellipse cx="50" cy="96" rx="2.6" ry="3.4" fill="none" stroke="#f3d9a8" strokeOpacity="0.7" strokeWidth="0.4" />
+      <rect x="49.55" y="93.6" width="0.9" height="4.8" fill="#f3d9a8" fillOpacity="0.75" />
+      <rect x="48.2" y="95" width="3.6" height="0.9" fill="#f3d9a8" fillOpacity="0.75" />
       {/* pingente */}
-      <circle cx="50" cy="104" r="2.3" fill="url(#contaOuro)" />
-      <circle cx="50" cy="109" r="1.55" fill="url(#contaOuro)" />
-      <circle cx="50" cy="113" r="1.55" fill="url(#contaOuro)" />
-      <circle cx="50" cy="117" r="1.55" fill="url(#contaOuro)" />
-      <circle cx="50" cy="121.5" r="2.3" fill="url(#contaOuro)" />
-      <rect x="49.1" y="124" width="1.8" height="8" rx="0.4" fill="#fbbf24" />
-      <rect x="46.8" y="126" width="6.4" height="1.7" rx="0.4" fill="#fbbf24" />
+      {pingente.map((c) => (
+        <g key={c.y}>
+          <circle cx="50" cy={c.y} r={c.raio} fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.25" />
+          <circle cx={50 - c.raio * 0.35} cy={c.y - c.raio * 0.38} r={c.raio * 0.28} fill="#fff4e0" fillOpacity="0.35" />
+        </g>
+      ))}
+      {/* cruz de madeira */}
+      <rect x="48.3" y="129" width="3.4" height="12.5" rx="0.6" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.3" />
+      <rect x="44.6" y="132" width="10.8" height="3.2" rx="0.6" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.3" />
+      <path d="M49.2,131 L49.2,140 M50.8,130.5 L50.8,139.5 M45.8,133 L54.2,133 M46.2,134.3 L53.8,134.3" stroke="#3b2410" strokeOpacity="0.35" strokeWidth="0.2" />
     </svg>
   );
 }
@@ -573,9 +565,7 @@ function SeloPostal({ ano }: { ano: number }) {
         </g>
       ))}
       <rect x="10" y="10" width="80" height="100" fill="#1e3a8a" />
-      <g transform="translate(18 26) scale(0.32)">
-        <SilhuetaBasilicaPaths />
-      </g>
+      <IlustracaoBasilica x="12" y="20" width="76" height="42" />
       <text x="50" y="84" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fde68a" fontFamily="sans-serif">
         APARECIDA
       </text>
@@ -583,29 +573,6 @@ function SeloPostal({ ano }: { ano: number }) {
         {ano}
       </text>
     </svg>
-  );
-}
-
-// Mesmos traços da silhueta, sem o <svg> em volta — para caber dentro do
-// selo postal.
-function SilhuetaBasilicaPaths() {
-  return (
-    <g fill="#fbbf24">
-      <rect x="99" y="4" width="2" height="14" />
-      <rect x="95" y="8" width="10" height="2" />
-      <rect x="95.5" y="18" width="9" height="11" rx="1" />
-      <path d="M76,52 C78,30 90,24 100,24 C110,24 122,30 124,52 Z" />
-      <rect x="78" y="50" width="44" height="14" />
-      <rect x="66" y="62" width="68" height="20" />
-      <path d="M22,82 L66,70 L66,82 Z" />
-      <path d="M178,82 L134,70 L134,82 Z" />
-      <rect x="16" y="80" width="168" height="16" />
-      <rect x="6" y="92" width="188" height="8" rx="1" />
-      <rect x="150" y="30" width="15" height="52" />
-      <path d="M148,31 L157.5,13 L167,31 Z" />
-      <rect x="156.5" y="3" width="2" height="12" />
-      <rect x="153.5" y="6" width="8" height="2" />
-    </g>
   );
 }
 
@@ -1754,7 +1721,7 @@ export default function RomariaPlusView({
                   onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   className="flex w-[86%] flex-col items-center gap-[2.5%] text-center text-white"
                 >
-                  <SilhuetaBasilica className="w-[80%]" />
+                  <IlustracaoBasilica className="w-[86%] drop-shadow-lg" />
                   <div className="h-[2px] w-[70%] bg-gradient-to-r from-transparent via-stripe-400 to-transparent" />
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
                     {tituloTexto}
@@ -1787,10 +1754,15 @@ export default function RomariaPlusView({
                 <p className="font-bold text-stripe-400" style={{ fontSize: "7.4cqw", textAlign: "center" }}>
                   {ano}
                 </p>
-                <div className="relative mt-[3%] w-[86%]" style={{ aspectRatio: "100 / 132" }}>
+                <div className="relative mt-[3%] w-[84%]" style={{ aspectRatio: "100 / 142" }}>
                   <div
-                    className="absolute overflow-hidden rounded-full ring-2 ring-stripe-300/70"
-                    style={{ left: "11%", top: `${(11 / 132) * 100}%`, width: "78%", height: `${(78 / 132) * 100}%` }}
+                    className="absolute overflow-hidden rounded-full"
+                    style={{
+                      left: `${50 - RAIO_FOTO_TERCO}%`,
+                      top: `${((50 - RAIO_FOTO_TERCO) / 142) * 100}%`,
+                      width: `${RAIO_FOTO_TERCO * 2}%`,
+                      height: `${((RAIO_FOTO_TERCO * 2) / 142) * 100}%`,
+                    }}
                   >
                     <FotoComPanZoom
                       src={fotoUrl}
