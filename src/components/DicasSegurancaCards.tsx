@@ -11,6 +11,7 @@ import {
   HeadphoneOff,
   OctagonPause,
   TrafficCone,
+  MoveHorizontal,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,6 +31,11 @@ const DICAS: Dica[] = [
     titulo: "Caminhe de frente para os carros",
     texto: "Sem marginal ou acostamento largo, ande sempre de frente para o tráfego, vendo quem vem.",
     Icone: Footprints,
+  },
+  {
+    titulo: "Caminhe o mais longe possível da rodovia",
+    texto: "Sempre que houver espaço (acostamento largo, gramado, calçada ou marginal), afaste-se ao máximo da pista: cada metro a mais é mais segurança.",
+    Icone: MoveHorizontal,
   },
   {
     titulo: "Utilize roupas claras!",
@@ -83,21 +89,22 @@ const DICAS: Dica[] = [
   },
 ];
 
+// Rodada 57 — só as duas cores do ícone do app, alternando: azul do céu
+// e laranja do pôr do sol (o amarelo e o branco saíram, a pedido do usuário).
 const ESTILOS = [
-  { fundo: "#1e2a4a", texto: "#ffffff", titulo: "#fbbf24", icone: "#fbbf24", circulo: "rgba(255,255,255,0.08)" },
-  { fundo: "#fbbf24", texto: "#2b1a0a", titulo: "#1e2a4a", icone: "#1e2a4a", circulo: "rgba(255,255,255,0.35)" },
-  { fundo: "#ffffff", texto: "#3f3f46", titulo: "#9a3412", icone: "#c2410c", circulo: "#fef3c7" },
+  { fundo: "#1f3b6b", texto: "#ffffff", titulo: "#f5a54a", icone: "#f5a54a", circulo: "rgba(255,255,255,0.10)" },
+  { fundo: "#e0892b", texto: "#1f1408", titulo: "#1f3b6b", icone: "#1f3b6b", circulo: "rgba(255,255,255,0.30)" },
 ];
 
 export default function DicasSegurancaCards() {
   return (
     <div className="flex flex-col gap-3">
       <div className="card flex flex-col items-center gap-2 text-center">
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "#1f3b6b", color: "#f5a54a" }}>
           <Lightbulb size={30} />
         </span>
         <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "center" }}>
-          Selecionamos algumas <strong className="text-amber-800 dark:text-amber-500">SUGESTÕES</strong> para tornar sua
+          Selecionamos algumas <strong style={{ color: "#e0892b" }}>SUGESTÕES</strong> para tornar sua
           peregrinação ainda mais segura e gratificante:
         </p>
       </div>
@@ -108,7 +115,7 @@ export default function DicasSegurancaCards() {
           return (
             <article
               key={d.titulo}
-              className={`flex items-center gap-4 overflow-hidden rounded-2xl p-4 shadow-sm ${e.fundo === "#ffffff" ? "border border-neutral-200 dark:border-neutral-800" : ""} ${iconeADireita ? "flex-row" : "flex-row-reverse"}`}
+              className={`flex items-center gap-4 overflow-hidden rounded-2xl p-4 shadow-sm ${iconeADireita ? "flex-row" : "flex-row-reverse"}`}
               style={{ background: e.fundo, color: e.texto }}
             >
               <div className="min-w-0 flex-1">

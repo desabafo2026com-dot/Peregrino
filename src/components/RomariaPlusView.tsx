@@ -51,6 +51,7 @@ export type Modelo =
   | "selo"
   // Rodada 49 — quatro modelos novos (Migration 43 libera no banco).
   | "basilica"
+  | "santa"
   | "terco"
   | "postal"
   | "credencial";
@@ -112,6 +113,7 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean; soAdmin?: boolean
   { id: "itinerario", nome: "Itinerário", temAjuste: true },
   { id: "selo", nome: "Selo de conquista", temAjuste: true },
   { id: "basilica", nome: "Basílica de Aparecida", temAjuste: true, soAdmin: true },
+  { id: "santa", nome: "Nossa Senhora Aparecida", temAjuste: true },
   { id: "terco", nome: "Terço", temAjuste: false },
   { id: "postal", nome: "Cartão-postal", temAjuste: false },
   { id: "credencial", nome: "Credencial do peregrino", temAjuste: false },
@@ -135,6 +137,36 @@ const ESTILOS_DESENHO: { id: EstiloDesenho; nome: string }[] = [
   { id: "escuro", nome: "Traço escuro" },
   { id: "papel", nome: "Desenho no papel" },
   { id: "foto", nome: "Foto da Basílica" },
+];
+// Rodada 57 — as listras do Cartão-postal e os veios do Terço eram
+// "repeating-linear-gradient", que o motor reserva de geração da imagem
+// (usado em alguns computadores) não desenha direito — saía uma moldura
+// vermelha lisa. Agora são desenhos SVG do tamanho da arte (1080x1920),
+// que os dois motores desenham igual.
+function svgFundo(conteudo: string) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" preserveAspectRatio="none">${conteudo}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 0 0 / 100% 100% no-repeat`;
+}
+const FUNDO_LISTRAS_CORREIO = svgFundo(
+  '<defs><pattern id="l" patternUnits="userSpaceOnUse" width="129.6" height="4000" patternTransform="rotate(45)">' +
+    '<rect width="32.4" height="4000" fill="#b91c1c"/><rect x="32.4" width="32.4" height="4000" fill="#fffdf7"/>' +
+    '<rect x="64.8" width="32.4" height="4000" fill="#1d4ed8"/><rect x="97.2" width="32.4" height="4000" fill="#fffdf7"/>' +
+    '</pattern></defs><rect width="1080" height="1920" fill="url(#l)"/>'
+);
+const FUNDO_VEIOS_MADEIRA = svgFundo(
+  '<defs><pattern id="v" patternUnits="userSpaceOnUse" width="16.2" height="1920">' +
+    '<rect width="6.5" height="1920" fill="rgba(0,0,0,0.05)"/><rect x="6.5" width="9.7" height="1920" fill="rgba(255,255,255,0.03)"/>' +
+    '</pattern></defs><rect width="1080" height="1920" fill="url(#v)"/>'
+);
+
+// Rodada 57 — modelo "Nossa Senhora Aparecida", nos mesmos moldes da
+// Basílica, para todos: desenho a lápis enviado pelo usuário (traço claro,
+// traço escuro ou no papel) ou a versão colorida do ícone do app.
+const ESTILOS_SANTA: { id: EstiloDesenho; nome: string }[] = [
+  { id: "claro", nome: "Traço claro" },
+  { id: "escuro", nome: "Traço escuro" },
+  { id: "papel", nome: "Desenho no papel" },
+  { id: "foto", nome: "Colorida" },
 ];
 // Fundo do modelo Basílica: começa mais escuro que o do Selo, porque o
 // traço claro precisa de contraste.
@@ -171,6 +203,7 @@ const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   itinerario: { x: 50, y: 55, escala: 100 },
   selo: { x: 50, y: 56, escala: 100 },
   basilica: { x: 50, y: 72, escala: 100 },
+  santa: { x: 50, y: 60, escala: 100 },
   terco: null,
   postal: null,
   credencial: null,
@@ -765,6 +798,11 @@ export default function RomariaPlusView({
     FRASES_TITULO.find((f) => f.id === (ajuste.frase ?? "peregrinacao")) ?? FRASES_TITULO[0];
   const tituloTexto =
     fraseSelecionada.texto ?? (ajuste.fraseCustom?.trim() || FRASES_TITULO[0].texto!);
+  // Rodada 57 — frase longa (2 ou 3 linhas) empurrava as datas/dados para
+  // fora da arte. Agora o título encolhe conforme o tamanho do texto.
+  const fatorTitulo =
+    tituloTexto.length <= 22 ? 1 : tituloTexto.length <= 28 ? 0.88 : tituloTexto.length <= 34 ? 0.8 : 0.72;
+  const fonteTitulo = (base: number) => `${(base * fatorTitulo).toFixed(2)}cqw`;
 
   // Transparência do "Selo de conquista" (Rodada 30) — um só controle que
   // afeta tanto a opacidade da foto em si quanto a intensidade do gradiente
@@ -1334,7 +1372,7 @@ export default function RomariaPlusView({
                   onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   className="flex w-[86%] flex-col items-center gap-[3%] px-[2%] py-[3%] text-center text-white"
                 >
-                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "7.2cqw", lineHeight: 1.05, textAlign: "center" }}>
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(7.2), lineHeight: 1.05, textAlign: "center" }}>
                     {tituloTexto}
                   </p>
                   <p className="font-bold text-stripe-400" style={{ fontSize: "9cqw", textAlign: "center" }}>
@@ -1368,7 +1406,7 @@ export default function RomariaPlusView({
             {modelo === "destaque" && (
               <div className="absolute inset-0 flex flex-col items-center bg-gradient-to-br from-amber-800 via-amber-900 to-neutral-900 px-[7%] pt-[8%] pb-[6%] text-center text-white">
                 <div className="absolute inset-x-0 top-0 h-[2.2%] bg-stripe-400" />
-                <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.4cqw", lineHeight: 1.15, textAlign: "center" }}>
+                <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.15, textAlign: "center" }}>
                   {tituloTexto}
                 </p>
                 <p className="mb-[4%] font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
@@ -1459,7 +1497,7 @@ export default function RomariaPlusView({
                 >
                   <p
                     className="mt-[1%]"
-                    style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}
+                    style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.6), lineHeight: 1.05, textAlign: "center" }}
                   >
                     {tituloTexto}
                   </p>
@@ -1518,7 +1556,7 @@ export default function RomariaPlusView({
                       />
                     </div>
                     <div className="mt-[4%] flex flex-col items-center gap-[2%] text-center text-amber-900">
-                      <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "5.4cqw", lineHeight: 1.1, textAlign: "center" }}>
+                      <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(5.4), lineHeight: 1.1, textAlign: "center" }}>
                         {tituloTexto}
                       </p>
                       <p className="font-bold text-amber-700" style={{ fontSize: "6.2cqw", textAlign: "center" }}>
@@ -1605,7 +1643,7 @@ export default function RomariaPlusView({
                   onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   className="flex w-[84%] flex-col items-center gap-[4%] text-center text-white"
                 >
-                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.6), lineHeight: 1.05, textAlign: "center" }}>
                     {tituloTexto}
                   </p>
                   <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
@@ -1713,7 +1751,7 @@ export default function RomariaPlusView({
                       </span>
                     </div>
                   </div>
-                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.4cqw", lineHeight: 1.1, textAlign: "center" }}>
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.1, textAlign: "center" }}>
                     {tituloTexto}
                   </p>
                   <div
@@ -1784,7 +1822,7 @@ export default function RomariaPlusView({
                     style={{ opacity: 1 - Math.min(70, Math.max(0, ajuste.transparenciaTexto ?? 0)) / 100 }}
                   >
                     <div className="h-[2px] w-[70%] bg-gradient-to-r from-transparent via-stripe-400 to-transparent" />
-                    <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.6cqw", lineHeight: 1.05, textAlign: "center" }}>
+                    <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.6), lineHeight: 1.05, textAlign: "center" }}>
                       {tituloTexto}
                     </p>
                     <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
@@ -1801,6 +1839,66 @@ export default function RomariaPlusView({
               </>
             )}
 
+            {/* "Nossa Senhora Aparecida" (Rodada 57) — igual à Basílica, com o
+                desenho da Santa enviado pelo usuário. */}
+            {modelo === "santa" && (
+              <>
+                <FotoComPanZoom
+                  src={fotoUrl}
+                  fotoPos={fotoPos}
+                  fotoEscala={fotoEscala}
+                  editando={editandoFoto}
+                  onArrastar={moverFoto}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                />
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background: `linear-gradient(to top, rgba(11,26,61,${0.92 * fatorEscuridaoBasilica}) 0%, rgba(11,26,61,${0.62 * fatorEscuridaoBasilica}) 38%, rgba(0,0,0,${0.12 * fatorEscuridaoBasilica}) 62%, rgba(0,0,0,${0.45 * fatorEscuridaoBasilica}) 100%)`,
+                  }}
+                />
+                {cabecalho(false)}
+                <PainelAjustavel
+                  ajuste={ajuste}
+                  editando={editando}
+                  containerRef={ref}
+                  onArrastar={setAjuste}
+                  onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  className="flex w-[90%] flex-col items-center gap-[2.5%] text-center text-white"
+                  transparenciaNoPainel={false}
+                >
+                  <div className="w-[74%]" style={{ opacity: opacidadeDesenho }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={estiloDesenho === "foto" ? "/arte/santa-colorida.webp" : `/arte/santa-desenho-${estiloDesenho}.webp`}
+                      alt="Nossa Senhora Aparecida"
+                      className="block w-full"
+                      style={estiloDesenho === "claro" ? { filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.55))" } : undefined}
+                      draggable={false}
+                    />
+                  </div>
+                  <div
+                    className="flex w-full flex-col items-center gap-[1.2cqw]"
+                    style={{ opacity: 1 - Math.min(70, Math.max(0, ajuste.transparenciaTexto ?? 0)) / 100 }}
+                  >
+                    <div className="h-[2px] w-[70%] bg-gradient-to-r from-transparent via-stripe-400 to-transparent" />
+                    <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.6), lineHeight: 1.05, textAlign: "center" }}>
+                      {tituloTexto}
+                    </p>
+                    <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", textAlign: "center" }}>
+                      {ano}
+                    </p>
+                    <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
+                      De {nomeOrigem} a Aparecida-SP
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1" style={{ fontSize: "3.1cqw" }}>
+                      {dadosLinha(15)}
+                    </div>
+                  </div>
+                </PainelAjustavel>
+              </>
+            )}
+
             {/* "Terço" (Rodada 49) — a foto num círculo no centro, rodeada
                 por um terço dourado (5 dezenas, medalha e cruz), sobre o azul
                 do manto de Nossa Senhora. */}
@@ -1808,12 +1906,11 @@ export default function RomariaPlusView({
               <div
                 className="absolute inset-0 flex flex-col items-center pt-[15%] pb-[4%] text-center text-white"
                 style={{
-                  background:
-                    "repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 0.6cqw, rgba(255,255,255,0.03) 0.6cqw 1.5cqw), linear-gradient(180deg, #7a4a24 0%, #5c3518 60%, #3f230e 100%)",
+                  background: `${FUNDO_VEIOS_MADEIRA}, linear-gradient(180deg, #7a4a24 0%, #5c3518 60%, #3f230e 100%)`,
                 }}
               >
                 {cabecalho(false)}
-                <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.2cqw", lineHeight: 1.08, textAlign: "center", textShadow: "0 2px 6px rgba(0,0,0,.45)" }}>
+                <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.2), lineHeight: 1.08, textAlign: "center", textShadow: "0 2px 6px rgba(0,0,0,.45)" }}>
                   {tituloTexto}
                 </p>
                 <p className="font-bold text-stripe-400" style={{ fontSize: "7cqw", textAlign: "center", textShadow: "0 2px 6px rgba(0,0,0,.45)" }}>
@@ -1869,8 +1966,7 @@ export default function RomariaPlusView({
               <div
                 className="absolute inset-0 p-[3%]"
                 style={{
-                  background:
-                    "repeating-linear-gradient(-45deg, #b91c1c 0 3cqw, #fffdf7 3cqw 6cqw, #1d4ed8 6cqw 9cqw, #fffdf7 9cqw 12cqw)",
+                  background: FUNDO_LISTRAS_CORREIO,
                 }}
               >
                 <div className="relative flex h-full w-full flex-col items-center px-[5%] pt-[14%] pb-[5%]" style={{ background: "#f3e9d2" }}>
@@ -1912,7 +2008,7 @@ export default function RomariaPlusView({
                   </div>
                   <div className="mt-[4%] flex w-full flex-1 items-center gap-[4%]">
                     <div className="flex min-w-0 flex-1 flex-col gap-[5%] text-amber-950" style={{ textAlign: "left" }}>
-                      <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.2cqw", lineHeight: 1.1, textAlign: "left" }}>
+                      <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.2), lineHeight: 1.1, textAlign: "left" }}>
                         {tituloTexto}
                       </p>
                       <p className="border-b border-amber-900/30 pb-[2%]" style={{ fontSize: "3.6cqw", textAlign: "left" }}>
@@ -1947,7 +2043,7 @@ export default function RomariaPlusView({
                   <p className="font-bold tracking-[0.25em] text-amber-800" style={{ fontSize: "2.6cqw", textAlign: "center" }}>
                     CREDENCIAL DO PEREGRINO
                   </p>
-                  <p className="mt-[1%]" style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "5.4cqw", lineHeight: 1.1, textAlign: "center" }}>
+                  <p className="mt-[1%]" style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(5.4), lineHeight: 1.1, textAlign: "center" }}>
                     {tituloTexto} <span className="text-amber-700">{ano}</span>
                   </p>
                   <div className="mt-[3%] flex w-full items-stretch gap-[4%]">
@@ -2049,7 +2145,7 @@ export default function RomariaPlusView({
                     {/* Transparência do fundo (Rodada 30, só no "Selo de
                         conquista" — a pedido do usuário: "tem que...
                         deixar mais transparente"). */}
-                    {modelo === "basilica" && (
+                    {(modelo === "basilica" || modelo === "santa") && (
                       <>
                         <label htmlFor="transparencia-fundo-basilica" className="mt-1 text-xs font-medium text-neutral-500">
                           Transparência do fundo
@@ -2130,10 +2226,10 @@ export default function RomariaPlusView({
                         }}
                         className="w-full accent-amber-700"
                       />
-                      {modelo === "basilica" && (
+                      {(modelo === "basilica" || modelo === "santa") && (
                         <>
                           <label htmlFor="estilo-desenho-basilica" className="mt-1 text-xs font-medium text-neutral-500">
-                            Desenho da Basílica
+                            {modelo === "santa" ? "Desenho de Nossa Senhora" : "Desenho da Basílica"}
                           </label>
                           <select
                             id="estilo-desenho-basilica"
@@ -2145,7 +2241,7 @@ export default function RomariaPlusView({
                             }}
                             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
                           >
-                            {ESTILOS_DESENHO.map((e) => (
+                            {(modelo === "santa" ? ESTILOS_SANTA : ESTILOS_DESENHO).map((e) => (
                               <option key={e.id} value={e.id}>
                                 {e.nome}
                               </option>

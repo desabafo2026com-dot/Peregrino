@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
+import CertificadoView from "@/components/CertificadoView";
 import RomariaPlusCompra from "@/components/RomariaPlusCompra";
 import MensagemConquistaForm from "@/components/MensagemConquistaForm";
 import VoltarButton from "@/components/VoltarButton";
@@ -105,6 +106,21 @@ export default async function CertificadoPage() {
     }
   });
 
+  // Ano de conclusão (horário de Brasília) de cada certificado, mais recente primeiro.
+  const anoDe = (c: Certificado) =>
+    Number(
+      new Date(c.data_fim ?? c.emitido_em).toLocaleString("en-US", { timeZone: "America/Sao_Paulo", year: "numeric" })
+    );
+  const porAno = new Map<number, Certificado[]>();
+  certificadosLista.forEach((c) => {
+    const ano = anoDe(c);
+    porAno.set(ano, [...(porAno.get(ano) ?? []), c]);
+  });
+  const anos = Array.from(porAno.keys()).sort((a, b) => b - a);
+  const origemPorPeregrinacao = new Map(
+    ((concluidasData ?? []) as Peregrinacao[]).map((p) => [p.id, p.cidade_origem ?? p.cidade_inicio ?? null])
+  );
+
   const mensagemPorCertificado = new Map<string, MensagemConquista>();
   ((mensagensConquista ?? []) as MensagemConquista[]).forEach((m) => {
     mensagemPorCertificado.set(m.certificado_id, m);
@@ -114,49 +130,58 @@ export default async function CertificadoPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
       <VoltarButton href="/painel" />
       <h1 className="text-2xl font-bold">Meus certificados</h1>
-      {certificadosLista.map((c) => {
-        const compra = compraPorCertificado.get(c.id) ?? null;
-        const pago = compra?.status === "pago";
-        return (
-          <div key={c.id} id={`certificado-${c.id}`} className="flex scroll-mt-6 flex-col gap-4">
-            {/* O link "Certificado Plus →" que ficava aqui, ao lado deste
-                título, foi movido (Rodada 16) para o lado direito de cada
-                peregrinação concluída, na lista de "Minha peregrinação" —
-                não fazia sentido ficar dentro desta página, que já mostra o
-                certificado grátis logo abaixo. */}
-            <h2 className="text-lg font-bold text-amber-800 dark:text-amber-500">Certificado</h2>
-            {/* Grátis, sempre disponível para quem concluiu a peregrinação —
-                sem a arte de pergaminho, que agora é exclusiva de quem compra
-                a Romaria Plus (ver "Certificado Plus" abaixo). */}
-            <CertificadoGratuitoView certificado={c} />
+      {anos.map((ano) => (
+        <section key={ano} className="flex flex-col gap-8">
+          {/* Rodada 57 — certificados separados por ano. */}
+          <h2 className="flex items-center gap-3 text-xl font-extrabold">
+            <span className="rounded-full px-4 py-1 text-white" style={{ background: "#1f3b6b" }}>
+              {ano}
+            </span>
+            <span className="h-px flex-1 bg-amber-200 dark:bg-amber-900" />
+          </h2>
+          {porAno.get(ano)!.map((c) => {
+            const compra = compraPorCertificado.get(c.id) ?? null;
+            const pago = compra?.status === "pago";
+            const comOrigem: Certificado = { ...c, origem: c.origem ?? origemPorPeregrinacao.get(c.peregrinacao_id) ?? null };
+            return (
+              <div key={c.id} id={`certificado-${c.id}`} className="flex scroll-mt-6 flex-col gap-4">
+                <h3 className="text-lg font-bold text-amber-800 dark:text-amber-500">Certificado</h3>
+                <CertificadoGratuitoView certificado={c} />
 
-            <MensagemConquistaForm
-              certificadoId={c.id}
-              userId={user.id}
-              nome={c.nome_peregrino.trim().split(/\s+/)[0]}
-              cidade={c.origem}
-              mensagemInicial={mensagemPorCertificado.get(c.id) ?? null}
-            />
-
-            <div id={`romaria-plus-${c.id}`} className="mt-2 flex scroll-mt-6 flex-col gap-4 border-t border-dashed border-amber-200 pt-6 dark:border-amber-900">
-              <h2 className="text-center text-lg font-bold text-amber-800 dark:text-amber-500">Certificado Plus</h2>
-              {pago && compra ? (
-                // A partir da Rodada 18 a arte de pergaminho e o editor das
-                // até 5 fotos ficam numa página própria, separada deste
-                // certificado grátis (antes vinham embutidos aqui mesmo).
-                <Link
-                  href={`/certificado/plus/${c.id}`}
-                  className="card flex items-center justify-center gap-2 text-center font-semibold text-amber-800 transition hover:border-amber-300 dark:text-amber-500"
+                <div
+                  id={`romaria-plus-${c.id}`}
+                  className="mt-2 flex scroll-mt-6 flex-col gap-4 border-t border-dashed border-amber-200 pt-6 dark:border-amber-900"
                 >
-                  <Sparkles size={18} /> Minhas fotos da Romaria Plus →
-                </Link>
-              ) : (
-                <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} isAdmin={isAdmin} />
-              )}
-            </div>
-          </div>
-        );
-      })}
+                  <h3 className="text-center text-lg font-bold text-amber-800 dark:text-amber-500">Certificado Plus</h3>
+                  {pago && compra ? (
+                    <>
+                      {/* Rodada 57 — o Certificado Plus (pergaminho) fica aqui,
+                          em Meus certificados; a página do Plus ficou só com as fotos. */}
+                      <CertificadoView certificado={comOrigem} />
+                      <Link
+                        href={`/certificado/plus/${c.id}`}
+                        className="card flex items-center justify-center gap-2 text-center font-semibold text-amber-800 transition hover:border-amber-300 dark:text-amber-500"
+                      >
+                        <Sparkles size={18} /> Minhas fotos da Romaria Plus →
+                      </Link>
+                    </>
+                  ) : (
+                    <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} isAdmin={isAdmin} />
+                  )}
+                </div>
+
+                <MensagemConquistaForm
+                  certificadoId={c.id}
+                  userId={user.id}
+                  nome={c.nome_peregrino.trim().split(/\s+/)[0]}
+                  cidade={c.origem}
+                  mensagemInicial={mensagemPorCertificado.get(c.id) ?? null}
+                />
+              </div>
+            );
+          })}
+        </section>
+      ))}
 
       <HistoricoPeregrinacoes lista={historico} temPeregrinacaoAtiva={!!ativa} />
     </div>

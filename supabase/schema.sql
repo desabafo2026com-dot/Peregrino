@@ -4310,3 +4310,26 @@ $$;
 grant execute on function public.excluir_foto_romaria_plus_slot(uuid, int) to authenticated;
 
 -- FIM DA MIGRATION 46
+
+-- =====================================================================
+-- MIGRATION 47 — Rodada 57: novo modelo de arte "Nossa Senhora Aparecida"
+-- ---------------------------------------------------------------------
+-- Só amplia a lista de modelos aceitos pelo banco com 'santa'.
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+alter table public.romaria_plus_fotos
+  drop constraint if exists romaria_plus_fotos_modelo_check;
+alter table public.romaria_plus_fotos
+  add constraint romaria_plus_fotos_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo',
+                    'basilica', 'santa', 'terco', 'postal', 'credencial'));
+
+alter table public.compras_romaria_plus
+  drop constraint if exists compras_romaria_plus_modelo_check;
+alter table public.compras_romaria_plus
+  add constraint compras_romaria_plus_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo',
+                    'basilica', 'santa', 'terco', 'postal', 'credencial'));
+
+-- FIM DA MIGRATION 47

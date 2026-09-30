@@ -192,7 +192,9 @@ export default function RomariaPlusFotos({
           os slots liberados até agora já foram usados, exatamente como
           pedido pelo usuário ("a opção só fica disponível após o usuário
           completar as 5 que ele adquiriu"). */}
-      {(!podeAdicionarNova || pacoteExtraPendente) && (
+      {/* Rodada 57 — "adquirir mais 5" aparece quando TODAS as fotos
+          liberadas até agora já foram salvas (baixadas/compartilhadas). */}
+      {(salvas >= MAX_FOTOS || pacoteExtraPendente) && (
         <RomariaPlusComprarExtra compraId={compraId} pacoteExtraPendenteInicial={pacoteExtraPendente} />
       )}
     </div>

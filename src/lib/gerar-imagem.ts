@@ -118,16 +118,33 @@ export async function gerarPngDoElemento(
   };
 
   let resultado: string | null = null;
+  let motivo = "";
+  // Chave de teste: localStorage "peregrino:forcarPlanoB" = "1" força o plano B.
+  let forcarPlanoB = false;
   try {
-    if (ehIOS()) await toPng(el, opcoes);
-    resultado = await toPng(el, opcoes);
+    forcarPlanoB = window.localStorage.getItem("peregrino:forcarPlanoB") === "1";
   } catch {
-    resultado = null;
+    forcarPlanoB = false;
+  }
+  if (forcarPlanoB) {
+    motivo = "forçado para teste";
+  } else {
+    try {
+      if (ehIOS()) await toPng(el, opcoes);
+      resultado = await toPng(el, opcoes);
+    } catch (e) {
+      resultado = null;
+      motivo = `erro: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
-  if (resultado && !(await imagemPareceCortada(resultado))) return ajustarTamanho(resultado, larguraFinal, alturaSaida);
+  if (resultado) {
+    if (!(await imagemPareceCortada(resultado))) return ajustarTamanho(resultado, larguraFinal, alturaSaida);
+    motivo = "bordas vazias (corte)";
+  }
 
   // Plano B: outro motor de desenho.
+  console.info(`[arte] usando o plano B (${motivo}); tela ${largura}x${altura}, dpr ${window.devicePixelRatio}`);
   const { default: html2canvas } = await import("html2canvas-pro");
   const canvas = await html2canvas(el, {
     scale: escala,

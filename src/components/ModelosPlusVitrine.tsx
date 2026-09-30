@@ -19,7 +19,10 @@ function ImagemModelo({ numero, onFalhou }: { numero: number; onFalhou: () => vo
       src={`/imagens-plus/modelo-${numero}.${EXTENSOES[tentativa]}`}
       alt={`Modelo ${numero} da Romaria Plus`}
       loading="lazy"
-      className={`h-56 w-auto shrink-0 snap-center rounded-xl object-cover shadow-md ${carregada ? "" : "hidden"}`}
+      // Rodada 57 — antes ficava "display: none" até carregar, e com
+      // loading="lazy" o navegador nunca carregava (imagem escondida).
+      // Agora ocupa o espaço (9:16) invisível até carregar.
+      className={`aspect-[9/16] h-56 w-auto shrink-0 snap-center rounded-xl object-cover shadow-md transition-opacity ${carregada ? "opacity-100" : "opacity-0"}`}
       onLoad={() => setCarregada(true)}
       onError={() => {
         if (tentativa < EXTENSOES.length - 1) setTentativa((t) => t + 1);

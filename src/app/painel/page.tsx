@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
-import type { Profile, RomariaPlusFoto } from "@/types/database";
+import RomariaPlusComprarExtra from "@/components/RomariaPlusComprarExtra";
+import { ROMARIA_PLUS_VALOR_CENTAVOS } from "@/lib/constants";
+import type { CompraRomariaPlus, Profile, RomariaPlusFoto } from "@/types/database";
 
 export const metadata = {
   title: "Meu painel — O Peregrino",
@@ -64,9 +66,10 @@ function Modulo({
   );
 }
 
-const AZUL = { fundo: "#1e2a4a", icone: "#fbbf24" };
-const OURO = { fundo: "#fbbf24", icone: "#1e2a4a" };
-const CREME = { fundo: "#fef3c7", icone: "#c2410c" };
+const VALOR_PLUS = `R$ ${(ROMARIA_PLUS_VALOR_CENTAVOS / 100).toFixed(2).replace(".", ",")}`;
+const AZUL = { fundo: "#1f3b6b", icone: "#f5a54a" };
+const OURO = { fundo: "#e0892b", icone: "#ffffff" };
+const CREME = { fundo: "#fbe3c9", icone: "#b8621a" };
 
 export default async function PainelPage() {
   const supabase = await createClient();
@@ -118,13 +121,23 @@ export default async function PainelPage() {
   const maxFotos = 5 + 5 * pacotesExtra;
 
   let artesSalvas: RomariaPlusFoto[] = [];
+  let pacoteExtraPendente: CompraRomariaPlus | null = null;
   if (compraPlus) {
-    const { data: fotosData } = await supabase
-      .from("romaria_plus_fotos")
-      .select("*")
-      .eq("compra_id", compraPlus.id)
-      .order("indice");
+    const [{ data: fotosData }, { data: pendenteData }] = await Promise.all([
+      supabase.from("romaria_plus_fotos").select("*").eq("compra_id", compraPlus.id).order("indice"),
+      // Pacote extra (+5) ainda confirmando pagamento, se houver.
+      supabase
+        .from("compras_romaria_plus")
+        .select("*")
+        .eq("compra_pai_id", compraPlus.id)
+        .eq("tipo", "extra")
+        .eq("status", "pendente")
+        .order("criado_em", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
     artesSalvas = ((fotosData ?? []) as RomariaPlusFoto[]).filter((f) => !!f.arte_url);
+    pacoteExtraPendente = (pendenteData as CompraRomariaPlus | null) ?? null;
   }
 
   const qtdCertificados = certificados?.length ?? 0;
@@ -155,9 +168,9 @@ export default async function PainelPage() {
       <Link
         href="/peregrinacao"
         className="flex items-center gap-4 rounded-2xl p-4 text-white shadow-md transition hover:brightness-110"
-        style={{ background: "linear-gradient(135deg, #1e2a4a 0%, #2c3e6b 60%, #c2410c 140%)" }}
+        style={{ background: "linear-gradient(135deg, #1f3b6b 0%, #2c4f8a 55%, #e0892b 140%)" }}
       >
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15" style={{ color: "#fbbf24" }}>
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15" style={{ color: "#f5a54a" }}>
           <Footprints size={26} />
         </span>
         <span className="min-w-0 flex-1">
@@ -229,6 +242,12 @@ export default async function PainelPage() {
 
         {compraPlus ? (
           <>
+            {artesSalvas.length === 0 && (
+              <>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-500">Use suas fotos para criar a arte</p>
+                <ModelosPlusVitrine />
+              </>
+            )}
             <div className="grid grid-cols-5 gap-2">
               {Array.from({ length: Math.max(5, artesSalvas.length) }, (_, i) => artesSalvas[i] ?? null).map((f, i) =>
                 f ? (
@@ -257,22 +276,36 @@ export default async function PainelPage() {
               href={`/certificado/plus/${compraPlus.certificado_id}`}
               className="btn-primary flex items-center justify-center gap-2"
             >
-              <Sparkles size={16} /> {artesSalvas.length < maxFotos ? "Criar e ver minhas artes" : "Ver minhas artes"}
+              <Sparkles size={16} />{" "}
+              {artesSalvas.length === 0
+                ? "Criar minha primeira arte"
+                : artesSalvas.length < maxFotos
+                  ? "Criar e ver minhas artes"
+                  : "Ver minhas artes"}
             </Link>
+            {/* Rodada 57 — completou as artes liberadas: oferece mais 5. */}
+            {(artesSalvas.length >= maxFotos || pacoteExtraPendente) && (
+              <RomariaPlusComprarExtra compraId={compraPlus.id} pacoteExtraPendenteInicial={pacoteExtraPendente} />
+            )}
           </>
         ) : (
           <>
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-500">Use suas fotos para criar a arte</p>
             <ModelosPlusVitrine />
             <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
-              Com a <strong>Romaria Plus</strong> você recebe o Certificado Plus e transforma até 5 fotos da sua
-              caminhada em artes para guardar e compartilhar.
+              Com a <strong>Romaria Plus</strong> você transforma <strong>5 fotos</strong> da sua caminhada em
+              artes para guardar e compartilhar e ganha o <strong>Certificado Plus</strong>. Usou as 5? Dá para
+              comprar mais 5.
             </p>
             {ultimoCertificadoId ? (
               <Link
                 href={`/certificado#romaria-plus-${ultimoCertificadoId}`}
-                className="btn-primary flex items-center justify-center gap-2"
+                className="flex w-full flex-col items-center gap-0.5 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 text-white shadow-md transition hover:from-amber-700 hover:to-amber-900"
               >
-                <Sparkles size={16} /> Quero a Romaria Plus
+                <span className="flex items-center gap-2 text-lg font-black">
+                  <Sparkles size={18} /> Adquirir por {VALOR_PLUS}
+                </span>
+                <span className="text-sm font-semibold text-amber-50">5 artes com suas fotos + Certificado Plus</span>
               </Link>
             ) : (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-300" style={{ textAlign: "left" }}>

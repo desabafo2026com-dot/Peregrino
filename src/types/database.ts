@@ -398,7 +398,7 @@ export interface CompraRomariaPlus {
   // aqui só para compras antigas que ainda não foram migradas na tela
   // (a migration 24 já copia o que existir para a foto de índice 1).
   // "itinerario" e "selo" são os dois modelos novos da Rodada 27.
-  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | "basilica" | "terco" | "postal" | "credencial" | null;
+  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | "basilica" | "santa" | "terco" | "postal" | "credencial" | null;
   // Posição/tamanho customizados do texto, só relevante para "classico" e
   // "painel" (Rodada 17) — null usa a posição padrão do modelo.
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
@@ -421,7 +421,7 @@ export interface RomariaPlusFoto {
   indice: number;
   foto_url: string;
   // "itinerario" e "selo" são os dois modelos novos da Rodada 27.
-  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | "basilica" | "terco" | "postal" | "credencial";
+  modelo: "classico" | "destaque" | "painel" | "moldura" | "itinerario" | "selo" | "basilica" | "santa" | "terco" | "postal" | "credencial";
   ajuste_overlay: AjusteOverlayRomariaPlus | null;
   contador_downloads: number;
   contador_compartilhamentos: number;

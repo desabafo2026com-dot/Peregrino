@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ROMARIA_PLUS_VALOR_CENTAVOS } from "@/lib/constants";
 import { Sparkles, Ticket, ShieldCheck } from "lucide-react";
 import type { CompraRomariaPlus } from "@/types/database";
+import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
 
 interface Props {
   certificadoId: string;
@@ -178,14 +179,18 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
 
   return (
     <div className="card text-center">
-      <Sparkles className="mx-auto mb-2 text-amber-700" size={24} />
-      <h3 className="mb-1 font-bold text-amber-800 dark:text-amber-500">Certificado Plus + arte de 5 fotos</h3>
-      <p className="mb-3 text-sm text-neutral-500">
-        Dá direito a um <strong>Certificado Plus</strong> (a versão com a
-        arte de pergaminho) e à edição de até <strong>5 fotos suas</strong>{" "}
-        em artes personalizadas, com os dados reais desta peregrinação —
-        prontas para baixar ou compartilhar nas redes, uma de cada vez, no
-        seu tempo.
+      {/* Rodada 57 — exemplos de artes prontas antes do botão de compra. */}
+      <h3 className="mb-1 flex items-center justify-center gap-2 font-bold text-amber-800 dark:text-amber-500">
+        <Sparkles size={20} /> Use suas fotos para criar a arte
+      </h3>
+      <p className="mb-3 text-sm text-neutral-500" style={{ textAlign: "center" }}>
+        Veja alguns exemplos feitos com fotos de peregrinos:
+      </p>
+      <ModelosPlusVitrine />
+      <p className="mt-2 mb-3 text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "center" }}>
+        A Romaria Plus inclui <strong>5 artes com as suas fotos</strong> (com os dados reais desta
+        peregrinação, prontas para baixar e compartilhar) e o <strong>Certificado Plus</strong>, a versão com
+        arte de pergaminho. Depois de usar as 5, dá para comprar mais 5.
       </p>
       {erro && <p className="mb-2 text-sm text-red-600">{erro}</p>}
       {/* Rodada 23: a pedido do usuário ("o botão de romaria plus devia ser
@@ -205,7 +210,7 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
           <>
             <span className="text-3xl leading-tight font-black tracking-tight">{VALOR_LABEL}</span>
             <span className="text-sm font-semibold text-amber-50">
-              Certificado Plus + arte de 5 fotos
+              5 artes com suas fotos + Certificado Plus
             </span>
           </>
         )}

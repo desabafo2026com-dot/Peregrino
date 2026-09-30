@@ -9,9 +9,10 @@ import { Trophy } from "lucide-react";
 // certificado. Com uma chuva de confetes leve em CSS.
 // Dourado fixo (a paleta "amber" do app foi personalizada para o marrom da
 // marca, então não serve aqui).
-const OURO = "#fbbf24";
+// Rodada 57 — laranja do ícone no lugar do amarelo.
+const OURO = "#f5a54a";
 
-const CORES_CONFETE = ["#fbbf24", "#f59e0b", "#fde68a", "#60a5fa", "#f472b6", "#34d399"];
+const CORES_CONFETE = ["#e0892b", "#f5a54a", "#ffffff", "#1f3b6b", "#60a5fa", "#fcd9b0"];
 
 export default function ParabensConclusao({ onReceber }: { onReceber: () => void }) {
   const confetes = Array.from({ length: 28 }, (_, i) => ({

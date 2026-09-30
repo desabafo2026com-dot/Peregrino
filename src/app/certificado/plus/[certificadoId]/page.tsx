@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
-import CertificadoView from "@/components/CertificadoView";
+import Link from "next/link";
+import { Award } from "lucide-react";
 import RomariaPlusFotos from "@/components/RomariaPlusFotos";
 import type { Certificado, CompraRomariaPlus, RomariaPlusFoto } from "@/types/database";
 
@@ -106,15 +107,20 @@ export default async function CertificadoPlusPage({
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <VoltarButton href="/certificado" />
+      <VoltarButton href="/painel" />
       <div>
-        <h1 className="mb-1 text-2xl font-bold text-amber-800 dark:text-amber-500">Certificado Plus</h1>
+        <h1 className="mb-1 text-2xl font-bold text-amber-800 dark:text-amber-500">Minhas fotos — Romaria Plus</h1>
         <p className="text-sm text-neutral-500">
-          Sua arte de pergaminho e até 5 fotos personalizadas desta peregrinação, prontas para baixar
-          ou compartilhar.
+          Transforme suas fotos desta peregrinação em artes prontas para baixar ou compartilhar.
         </p>
+        {/* Rodada 57 — o Certificado Plus (pergaminho) mudou para Meus certificados. */}
+        <Link
+          href={`/certificado#certificado-${cert.id}`}
+          className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:underline dark:text-amber-500"
+        >
+          <Award size={15} /> Ver meu Certificado Plus em Meus certificados →
+        </Link>
       </div>
-      <CertificadoView certificado={certificadoComOrigem} />
       <RomariaPlusFotos
         certificado={certificadoComOrigem}
         cidadesCheckin={cidadesCheckin}

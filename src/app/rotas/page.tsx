@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, nomeRota, kmPertenceARota } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import QuadroResumoRiscos from "@/components/QuadroResumoRiscos";
+import FotoAmpliavel from "@/components/FotoAmpliavel";
 import DicasSegurancaCards from "@/components/DicasSegurancaCards";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
@@ -186,7 +187,17 @@ export default async function RotasPage({
                   <td className="py-2 pr-4 whitespace-nowrap">
                     {kmSentidoLabel(r.km_referencia, r.sentido)}
                   </td>
-                  <td className="py-2 pr-4 font-medium">{r.titulo}</td>
+                  <td className="py-2 pr-4 font-medium">
+                    {r.titulo}
+                    {/* Rodada 57 — foto do local (toque para ampliar), logo abaixo do nome. */}
+                    {r.foto_url && (
+                      <FotoAmpliavel
+                        src={r.foto_url}
+                        alt={`Foto do local: ${r.titulo}`}
+                        className="mt-1.5 block h-16 w-24 overflow-hidden rounded-lg"
+                      />
+                    )}
+                  </td>
                   <td className={`py-2 pr-4 font-medium ${riscoColor(r.nivel_risco)}`}>
                     {NIVEL_RISCO_LABELS[r.nivel_risco]}
                   </td>
