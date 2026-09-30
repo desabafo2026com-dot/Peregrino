@@ -4027,3 +4027,157 @@ revoke all on function public.estatisticas_acessos() from public;
 grant execute on function public.estatisticas_acessos() to authenticated;
 
 -- FIM DA MIGRATION 44
+
+-- =====================================================================
+-- MIGRATION 45 — Rodada 54: credencial (crachá) do peregrino
+-- ---------------------------------------------------------------------
+-- Cada peregrino pode montar e imprimir um crachá para pendurar na
+-- mochila, escolhendo quais dados aparecem. O sistema gera um código
+-- individual (ex.: PER-7K3F9Q) e um QR code que abre uma página pública
+-- de verificação com EXATAMENTE os dados que a própria pessoa escolheu
+-- mostrar no crachá (útil em caso de emergência na rodovia).
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+create table if not exists public.crachas_peregrino (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  codigo text not null unique,
+  dados jsonb not null default '{}'::jsonb,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+alter table public.crachas_peregrino enable row level security;
+
+-- Leitura direta: só a própria pessoa (e administradores). Gravação só
+-- pelas funções abaixo — o código nunca é escolhido pelo aparelho.
+drop policy if exists "crachas_select_own_ou_admin" on public.crachas_peregrino;
+create policy "crachas_select_own_ou_admin" on public.crachas_peregrino for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+-- Devolve o crachá da pessoa logada, criando na primeira vez (com um
+-- código novo e único, sem letras que confundem: sem I, O, 0 e 1).
+create or replace function public.meu_cracha()
+returns public.crachas_peregrino
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_linha public.crachas_peregrino;
+  v_codigo text;
+  v_letras constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  v_tentativa int := 0;
+begin
+  if v_uid is null then
+    raise exception 'Entre na sua conta para gerar a credencial.';
+  end if;
+
+  select * into v_linha from public.crachas_peregrino where user_id = v_uid;
+  if found then
+    return v_linha;
+  end if;
+
+  loop
+    v_tentativa := v_tentativa + 1;
+    v_codigo := 'PER-';
+    for i in 1..6 loop
+      v_codigo := v_codigo || substr(v_letras, 1 + floor(random() * length(v_letras))::int, 1);
+    end loop;
+    begin
+      insert into public.crachas_peregrino (user_id, codigo) values (v_uid, v_codigo)
+      returning * into v_linha;
+      return v_linha;
+    exception when unique_violation then
+      -- outro pedido da mesma pessoa pode ter criado a linha ao mesmo tempo
+      select * into v_linha from public.crachas_peregrino where user_id = v_uid;
+      if found then
+        return v_linha;
+      end if;
+      if v_tentativa > 20 then
+        raise;
+      end if;
+    end;
+  end loop;
+end;
+$$;
+
+revoke all on function public.meu_cracha() from public;
+grant execute on function public.meu_cracha() to authenticated;
+
+create or replace function public.salvar_cracha(p_dados jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Entre na sua conta para salvar a credencial.';
+  end if;
+  if p_dados is null or jsonb_typeof(p_dados) <> 'object' or length(p_dados::text) > 4000 then
+    raise exception 'Dados inválidos.';
+  end if;
+  perform public.meu_cracha();
+  update public.crachas_peregrino
+  set dados = p_dados, atualizado_em = now()
+  where user_id = auth.uid();
+end;
+$$;
+
+revoke all on function public.salvar_cracha(jsonb) from public;
+grant execute on function public.salvar_cracha(jsonb) to authenticated;
+
+-- Página pública do QR code: só o que a pessoa marcou para aparecer.
+create or replace function public.cracha_publico(p_codigo text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_c public.crachas_peregrino;
+  v_p public.profiles;
+  v_m jsonb;
+  v_nome text;
+  v_em_caminhada boolean;
+begin
+  select * into v_c from public.crachas_peregrino where codigo = upper(trim(p_codigo));
+  if not found then
+    return null;
+  end if;
+  select * into v_p from public.profiles where id = v_c.user_id;
+  v_m := coalesce(v_c.dados -> 'mostrar', '{}'::jsonb);
+
+  v_nome := coalesce(v_p.nome_completo, '');
+  if coalesce(v_c.dados ->> 'nome_exibicao', 'completo') = 'primeiro' then
+    v_nome := split_part(trim(v_nome), ' ', 1);
+  end if;
+
+  select exists (
+    select 1 from public.peregrinacoes pe
+    where pe.user_id = v_c.user_id and pe.status = 'em_andamento'
+  ) into v_em_caminhada;
+
+  return jsonb_strip_nulls(jsonb_build_object(
+    'codigo', v_c.codigo,
+    'nome', v_nome,
+    'em_caminhada', v_em_caminhada,
+    'foto', case when (v_m ->> 'foto')::boolean then v_p.avatar_url end,
+    'cidade', case when (v_m ->> 'cidade')::boolean then concat_ws(' - ', v_p.cidade, v_p.uf) end,
+    'telefone', case when (v_m ->> 'telefone')::boolean then v_p.telefone end,
+    'grupo', case when (v_m ->> 'grupo')::boolean then nullif(v_c.dados ->> 'grupo', '') end,
+    'sangue', case when (v_m ->> 'sangue')::boolean then nullif(v_c.dados ->> 'sangue', '') end,
+    'saude', case when (v_m ->> 'saude')::boolean then nullif(v_c.dados ->> 'saude', '') end,
+    'emergencia_nome', case when (v_m ->> 'emergencia')::boolean then nullif(v_c.dados ->> 'emergencia_nome', '') end,
+    'emergencia_telefone', case when (v_m ->> 'emergencia')::boolean then nullif(v_c.dados ->> 'emergencia_telefone', '') end
+  ));
+end;
+$$;
+
+revoke all on function public.cracha_publico(text) from public;
+grant execute on function public.cracha_publico(text) to anon, authenticated;
+
+-- FIM DA MIGRATION 45

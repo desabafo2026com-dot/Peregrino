@@ -522,3 +522,48 @@ export interface MensagemContato {
 // `supabase gen types typescript` quando o projeto estiver criado.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Database = any;
+
+// Credencial (crachá) do peregrino — Rodada 54, Migration 45. `dados` é
+// escolhido pela própria pessoa; o código é gerado pelo banco
+// (meu_cracha()), nunca pelo aparelho.
+export interface DadosCracha {
+  nome_exibicao?: "completo" | "primeiro";
+  mostrar?: {
+    foto?: boolean;
+    cidade?: boolean;
+    telefone?: boolean;
+    grupo?: boolean;
+    sangue?: boolean;
+    saude?: boolean;
+    emergencia?: boolean;
+  };
+  grupo?: string;
+  sangue?: string;
+  saude?: string;
+  emergencia_nome?: string;
+  emergencia_telefone?: string;
+}
+
+export interface CrachaPeregrino {
+  user_id: string;
+  codigo: string;
+  dados: DadosCracha;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+// O que a página pública do QR code recebe (cracha_publico): só os campos
+// que a pessoa marcou para aparecer.
+export interface CrachaPublico {
+  codigo: string;
+  nome: string;
+  em_caminhada: boolean;
+  foto?: string;
+  cidade?: string;
+  telefone?: string;
+  grupo?: string;
+  sangue?: string;
+  saude?: string;
+  emergencia_nome?: string;
+  emergencia_telefone?: string;
+}

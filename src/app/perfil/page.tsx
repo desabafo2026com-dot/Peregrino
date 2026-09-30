@@ -6,6 +6,7 @@ import ContatoDesenvolvedorForm from "@/components/ContatoDesenvolvedorForm";
 import ExcluirContaForm from "@/components/ExcluirContaForm";
 import VoltarButton from "@/components/VoltarButton";
 import Link from "next/link";
+import { IdCard } from "lucide-react";
 import type { Profile, MensagemContato } from "@/types/database";
 
 export default async function PerfilPage() {
@@ -67,6 +68,23 @@ export default async function PerfilPage() {
         aceitaCompartilharInicial={!!user.user_metadata?.aceita_termos}
         perfilExistente={perfil as Profile | null}
       />
+      {perfilCompleto && (
+        // Rodada 54 — credencial (crachá) para imprimir e levar na mochila.
+        <Link
+          href="/perfil/credencial"
+          className="card mt-6 flex items-center gap-4 border-amber-200 transition hover:border-amber-400 dark:border-amber-900"
+        >
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white">
+            <IdCard size={24} />
+          </span>
+          <span>
+            <span className="block font-bold text-amber-800 dark:text-amber-500">Minha credencial de peregrino</span>
+            <span className="block text-sm text-neutral-500">
+              Crachá para imprimir e pendurar na mochila, com os dados que você escolher, seu código e QR code.
+            </span>
+          </span>
+        </Link>
+      )}
       <div className="mt-6">
         <AlterarSenhaForm />
       </div>

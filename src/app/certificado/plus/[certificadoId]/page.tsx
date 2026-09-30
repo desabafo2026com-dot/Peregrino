@@ -62,7 +62,7 @@ export default async function CertificadoPlusPage({
   // juntas num só Promise.all (Rodada 30, mesma otimização de
   // /peregrinacao e /certificado).
   const cert = certificado as Certificado;
-  const [{ data: fotos }, { data: pacotesExtra }, { data: peregrinacao }, { data: checkinsCidades }] = await Promise.all([
+  const [{ data: fotos }, { data: pacotesExtra }, { data: peregrinacao }, { data: checkinsCidades }, { data: perfilLogado }] = await Promise.all([
     supabase.from("romaria_plus_fotos").select("*").eq("compra_id", compraId).order("indice"),
     // Pacotes extra de +5 fotos (Rodada 30) — quantos já foram pagos
     // (define o limite atual da galeria) e o mais recente ainda pendente,
@@ -88,6 +88,8 @@ export default async function CertificadoPlusPage({
       .eq("peregrinacao_id", cert.peregrinacao_id)
       .not("ponto_checkin_id", "is", null)
       .order("criado_em", { ascending: true }),
+    // Rodada 54 — o modelo "Basílica" só aparece para administradores.
+    supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
   ]);
 
   const certificadoComOrigem: Certificado = {
@@ -116,6 +118,7 @@ export default async function CertificadoPlusPage({
       <RomariaPlusFotos
         certificado={certificadoComOrigem}
         cidadesCheckin={cidadesCheckin}
+        ehAdmin={!!perfilLogado?.is_admin}
         compraId={compraId}
         userId={user.id}
         fotosIniciais={(fotos ?? []) as RomariaPlusFoto[]}

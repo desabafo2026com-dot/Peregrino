@@ -101,14 +101,17 @@ function formatarTempoCompacto(inicio: string | null, fim: string | null) {
 // Rodada 30: "itinerario" e "selo" ganharam temAjuste=true (a pedido do
 // usuário — "tem que ter como movimentar e dimensionar") e agora usam o
 // mesmo PainelAjustavel de classico/painel para o bloco de texto/gráfico.
-const MODELOS: { id: Modelo; nome: string; temAjuste: boolean }[] = [
+// Rodada 54: `soAdmin` — o modelo "Basílica de Aparecida" fica visível só
+// para administradores até o usuário confirmar os direitos de uso da foto
+// da Basílica (quem já salvou uma arte nele continua vendo a arte salva).
+const MODELOS: { id: Modelo; nome: string; temAjuste: boolean; soAdmin?: boolean }[] = [
   { id: "classico", nome: "Clássico", temAjuste: true },
   { id: "destaque", nome: "Foto em destaque", temAjuste: false },
   { id: "painel", nome: "Painel flutuante", temAjuste: true },
   { id: "moldura", nome: "Moldura dourada", temAjuste: false },
   { id: "itinerario", nome: "Itinerário", temAjuste: true },
   { id: "selo", nome: "Selo de conquista", temAjuste: true },
-  { id: "basilica", nome: "Basílica de Aparecida", temAjuste: true },
+  { id: "basilica", nome: "Basílica de Aparecida", temAjuste: true, soAdmin: true },
   { id: "terco", nome: "Terço", temAjuste: false },
   { id: "postal", nome: "Cartão-postal", temAjuste: false },
   { id: "credencial", nome: "Credencial do peregrino", temAjuste: false },
@@ -484,185 +487,12 @@ function FotoComPanZoom({
 // próprios (nada de imagem externa), para a arte sempre sair igual no PNG.
 // ---------------------------------------------------------------------
 
-// Terço de madeira como moldura retangular da foto (Rodada 53 — no
-// formato da referência enviada pelo usuário, com contas de madeira e a
-// medalha de Nossa Senhora Aparecida): as contas correm em volta da foto
-// num retângulo de cantos arredondados — 5 dezenas, com uma conta maior
-// entre elas —, a medalha fecha o círculo no canto de baixo à direita e
-// dela sai o pingente, com a cruz de madeira deitada embaixo, à esquerda.
-// Coordenadas no viewBox 100 x 136; a foto é posicionada por fora, em
-// HTML, no mesmo retângulo (MOLDURA_TERCO).
-const MOLDURA_TERCO = { x0: 5, y0: 5, x1: 95, y1: 110, canto: 7 };
-
-function pontoNaMoldura(s: number) {
-  const { x0, y0, x1, y1, canto: rc } = MOLDURA_TERCO;
-  const arco = (Math.PI / 2) * rc;
-  const trechos: { comp: number; ponto: (t: number) => [number, number] }[] = [
-    { comp: y1 - y0 - 2 * rc, ponto: (t) => [x1, y1 - rc - t] },
-    { comp: arco, ponto: (t) => { const a = -(t / rc); return [x1 - rc + rc * Math.cos(a), y0 + rc + rc * Math.sin(a)]; } },
-    { comp: x1 - x0 - 2 * rc, ponto: (t) => [x1 - rc - t, y0] },
-    { comp: arco, ponto: (t) => { const a = -Math.PI / 2 - t / rc; return [x0 + rc + rc * Math.cos(a), y0 + rc + rc * Math.sin(a)]; } },
-    { comp: y1 - y0 - 2 * rc, ponto: (t) => [x0, y0 + rc + t] },
-    { comp: arco, ponto: (t) => { const a = Math.PI - t / rc; return [x0 + rc + rc * Math.cos(a), y1 - rc + rc * Math.sin(a)]; } },
-    { comp: x1 - x0 - 2 * rc, ponto: (t) => [x0 + rc + t, y1] },
-    { comp: arco, ponto: (t) => { const a = Math.PI / 2 - t / rc; return [x1 - rc + rc * Math.cos(a), y1 - rc + rc * Math.sin(a)]; } },
-  ];
-  const total = trechos.reduce((soma, t) => soma + t.comp, 0);
-  let resto = ((s % total) + total) % total;
-  for (const t of trechos) {
-    if (resto <= t.comp) return t.ponto(resto);
-    resto -= t.comp;
-  }
-  return trechos[0].ponto(0);
-}
-
-function perimetroMoldura() {
-  const { x0, y0, x1, y1, canto: rc } = MOLDURA_TERCO;
-  return 2 * (x1 - x0 - 2 * rc) + 2 * (y1 - y0 - 2 * rc) + 2 * Math.PI * rc;
-}
-
-function Conta({ x, y, r }: { x: number; y: number; r: number }) {
-  return (
-    <g>
-      <circle cx={x} cy={y} r={r} fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.3" />
-      <circle cx={x - r * 0.35} cy={y - r * 0.38} r={r * 0.3} fill="#fff4e0" fillOpacity="0.35" />
-    </g>
-  );
-}
-
-// Medalha de Nossa Senhora Aparecida: a imagem de manto azul em forma de
-// sino, com a coroa dourada, sobre fundo claro num aro dourado.
-function MedalhaAparecida({ x, y }: { x: number; y: number }) {
-  return (
-    <g transform={`translate(${x} ${y})`}>
-      <circle cx="0" cy="-8.4" r="1.1" fill="none" stroke="#b8862b" strokeWidth="0.55" />
-      <ellipse cx="0" cy="0" rx="6.4" ry="7.8" fill="url(#aroDourado)" stroke="#7a5412" strokeWidth="0.35" />
-      <ellipse cx="0" cy="0" rx="5.1" ry="6.5" fill="#f7eed8" />
-      <ellipse cx="0" cy="0" rx="5.1" ry="6.5" fill="url(#raiosMedalha)" />
-      {/* manto */}
-      <path d="M0,-2.9 C2.3,-2.7 3.4,1.2 3.7,5.1 L-3.7,5.1 C-3.4,1.2 -2.3,-2.7 0,-2.9 Z" fill="#1e3a8a" stroke="#e0b44a" strokeWidth="0.35" />
-      <path d="M-1.2,-1 C-0.4,1 -0.4,3 -0.9,5 M1.2,-1 C0.4,1 0.4,3 0.9,5" stroke="#e0b44a" strokeWidth="0.18" fill="none" />
-      {/* rosto e mãos postas */}
-      <ellipse cx="0" cy="-2.4" rx="0.85" ry="1.05" fill="#5b3a21" />
-      <path d="M-0.45,0.9 L0,-0.2 L0.45,0.9 Z" fill="#5b3a21" />
-      {/* coroa */}
-      <path d="M-1.6,-3.4 L-1.6,-4.9 L-0.8,-4.2 L0,-5.5 L0.8,-4.2 L1.6,-4.9 L1.6,-3.4 Z" fill="#fbbf24" stroke="#9a6b12" strokeWidth="0.15" />
-      {/* base */}
-      <path d="M-2.8,5.1 L2.8,5.1 L2.2,5.9 L-2.2,5.9 Z" fill="#c9962f" />
-    </g>
-  );
-}
-
-function ContasTerco() {
-  const { x1, y1, canto } = MOLDURA_TERCO;
-  const L = perimetroMoldura();
-  // A medalha fica no meio do arco do canto de baixo à direita.
-  const sMedalha = L - (Math.PI / 4) * canto;
-  // A medalha fica logo abaixo do canto, ligada às duas pontas das contas
-  // por um pedaço de cordão; o pingente sai dela para a esquerda, por baixo
-  // da moldura (sem passar por cima das contas).
-  const medalha = { x: x1 - 5, y: y1 + 8.5 };
-  const vao = 24;
-  // Da medalha, subindo pela direita, dando a volta e voltando pela base:
-  // 5 dezenas de contas pequenas com uma grande entre elas.
-  const tipos: ("p" | "g")[] = [];
-  for (let d = 0; d < 5; d++) {
-    for (let i = 0; i < 10; i++) tipos.push("p");
-    if (d < 4) tipos.push("g");
-  }
-  const espaco = 0.42;
-  const unidades = tipos.reduce((soma, t) => soma + (t === "g" ? 1.36 : 1) + espaco, 0);
-  const unidade = (L - vao) / unidades;
-  const rP = unidade / 2;
-  const rG = (unidade * 1.36) / 2;
-  let s = sMedalha + vao / 2;
-  const contas = tipos.map((t) => {
-    const r = t === "g" ? rG : rP;
-    const [x, y] = pontoNaMoldura(s + r);
-    s += 2 * r + unidade * espaco;
-    return { x, y, r };
-  });
-  // Pingente: da medalha para a esquerda, por baixo da moldura, até a cruz.
-  const destino = { x: 16, y: 127 };
-  const dx = destino.x - medalha.x;
-  const dy = destino.y - medalha.y;
-  const dist = Math.hypot(dx, dy);
-  const ux = dx / dist;
-  const uy = dy / dist;
-  const em = (d: number) => ({ x: medalha.x + ux * d, y: medalha.y + uy * d });
-  const pingente = [
-    { ...em(10.5), r: rG },
-    { ...em(17), r: rP },
-    { ...em(22.5), r: rP },
-    { ...em(28), r: rP },
-    { ...em(34.5), r: rG },
-  ];
-  const topoCruz = em(41);
-  const primeira = contas[0];
-  const ultima = contas[contas.length - 1];
-  const anguloCruz = (Math.atan2(uy, ux) * 180) / Math.PI;
-  return (
-    <svg viewBox="0 0 100 136" className="absolute inset-0 h-full w-full" aria-hidden="true">
-      <defs>
-        <radialGradient id="contaMadeira" cx="35%" cy="32%" r="70%">
-          <stop offset="0%" stopColor="#e7b77c" />
-          <stop offset="35%" stopColor="#b27437" />
-          <stop offset="75%" stopColor="#7a4619" />
-          <stop offset="100%" stopColor="#4a2a0e" />
-        </radialGradient>
-        <linearGradient id="cruzMadeira" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6b3d16" />
-          <stop offset="45%" stopColor="#b0733a" />
-          <stop offset="100%" stopColor="#5a3211" />
-        </linearGradient>
-        <linearGradient id="aroDourado" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#fde68a" />
-          <stop offset="50%" stopColor="#d4a33a" />
-          <stop offset="100%" stopColor="#8a5f14" />
-        </linearGradient>
-        <radialGradient id="raiosMedalha" cx="50%" cy="45%" r="60%">
-          <stop offset="0%" stopColor="#fde68a" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#fde68a" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      {/* cordão da moldura e do pingente */}
-      <polyline
-        points={contas.map((c) => `${c.x},${c.y}`).join(" ")}
-        fill="none"
-        stroke="#3b2410"
-        strokeOpacity="0.85"
-        strokeWidth="0.7"
-      />
-      <line x1={medalha.x} y1={medalha.y} x2={topoCruz.x} y2={topoCruz.y} stroke="#3b2410" strokeOpacity="0.85" strokeWidth="0.7" />
-      <path
-        d={`M${primeira.x},${primeira.y} Q${x1 + 1},${medalha.y - 6} ${medalha.x},${medalha.y - 7} M${ultima.x},${ultima.y} Q${medalha.x - 6},${y1 + 3} ${medalha.x},${medalha.y - 7}`}
-        fill="none"
-        stroke="#3b2410"
-        strokeOpacity="0.85"
-        strokeWidth="0.7"
-      />
-      {contas.map((c, i) => (
-        <Conta key={i} x={c.x} y={c.y} r={c.r} />
-      ))}
-      {pingente.map((c, i) => (
-        <Conta key={`p${i}`} x={c.x} y={c.y} r={c.r} />
-      ))}
-      {/* cruz de madeira deitada, com o topo preso ao cordão */}
-      <g transform={`translate(${topoCruz.x} ${topoCruz.y}) rotate(${anguloCruz})`}>
-        <rect x="0" y="-1.9" width="25" height="3.8" rx="0.7" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.35" />
-        <rect x="5" y="-7.2" width="3.8" height="14.4" rx="0.7" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.35" />
-        {/* Cristo em metal, bem simples */}
-        <g fill="#d9d4c7" stroke="#8a8578" strokeWidth="0.15">
-          <circle cx="5.2" cy="0" r="0.95" />
-          <path d="M6.1,-0.7 L13.8,-0.55 L15.8,0 L13.8,0.55 L6.1,0.7 Z" />
-          <path d="M6.6,-0.4 L7.4,-5.8 L8.1,-5.6 L7.6,-0.3 Z M6.6,0.4 L7.4,5.8 L8.1,5.6 L7.6,0.3 Z" />
-        </g>
-        <rect x="1.2" y="-0.6" width="2.4" height="1.2" rx="0.2" fill="#f3e3c3" fillOpacity="0.9" />
-      </g>
-      <MedalhaAparecida x={medalha.x} y={medalha.y} />
-    </svg>
-  );
-}
+// Terço (Rodada 54): imagem enviada pelo usuário — terço de madeira com a
+// medalha de Nossa Senhora Aparecida sobre papel artesanal, numa mesa de
+// madeira —, tratada para o papel de DENTRO do terço ficar transparente
+// (public/arte/terco-madeira.webp, 765x1024). A foto do peregrino fica por
+// baixo, neste retângulo (em pixels da imagem), e aparece entre as contas.
+const TERCO_IMG = { largura: 765, altura: 1024, x0: 110, y0: 120, x1: 666, y1: 902, canto: 26 };
 
 // Selo postal com borda serrilhada, para o "Cartão-postal".
 function SeloPostal({ ano }: { ano: number }) {
@@ -693,9 +523,11 @@ function SeloPostal({ ano }: { ano: number }) {
         {ano}
       </text>
     </svg>
+      {/* Rodada 54: desenho a lápis enviado pelo usuário, no lugar da foto
+          da Basílica (que ficou restrita ao admin até conferir os direitos). */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/arte/basilica-foto.webp"
+        src="/arte/basilica-desenho-papel.webp"
         alt=""
         className="absolute object-cover"
         style={{ left: "10%", top: `${(10 / 120) * 100}%`, width: "80%", height: `${(62 / 120) * 100}%` }}
@@ -819,6 +651,8 @@ interface Props {
   // Rodada 49 — cidades com check-in nesta peregrinação, na ordem em que
   // foram feitos (carimbos da "Credencial do peregrino").
   cidadesCheckin?: string[];
+  // Rodada 54 — libera os modelos marcados como soAdmin.
+  ehAdmin?: boolean;
   onSalvo?: (dados: { indice: number; foto_url: string; modelo: Modelo; ajuste_overlay: AjusteOverlayRomariaPlus | null }) => void;
 }
 
@@ -833,6 +667,7 @@ export default function RomariaPlusView({
   contadorDownloadsInicial = 0,
   contadorCompartilhamentosInicial = 0,
   cidadesCheckin = [],
+  ehAdmin = false,
   onSalvo,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -1276,19 +1111,31 @@ export default function RomariaPlusView({
   // Carimbos da "Credencial": cada cidade com check-in, na ordem, sem
   // repetir, e sempre terminando em Aparecida (a chegada). Sem a lista
   // (certificado antigo), só a origem e Aparecida.
-  const carimbos = (() => {
-    const ehAparecida = (cidade: string) => cidade.trim().toLowerCase() === "aparecida";
+  // Rodada 54 — carimbo da ORIGEM (maior) + um carimbo para cada cidade
+  // do caminho com check-in, na ordem, sem repetir + o de APARECIDA
+  // (maior). Origem: a declarada no certificado/peregrinação; sem ela, a
+  // primeira cidade com check-in.
+  const normalizar = (cidade: string) =>
+    cidade.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const ehAparecida = (cidade: string) => normalizar(cidade) === "aparecida";
+  const cidadesUnicas = (() => {
     const vistas = new Set<string>();
     const lista: string[] = [];
     for (const cidade of cidadesCheckin) {
-      const chave = cidade.trim().toLowerCase();
+      const chave = normalizar(cidade);
       if (!chave || vistas.has(chave) || ehAparecida(cidade)) continue;
       vistas.add(chave);
       lista.push(cidade);
     }
-    if (lista.length === 0 && origem && !ehAparecida(origem)) lista.push(origem);
-    return lista.slice(0, 11);
+    return lista;
   })();
+  const origemCarimbo =
+    origem && !ehAparecida(origem) ? origem.trim() : (cidadesUnicas[0] ?? null);
+  const carimbos = cidadesUnicas
+    .filter((cidade) => !origemCarimbo || normalizar(cidade) !== normalizar(origemCarimbo))
+    .slice(0, 12);
+  const larguraPassagem = carimbos.length <= 6 ? 23 : 19;
+  const dataSaida = c.data_inicio ? formatarDataCurta(new Date(c.data_inicio)).slice(0, 5) : null;
   const dataChegada = c.data_fim ? formatarDataCurta(new Date(c.data_fim)).slice(0, 5) : String(ano);
 
   return (
@@ -1352,9 +1199,10 @@ export default function RomariaPlusView({
                   onChange={(e) => escolherModelo(e.target.value as Modelo)}
                   className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
                 >
-                  {MODELOS.map((m) => (
+                  {MODELOS.filter((m) => !m.soAdmin || ehAdmin || m.id === modelo).map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.nome}
+                      {m.soAdmin ? " (só admin)" : ""}
                     </option>
                   ))}
                 </select>
@@ -1899,25 +1747,31 @@ export default function RomariaPlusView({
                 do manto de Nossa Senhora. */}
             {modelo === "terco" && (
               <div
-                className="absolute inset-0 flex flex-col items-center px-[6%] pt-[15%] pb-[5%] text-center text-white"
-                style={{ background: "radial-gradient(circle at 50% 42%, #1e3a8a 0%, #0f1f4d 55%, #070f2b 100%)" }}
+                className="absolute inset-0 flex flex-col items-center pt-[15%] pb-[4%] text-center text-white"
+                style={{
+                  background:
+                    "repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 0.6cqw, rgba(255,255,255,0.03) 0.6cqw 1.5cqw), linear-gradient(180deg, #7a4a24 0%, #5c3518 60%, #3f230e 100%)",
+                }}
               >
                 {cabecalho(false)}
-                <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.2cqw", lineHeight: 1.08, textAlign: "center" }}>
+                <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: "6.2cqw", lineHeight: 1.08, textAlign: "center", textShadow: "0 2px 6px rgba(0,0,0,.45)" }}>
                   {tituloTexto}
                 </p>
-                <p className="font-bold text-stripe-400" style={{ fontSize: "7.4cqw", textAlign: "center" }}>
+                <p className="font-bold text-stripe-400" style={{ fontSize: "7cqw", textAlign: "center", textShadow: "0 2px 6px rgba(0,0,0,.45)" }}>
                   {ano}
                 </p>
-                <div className="relative mt-[3%] w-[86%]" style={{ aspectRatio: "100 / 136" }}>
+                <div
+                  className="relative mt-[2%] w-[90%] shadow-2xl"
+                  style={{ aspectRatio: `${TERCO_IMG.largura} / ${TERCO_IMG.altura}` }}
+                >
                   <div
                     className="absolute overflow-hidden"
                     style={{
-                      left: `${MOLDURA_TERCO.x0}%`,
-                      top: `${(MOLDURA_TERCO.y0 / 136) * 100}%`,
-                      width: `${MOLDURA_TERCO.x1 - MOLDURA_TERCO.x0}%`,
-                      height: `${((MOLDURA_TERCO.y1 - MOLDURA_TERCO.y0) / 136) * 100}%`,
-                      borderRadius: `${(MOLDURA_TERCO.canto / (MOLDURA_TERCO.x1 - MOLDURA_TERCO.x0)) * 100}% / ${(MOLDURA_TERCO.canto / (MOLDURA_TERCO.y1 - MOLDURA_TERCO.y0)) * 100}%`,
+                      left: `${(TERCO_IMG.x0 / TERCO_IMG.largura) * 100}%`,
+                      top: `${(TERCO_IMG.y0 / TERCO_IMG.altura) * 100}%`,
+                      width: `${((TERCO_IMG.x1 - TERCO_IMG.x0) / TERCO_IMG.largura) * 100}%`,
+                      height: `${((TERCO_IMG.y1 - TERCO_IMG.y0) / TERCO_IMG.altura) * 100}%`,
+                      borderRadius: `${(TERCO_IMG.canto / (TERCO_IMG.x1 - TERCO_IMG.x0)) * 100}% / ${(TERCO_IMG.canto / (TERCO_IMG.y1 - TERCO_IMG.y0)) * 100}%`,
                     }}
                   >
                     <FotoComPanZoom
@@ -1929,15 +1783,19 @@ export default function RomariaPlusView({
                       onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                     />
                   </div>
-                  <div className="pointer-events-none absolute inset-0">
-                    <ContasTerco />
-                  </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/arte/terco-madeira.webp"
+                    alt=""
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    draggable={false}
+                  />
                 </div>
-                <p className="mt-[2%] font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
+                <p className="mt-[3%] font-semibold text-white/95" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
                   De {nomeOrigem} a Aparecida-SP
                 </p>
                 <div
-                  className="mt-[2%] flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1 text-stripe-200"
+                  className="mt-[1.5%] flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1 text-stripe-200"
                   style={{ fontSize: "3cqw" }}
                 >
                   {dadosLinha(14)}
@@ -2056,24 +1914,26 @@ export default function RomariaPlusView({
                       <div className="flex flex-col gap-1">{dadosLinha(12)}</div>
                     </div>
                   </div>
-                  {/* Até 9 carimbos cabem 3 por linha, maiores; acima disso, 4
-                      por linha. O espaço que sobra é dividido em volta. */}
-                  <div className="flex w-full flex-1 flex-wrap content-center items-center justify-center gap-x-[4%] gap-y-[3%] py-[3%]">
-                    {carimbos.map((cidade, i) => (
+                  {/* Origem e Aparecida maiores; as cidades do caminho, menores,
+                      entre as duas. */}
+                  <div className="flex w-full flex-1 flex-wrap content-center items-center justify-center gap-x-[3%] gap-y-[2.5%] py-[3%]">
+                    {origemCarimbo && (
                       <Carimbo
-                        key={cidade + i}
-                        cidade={cidade}
-                        rotulo={i === 0 ? "Início" : "Passagem"}
-                        indice={i}
-                        largura={carimbos.length + 1 <= 9 ? 28 : 21}
+                        cidade={origemCarimbo}
+                        rotulo={dataSaida ? `Origem ${dataSaida}` : "Origem"}
+                        indice={0}
+                        largura={30}
                       />
+                    )}
+                    {carimbos.map((cidade, i) => (
+                      <Carimbo key={cidade + i} cidade={cidade} rotulo="Passagem" indice={i + 1} largura={larguraPassagem} />
                     ))}
                     <Carimbo
                       cidade="Aparecida"
                       rotulo={`Chegada ${dataChegada}`}
-                      indice={carimbos.length}
+                      indice={carimbos.length + 1}
                       destaque
-                      largura={carimbos.length + 1 <= 9 ? 28 : 21}
+                      largura={30}
                     />
                   </div>
                 </div>
