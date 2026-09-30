@@ -26,6 +26,7 @@ import {
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
 import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
+import ParabensConclusao from "@/components/ParabensConclusao";
 import { cidadeDoCaminhoProxima } from "@/lib/checkin-cidade";
 import { kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
 import { votarAviso } from "@/lib/avisos-votos";
@@ -313,6 +314,7 @@ export default function PeregrinacaoClient({
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [parabens, setParabens] = useState(false);
 
   // Rodada 46 — posição do peregrino no mapa, acompanhando enquanto ele
   // anda (só durante a caminhada em andamento e com a página aberta).
@@ -814,7 +816,8 @@ export default function PeregrinacaoClient({
       setErro(certError.message);
       return;
     }
-    router.push("/certificado");
+    // Rodada 55 — mensagem de parabéns antes de ir para o certificado.
+    setParabens(true);
   }
 
   async function reabrirConcluida(id: string) {
@@ -1310,6 +1313,7 @@ export default function PeregrinacaoClient({
 
   return (
     <div className="flex flex-col gap-6">
+      {parabens && <ParabensConclusao onReceber={() => router.push("/certificado")} />}
       {principal}
 
       {peregrinacoesConcluidas.length > 0 && (

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, nomeRota, kmPertenceARota } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import QuadroResumoRiscos from "@/components/QuadroResumoRiscos";
+import DicasSegurancaCards from "@/components/DicasSegurancaCards";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
 import type { PontoRisco, Rota, PontoCheckin } from "@/types/database";
@@ -13,20 +14,6 @@ const COR_ROTA: Record<string, string> = {
   sul: "#fdba74",
 };
 
-const DICAS_GERAIS = [
-  "Caminhe sempre de frente para o tráfego quando não houver marginal ou acostamento largo.",
-  "Use roupas e acessórios com cores claras ou refletivas, principalmente ao amanhecer, entardecer e à noite.",
-  "Evite caminhar durante a madrugada em trechos sem iluminação.",
-  "Mantenha-se hidratado e faça pausas nos pontos de apoio (PAP).",
-  "Ande em fila única em trechos estreitos, nunca lado a lado.",
-  "Leve um documento de identificação e o telefone de um contato de emergência sempre visível.",
-  "Avise alguém de confiança sobre seu trajeto e horários previstos.",
-  "Em caso de mal-estar, procure o PAP mais próximo ou acione a emergência.",
-  // Três dicas adicionadas na Rodada 28, a pedido do usuário.
-  "Não use fones de ouvido, fique atento aos sons!",
-  "Sempre que parar, se afaste ao máximo da pista.",
-  "Sempre que for transpor uma faixa olhe bem para os dois lados e espere poder fazer em segurança.",
-];
 
 // Só existem 3 níveis (Moderado/Alto/Muito alto) — ver NIVEL_RISCO_LABELS.
 function riscoColor(nivel: number) {
@@ -126,16 +113,8 @@ export default async function RotasPage({
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
           <ShieldAlert size={20} /> Dicas de segurança
         </h2>
-        <div className="card">
-          <ul className="flex flex-col gap-2 text-sm">
-            {DICAS_GERAIS.map((d, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="text-amber-700">•</span>
-                <span>{d}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Rodada 55 — dicas em cards (ver DicasSegurancaCards). */}
+        <DicasSegurancaCards />
       </section>
 
       {/* Rodada 46 — quadro resumo pedido pelo usuário, logo abaixo das dicas. */}
