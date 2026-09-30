@@ -360,7 +360,9 @@ export interface AjusteOverlayRomariaPlus {
   transparenciaTexto?: number;
   // Modelo "Basílica de Aparecida" (Rodada 52): estilo do desenho da
   // Basílica e a transparência dele (0 a 80).
-  estiloDesenho?: "claro" | "escuro" | "papel" | "ilustracao";
+  // "ilustracao" (Rodada 51) foi substituído por "foto" na Rodada 53 — o
+  // app trata o valor antigo como "foto".
+  estiloDesenho?: "claro" | "escuro" | "papel" | "foto" | "ilustracao";
   transparenciaDesenho?: number;
 }
 

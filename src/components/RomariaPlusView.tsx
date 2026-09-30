@@ -22,7 +22,6 @@ import {
   Medal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import IlustracaoBasilica from "@/components/IlustracaoBasilica";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
 
 // Fonte própria para o título — auto-hospedada como arquivos estáticos em
@@ -124,14 +123,15 @@ const TRANSPARENCIA_SELO_PADRAO = 40;
 
 // Rodada 52 — desenho a lápis da Basílica enviado pelo usuário, tratado
 // para virar só o traço (fundo de papel transparente) em duas cores, mais
-// a versão original em papel. Arquivos em public/arte/. "ilustracao" é o
-// desenho colorido em SVG da Rodada 51.
-type EstiloDesenho = "claro" | "escuro" | "papel" | "ilustracao";
+// a versão original em papel. Rodada 53: a ilustração colorida em SVG
+// saiu (o usuário não gostou) e entrou a foto real da Basílica enviada
+// por ele, recortada com as bordas esmaecidas. Arquivos em public/arte/.
+type EstiloDesenho = "claro" | "escuro" | "papel" | "foto";
 const ESTILOS_DESENHO: { id: EstiloDesenho; nome: string }[] = [
   { id: "claro", nome: "Traço claro" },
   { id: "escuro", nome: "Traço escuro" },
   { id: "papel", nome: "Desenho no papel" },
-  { id: "ilustracao", nome: "Ilustração colorida" },
+  { id: "foto", nome: "Foto da Basílica" },
 ];
 // Fundo do modelo Basílica: começa mais escuro que o do Selo, porque o
 // traço claro precisa de contraste.
@@ -484,45 +484,125 @@ function FotoComPanZoom({
 // próprios (nada de imagem externa), para a arte sempre sair igual no PNG.
 // ---------------------------------------------------------------------
 
-// Terço de madeira servindo de moldura da foto (Rodada 51 — a pedido do
-// usuário, no lugar das contas douradas finas da Rodada 49): as 5 dezenas
-// (10 contas + 1 maior entre elas) encostadas umas nas outras em volta da
-// foto, a medalha embaixo e o pingente com a cruz de madeira. Coordenadas
-// no viewBox 100 x 142; o círculo da foto é desenhado por fora, em HTML,
-// alinhado ao mesmo centro (50,50) com raio RAIO_FOTO_TERCO — as contas
-// ficam por cima da borda da foto, como uma moldura.
-const RAIO_FOTO_TERCO = 42;
+// Terço de madeira como moldura retangular da foto (Rodada 53 — no
+// formato da referência enviada pelo usuário, com contas de madeira e a
+// medalha de Nossa Senhora Aparecida): as contas correm em volta da foto
+// num retângulo de cantos arredondados — 5 dezenas, com uma conta maior
+// entre elas —, a medalha fecha o círculo no canto de baixo à direita e
+// dela sai o pingente, com a cruz de madeira deitada embaixo, à esquerda.
+// Coordenadas no viewBox 100 x 136; a foto é posicionada por fora, em
+// HTML, no mesmo retângulo (MOLDURA_TERCO).
+const MOLDURA_TERCO = { x0: 5, y0: 5, x1: 95, y1: 110, canto: 7 };
+
+function pontoNaMoldura(s: number) {
+  const { x0, y0, x1, y1, canto: rc } = MOLDURA_TERCO;
+  const arco = (Math.PI / 2) * rc;
+  const trechos: { comp: number; ponto: (t: number) => [number, number] }[] = [
+    { comp: y1 - y0 - 2 * rc, ponto: (t) => [x1, y1 - rc - t] },
+    { comp: arco, ponto: (t) => { const a = -(t / rc); return [x1 - rc + rc * Math.cos(a), y0 + rc + rc * Math.sin(a)]; } },
+    { comp: x1 - x0 - 2 * rc, ponto: (t) => [x1 - rc - t, y0] },
+    { comp: arco, ponto: (t) => { const a = -Math.PI / 2 - t / rc; return [x0 + rc + rc * Math.cos(a), y0 + rc + rc * Math.sin(a)]; } },
+    { comp: y1 - y0 - 2 * rc, ponto: (t) => [x0, y0 + rc + t] },
+    { comp: arco, ponto: (t) => { const a = Math.PI - t / rc; return [x0 + rc + rc * Math.cos(a), y1 - rc + rc * Math.sin(a)]; } },
+    { comp: x1 - x0 - 2 * rc, ponto: (t) => [x0 + rc + t, y1] },
+    { comp: arco, ponto: (t) => { const a = Math.PI / 2 - t / rc; return [x1 - rc + rc * Math.cos(a), y1 - rc + rc * Math.sin(a)]; } },
+  ];
+  const total = trechos.reduce((soma, t) => soma + t.comp, 0);
+  let resto = ((s % total) + total) % total;
+  for (const t of trechos) {
+    if (resto <= t.comp) return t.ponto(resto);
+    resto -= t.comp;
+  }
+  return trechos[0].ponto(0);
+}
+
+function perimetroMoldura() {
+  const { x0, y0, x1, y1, canto: rc } = MOLDURA_TERCO;
+  return 2 * (x1 - x0 - 2 * rc) + 2 * (y1 - y0 - 2 * rc) + 2 * Math.PI * rc;
+}
+
+function Conta({ x, y, r }: { x: number; y: number; r: number }) {
+  return (
+    <g>
+      <circle cx={x} cy={y} r={r} fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.3" />
+      <circle cx={x - r * 0.35} cy={y - r * 0.38} r={r * 0.3} fill="#fff4e0" fillOpacity="0.35" />
+    </g>
+  );
+}
+
+// Medalha de Nossa Senhora Aparecida: a imagem de manto azul em forma de
+// sino, com a coroa dourada, sobre fundo claro num aro dourado.
+function MedalhaAparecida({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <circle cx="0" cy="-8.4" r="1.1" fill="none" stroke="#b8862b" strokeWidth="0.55" />
+      <ellipse cx="0" cy="0" rx="6.4" ry="7.8" fill="url(#aroDourado)" stroke="#7a5412" strokeWidth="0.35" />
+      <ellipse cx="0" cy="0" rx="5.1" ry="6.5" fill="#f7eed8" />
+      <ellipse cx="0" cy="0" rx="5.1" ry="6.5" fill="url(#raiosMedalha)" />
+      {/* manto */}
+      <path d="M0,-2.9 C2.3,-2.7 3.4,1.2 3.7,5.1 L-3.7,5.1 C-3.4,1.2 -2.3,-2.7 0,-2.9 Z" fill="#1e3a8a" stroke="#e0b44a" strokeWidth="0.35" />
+      <path d="M-1.2,-1 C-0.4,1 -0.4,3 -0.9,5 M1.2,-1 C0.4,1 0.4,3 0.9,5" stroke="#e0b44a" strokeWidth="0.18" fill="none" />
+      {/* rosto e mãos postas */}
+      <ellipse cx="0" cy="-2.4" rx="0.85" ry="1.05" fill="#5b3a21" />
+      <path d="M-0.45,0.9 L0,-0.2 L0.45,0.9 Z" fill="#5b3a21" />
+      {/* coroa */}
+      <path d="M-1.6,-3.4 L-1.6,-4.9 L-0.8,-4.2 L0,-5.5 L0.8,-4.2 L1.6,-4.9 L1.6,-3.4 Z" fill="#fbbf24" stroke="#9a6b12" strokeWidth="0.15" />
+      {/* base */}
+      <path d="M-2.8,5.1 L2.8,5.1 L2.2,5.9 L-2.2,5.9 Z" fill="#c9962f" />
+    </g>
+  );
+}
 
 function ContasTerco() {
-  const cx = 50;
-  const cy = 50;
-  const r = 45;
-  const rPequena = 2.35;
-  const rGrande = 3.1;
-  const folga = 0.22;
-  // 55 contas no círculo: [10 pequenas + 1 grande] x 5. Distribuídas pelo
-  // tamanho de cada uma (as grandes ocupam mais arco), deixando embaixo o
-  // espaço da medalha.
-  const tipos = Array.from({ length: 55 }, (_, i) => (i % 11 === 10 ? "grande" : "pequena"));
-  const arcoTotal = tipos.reduce((soma, t) => soma + 2 * (t === "grande" ? rGrande : rPequena) + folga, 0);
-  const anguloDisponivel = arcoTotal / r;
-  const inicio = Math.PI / 2 + (2 * Math.PI - anguloDisponivel) / 2;
-  let andado = 0;
+  const { x1, y1, canto } = MOLDURA_TERCO;
+  const L = perimetroMoldura();
+  // A medalha fica no meio do arco do canto de baixo à direita.
+  const sMedalha = L - (Math.PI / 4) * canto;
+  // A medalha fica logo abaixo do canto, ligada às duas pontas das contas
+  // por um pedaço de cordão; o pingente sai dela para a esquerda, por baixo
+  // da moldura (sem passar por cima das contas).
+  const medalha = { x: x1 - 5, y: y1 + 8.5 };
+  const vao = 24;
+  // Da medalha, subindo pela direita, dando a volta e voltando pela base:
+  // 5 dezenas de contas pequenas com uma grande entre elas.
+  const tipos: ("p" | "g")[] = [];
+  for (let d = 0; d < 5; d++) {
+    for (let i = 0; i < 10; i++) tipos.push("p");
+    if (d < 4) tipos.push("g");
+  }
+  const espaco = 0.42;
+  const unidades = tipos.reduce((soma, t) => soma + (t === "g" ? 1.36 : 1) + espaco, 0);
+  const unidade = (L - vao) / unidades;
+  const rP = unidade / 2;
+  const rG = (unidade * 1.36) / 2;
+  let s = sMedalha + vao / 2;
   const contas = tipos.map((t) => {
-    const raio = t === "grande" ? rGrande : rPequena;
-    const ang = inicio + (andado + raio) / r;
-    andado += 2 * raio + folga;
-    return { x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang), raio };
+    const r = t === "g" ? rG : rP;
+    const [x, y] = pontoNaMoldura(s + r);
+    s += 2 * r + unidade * espaco;
+    return { x, y, r };
   });
+  // Pingente: da medalha para a esquerda, por baixo da moldura, até a cruz.
+  const destino = { x: 16, y: 127 };
+  const dx = destino.x - medalha.x;
+  const dy = destino.y - medalha.y;
+  const dist = Math.hypot(dx, dy);
+  const ux = dx / dist;
+  const uy = dy / dist;
+  const em = (d: number) => ({ x: medalha.x + ux * d, y: medalha.y + uy * d });
   const pingente = [
-    { y: 104.5, raio: rGrande },
-    { y: 110.2, raio: rPequena },
-    { y: 115.2, raio: rPequena },
-    { y: 120.2, raio: rPequena },
-    { y: 126, raio: rGrande },
+    { ...em(10.5), r: rG },
+    { ...em(17), r: rP },
+    { ...em(22.5), r: rP },
+    { ...em(28), r: rP },
+    { ...em(34.5), r: rG },
   ];
+  const topoCruz = em(41);
+  const primeira = contas[0];
+  const ultima = contas[contas.length - 1];
+  const anguloCruz = (Math.atan2(uy, ux) * 180) / Math.PI;
   return (
-    <svg viewBox="0 0 100 142" className="absolute inset-0 h-full w-full" aria-hidden="true">
+    <svg viewBox="0 0 100 136" className="absolute inset-0 h-full w-full" aria-hidden="true">
       <defs>
         <radialGradient id="contaMadeira" cx="35%" cy="32%" r="70%">
           <stop offset="0%" stopColor="#e7b77c" />
@@ -530,37 +610,56 @@ function ContasTerco() {
           <stop offset="75%" stopColor="#7a4619" />
           <stop offset="100%" stopColor="#4a2a0e" />
         </radialGradient>
-        <linearGradient id="cruzMadeira" x1="0" y1="0" x2="1" y2="0">
+        <linearGradient id="cruzMadeira" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#6b3d16" />
-          <stop offset="45%" stopColor="#a8692f" />
+          <stop offset="45%" stopColor="#b0733a" />
           <stop offset="100%" stopColor="#5a3211" />
         </linearGradient>
+        <linearGradient id="aroDourado" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fde68a" />
+          <stop offset="50%" stopColor="#d4a33a" />
+          <stop offset="100%" stopColor="#8a5f14" />
+        </linearGradient>
+        <radialGradient id="raiosMedalha" cx="50%" cy="45%" r="60%">
+          <stop offset="0%" stopColor="#fde68a" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#fde68a" stopOpacity="0" />
+        </radialGradient>
       </defs>
-      {/* cordão */}
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#3b2410" strokeOpacity="0.8" strokeWidth="0.6" />
-      <line x1="50" y1="99" x2="50" y2="129" stroke="#3b2410" strokeOpacity="0.8" strokeWidth="0.6" />
+      {/* cordão da moldura e do pingente */}
+      <polyline
+        points={contas.map((c) => `${c.x},${c.y}`).join(" ")}
+        fill="none"
+        stroke="#3b2410"
+        strokeOpacity="0.85"
+        strokeWidth="0.7"
+      />
+      <line x1={medalha.x} y1={medalha.y} x2={topoCruz.x} y2={topoCruz.y} stroke="#3b2410" strokeOpacity="0.85" strokeWidth="0.7" />
+      <path
+        d={`M${primeira.x},${primeira.y} Q${x1 + 1},${medalha.y - 6} ${medalha.x},${medalha.y - 7} M${ultima.x},${ultima.y} Q${medalha.x - 6},${y1 + 3} ${medalha.x},${medalha.y - 7}`}
+        fill="none"
+        stroke="#3b2410"
+        strokeOpacity="0.85"
+        strokeWidth="0.7"
+      />
       {contas.map((c, i) => (
-        <g key={i}>
-          <circle cx={c.x} cy={c.y} r={c.raio} fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.25" />
-          <circle cx={c.x - c.raio * 0.35} cy={c.y - c.raio * 0.38} r={c.raio * 0.28} fill="#fff4e0" fillOpacity="0.35" />
-        </g>
+        <Conta key={i} x={c.x} y={c.y} r={c.r} />
       ))}
-      {/* medalha */}
-      <ellipse cx="50" cy="96" rx="4" ry="4.9" fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.35" />
-      <ellipse cx="50" cy="96" rx="2.6" ry="3.4" fill="none" stroke="#f3d9a8" strokeOpacity="0.7" strokeWidth="0.4" />
-      <rect x="49.55" y="93.6" width="0.9" height="4.8" fill="#f3d9a8" fillOpacity="0.75" />
-      <rect x="48.2" y="95" width="3.6" height="0.9" fill="#f3d9a8" fillOpacity="0.75" />
-      {/* pingente */}
-      {pingente.map((c) => (
-        <g key={c.y}>
-          <circle cx="50" cy={c.y} r={c.raio} fill="url(#contaMadeira)" stroke="#3b2410" strokeWidth="0.25" />
-          <circle cx={50 - c.raio * 0.35} cy={c.y - c.raio * 0.38} r={c.raio * 0.28} fill="#fff4e0" fillOpacity="0.35" />
-        </g>
+      {pingente.map((c, i) => (
+        <Conta key={`p${i}`} x={c.x} y={c.y} r={c.r} />
       ))}
-      {/* cruz de madeira */}
-      <rect x="48.3" y="129" width="3.4" height="12.5" rx="0.6" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.3" />
-      <rect x="44.6" y="132" width="10.8" height="3.2" rx="0.6" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.3" />
-      <path d="M49.2,131 L49.2,140 M50.8,130.5 L50.8,139.5 M45.8,133 L54.2,133 M46.2,134.3 L53.8,134.3" stroke="#3b2410" strokeOpacity="0.35" strokeWidth="0.2" />
+      {/* cruz de madeira deitada, com o topo preso ao cordão */}
+      <g transform={`translate(${topoCruz.x} ${topoCruz.y}) rotate(${anguloCruz})`}>
+        <rect x="0" y="-1.9" width="25" height="3.8" rx="0.7" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.35" />
+        <rect x="5" y="-7.2" width="3.8" height="14.4" rx="0.7" fill="url(#cruzMadeira)" stroke="#3b2410" strokeWidth="0.35" />
+        {/* Cristo em metal, bem simples */}
+        <g fill="#d9d4c7" stroke="#8a8578" strokeWidth="0.15">
+          <circle cx="5.2" cy="0" r="0.95" />
+          <path d="M6.1,-0.7 L13.8,-0.55 L15.8,0 L13.8,0.55 L6.1,0.7 Z" />
+          <path d="M6.6,-0.4 L7.4,-5.8 L8.1,-5.6 L7.6,-0.3 Z M6.6,0.4 L7.4,5.8 L8.1,5.6 L7.6,0.3 Z" />
+        </g>
+        <rect x="1.2" y="-0.6" width="2.4" height="1.2" rx="0.2" fill="#f3e3c3" fillOpacity="0.9" />
+      </g>
+      <MedalhaAparecida x={medalha.x} y={medalha.y} />
     </svg>
   );
 }
@@ -568,8 +667,11 @@ function ContasTerco() {
 // Selo postal com borda serrilhada, para o "Cartão-postal".
 function SeloPostal({ ano }: { ano: number }) {
   const furos = Array.from({ length: 9 }, (_, i) => 6 + i * 11);
+  // Rodada 53: a figura do selo passou a ser a foto real da Basílica (em
+  // HTML, por cima do SVG do papel serrilhado).
   return (
-    <svg viewBox="0 0 100 120" className="h-full w-full drop-shadow" aria-hidden="true">
+    <div className="relative w-full drop-shadow" style={{ aspectRatio: "100 / 120" }}>
+    <svg viewBox="0 0 100 120" className="absolute inset-0 h-full w-full" aria-hidden="true">
       <rect x="2" y="2" width="96" height="116" fill="#fffdf7" />
       {furos.map((p) => (
         <g key={p} fill="#f3e9d2">
@@ -584,14 +686,22 @@ function SeloPostal({ ano }: { ano: number }) {
         </g>
       ))}
       <rect x="10" y="10" width="80" height="100" fill="#1e3a8a" />
-      <IlustracaoBasilica x="12" y="20" width="76" height="42" />
-      <text x="50" y="84" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fde68a" fontFamily="sans-serif">
+      <text x="50" y="86" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fde68a" fontFamily="sans-serif">
         APARECIDA
       </text>
-      <text x="50" y="100" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fbbf24" fontFamily="sans-serif">
+      <text x="50" y="101" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fbbf24" fontFamily="sans-serif">
         {ano}
       </text>
     </svg>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/arte/basilica-foto.webp"
+        alt=""
+        className="absolute object-cover"
+        style={{ left: "10%", top: `${(10 / 120) * 100}%`, width: "80%", height: `${(62 / 120) * 100}%` }}
+        draggable={false}
+      />
+    </div>
   );
 }
 
@@ -815,7 +925,8 @@ export default function RomariaPlusView({
 
   // Modelo "Basílica" (Rodada 52): estilo e transparência do desenho, e
   // quanto o fundo escurece a foto (mesmo campo `transparencia` do Selo).
-  const estiloDesenho: EstiloDesenho = ajuste.estiloDesenho ?? "claro";
+  const estiloDesenho: EstiloDesenho =
+    ajuste.estiloDesenho === "ilustracao" ? "foto" : (ajuste.estiloDesenho ?? "claro");
   const opacidadeDesenho = 1 - Math.min(80, Math.max(0, ajuste.transparenciaDesenho ?? 0)) / 100;
   const transparenciaFundoBasilica = ajuste.transparencia ?? TRANSPARENCIA_FUNDO_BASILICA_PADRAO;
   const fatorEscuridaoBasilica = 1 - (transparenciaFundoBasilica / 100) * 0.85;
@@ -1752,18 +1863,14 @@ export default function RomariaPlusView({
                   transparenciaNoPainel={false}
                 >
                   <div className="w-full" style={{ opacity: opacidadeDesenho }}>
-                    {estiloDesenho === "ilustracao" ? (
-                      <IlustracaoBasilica className="mx-auto w-[88%] drop-shadow-lg" />
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`/arte/basilica-desenho-${estiloDesenho}.webp`}
-                        alt="Desenho da Basílica de Aparecida"
-                        className="block w-full"
-                        style={estiloDesenho === "claro" ? { filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.55))" } : undefined}
-                        draggable={false}
-                      />
-                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={estiloDesenho === "foto" ? "/arte/basilica-foto.webp" : `/arte/basilica-desenho-${estiloDesenho}.webp`}
+                      alt="Basílica de Nossa Senhora Aparecida"
+                      className="block w-full"
+                      style={estiloDesenho === "claro" ? { filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.55))" } : undefined}
+                      draggable={false}
+                    />
                   </div>
                   <div
                     className="flex w-full flex-col items-center gap-[1.2cqw]"
@@ -1802,14 +1909,15 @@ export default function RomariaPlusView({
                 <p className="font-bold text-stripe-400" style={{ fontSize: "7.4cqw", textAlign: "center" }}>
                   {ano}
                 </p>
-                <div className="relative mt-[3%] w-[84%]" style={{ aspectRatio: "100 / 142" }}>
+                <div className="relative mt-[3%] w-[86%]" style={{ aspectRatio: "100 / 136" }}>
                   <div
-                    className="absolute overflow-hidden rounded-full"
+                    className="absolute overflow-hidden"
                     style={{
-                      left: `${50 - RAIO_FOTO_TERCO}%`,
-                      top: `${((50 - RAIO_FOTO_TERCO) / 142) * 100}%`,
-                      width: `${RAIO_FOTO_TERCO * 2}%`,
-                      height: `${((RAIO_FOTO_TERCO * 2) / 142) * 100}%`,
+                      left: `${MOLDURA_TERCO.x0}%`,
+                      top: `${(MOLDURA_TERCO.y0 / 136) * 100}%`,
+                      width: `${MOLDURA_TERCO.x1 - MOLDURA_TERCO.x0}%`,
+                      height: `${((MOLDURA_TERCO.y1 - MOLDURA_TERCO.y0) / 136) * 100}%`,
+                      borderRadius: `${(MOLDURA_TERCO.canto / (MOLDURA_TERCO.x1 - MOLDURA_TERCO.x0)) * 100}% / ${(MOLDURA_TERCO.canto / (MOLDURA_TERCO.y1 - MOLDURA_TERCO.y0)) * 100}%`,
                     }}
                   >
                     <FotoComPanZoom
