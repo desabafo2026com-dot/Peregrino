@@ -16,6 +16,21 @@ function detectarSistema(): SistemaDetectado {
   return "outro";
 }
 
+// Rodada 58b — mensagem que acompanha o link ao compartilhar (texto do
+// usuário). O link vai junto, e a prévia (imagem + título) aparece em cima.
+const MENSAGEM_COMPARTILHAR = `O PEREGRINO - APP de apoio para quem caminha na Dutra até Aparecida
+
+Após entrar no link, clique em Instalar para criar um ícone no seu celular.
+
+Você tem informações sem se cadastrar.
+- Responsáveis por Romarias podem informar a quantidade de pessoas para que os PAPs possam se planejar.
+- Gerentes de PAPs podem colocar suas informações para receber doações.
+- Peregrinos podem se cadastrar e planejar sua Peregrinação.
+Crie sua identificação de Peregrino.
+Registre a caminhada em tempo real e receba um certificado!
+Receba e mande mensagens de ocorrências no trajeto.
+Pode adquirir artes de fotos para tornar sua experiência mais incrível (opcional).`;
+
 export default function InstalarPage() {
   const [sistema, setSistema] = useState<SistemaDetectado>("outro");
   const [url, setUrl] = useState("");
@@ -47,7 +62,7 @@ export default function InstalarPage() {
       try {
         await navigator.share({
           title: "O Peregrino",
-          text: "Planeje sua peregrinação, registre e receba um certificado para compartilhar! Crie sua identificação de Peregrino. Receba e mande mensagens de ocorrências no trajeto.",
+          text: MENSAGEM_COMPARTILHAR,
           url,
         });
       } catch {
@@ -58,9 +73,11 @@ export default function InstalarPage() {
     }
   }
 
+  // Rodada 58b — copia a mensagem completa com o link no final (bom para
+  // colar em grupos de WhatsApp pelo computador).
   async function copiarLink() {
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(`${MENSAGEM_COMPARTILHAR}\n\n${url}`);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
     } catch {
@@ -164,7 +181,7 @@ export default function InstalarPage() {
             className="btn-secondary flex flex-1 items-center justify-center gap-2"
           >
             {copiado ? <Check size={18} /> : <Copy size={18} />}
-            {copiado ? "Copiado!" : "Copiar link"}
+            {copiado ? "Copiado!" : "Copiar mensagem"}
           </button>
         </div>
         {qrDataUrl && (

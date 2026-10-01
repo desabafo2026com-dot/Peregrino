@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { Printer, Download, FileText, Award } from "lucide-react";
-import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado } from "@/lib/certificado-texto";
+import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado, tempoNoCertificado } from "@/lib/certificado-texto";
 import type { Certificado } from "@/types/database";
 
 // Tamanho de página A4 paisagem, em mm — mesma orientação/proporção usada
@@ -105,7 +105,7 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
     { label: "Início", valor: formatarDataCurta(c.data_inicio) },
     { label: "Origem", valor: c.origem || "—" },
     { label: "Chegada", valor: formatarDataCurta(c.data_fim) },
-    { label: "Tempo", valor: c.duracao_texto || "—" },
+    { label: "Tempo", valor: tempoNoCertificado(c.data_inicio, c.data_fim, c.duracao_texto) || "—" },
     { label: "Check-ins", valor: String(checkinsNoCertificado(c.total_checkins)) },
   ];
 

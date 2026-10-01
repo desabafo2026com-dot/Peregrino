@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Printer, Download, FileText } from "lucide-react";
-import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado } from "@/lib/certificado-texto";
+import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado, tempoNoCertificado } from "@/lib/certificado-texto";
 import type { Certificado } from "@/types/database";
 
 // Proporção real da imagem-modelo (public/certificado/modelo-certificado.jpg),
@@ -34,6 +34,7 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
   const origem = c.origem;
   const dataInicio = formatarData(c.data_inicio);
   const checkins = checkinsNoCertificado(c.total_checkins);
+  const tempo = tempoNoCertificado(c.data_inicio, c.data_fim, c.duracao_texto);
 
   function imprimir() {
     // Marca só este certificado (útil quando há vários na mesma página) para
@@ -138,9 +139,9 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
             )}
             {dataInicio && <> no dia {dataInicio}</>}, com <strong>{checkins}</strong> check-in(s) confirmados
             ao longo da rota
-            {c.duracao_texto && (
+            {tempo && (
               <>
-                {" "}e um tempo total de <strong>{c.duracao_texto}</strong>
+                {" "}e um tempo total de <strong>{tempo}</strong>
               </>
             )}
             .

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import VoltarButton from "@/components/VoltarButton";
 import { ShieldCheck, Search } from "lucide-react";
+import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado, tempoNoCertificado } from "@/lib/certificado-texto";
+import type { MeioTransporte } from "@/types/database";
 
 interface Resultado {
   nome_peregrino: string;
@@ -19,7 +21,6 @@ interface Resultado {
   valido: boolean;
 }
 
-const MEIO_LABEL: Record<string, string> = { a_pe: "a pé", bicicleta: "de bicicleta", moto: "de moto", outros: "outro meio de transporte" };
 
 export default function VerificarPage() {
   const [codigo, setCodigo] = useState("");
@@ -70,16 +71,13 @@ export default function VerificarPage() {
         <div className="card">
           <p className="mb-2 font-semibold text-green-700">✓ Certificado válido</p>
           <p className="text-sm">
-            <strong>{resultado.nome_peregrino}</strong> concluiu{" "}
-            {resultado.meio_transporte === "outros"
-              ? resultado.meio_transporte_outro_desc || "outro meio de transporte"
-              : resultado.meio_transporte
-                ? MEIO_LABEL[resultado.meio_transporte] ?? ""
-                : ""}{" "}
-            a
-            peregrinação{resultado.rota_nome ? ` pela ${resultado.rota_nome}` : ""} em{" "}
-            {resultado.duracao_texto ?? `${resultado.dias_caminhada} dia(s)`}, com{" "}
-            {resultado.total_checkins} check-in(s).
+            {/* Rodada 58b — mesmo padrão de texto dos certificados. */}
+            <strong>{nomeNoCertificado(resultado.nome_peregrino)}</strong> concluiu com êxito a peregrinação{" "}
+            {meioNaFrase(resultado.meio_transporte as MeioTransporte | null, resultado.meio_transporte_outro_desc)} até a
+            Basílica de Nossa Senhora Aparecida-SP em{" "}
+            {tempoNoCertificado(resultado.data_inicio, resultado.data_fim, resultado.duracao_texto) ??
+              `${resultado.dias_caminhada} dia(s)`}
+            , com {checkinsNoCertificado(resultado.total_checkins)} check-in(s).
           </p>
         </div>
       )}

@@ -25,3 +25,24 @@ export function nomeNoCertificado(nome: string): string {
 export function checkinsNoCertificado(total: number | null | undefined): number {
   return Math.max(2, total ?? 0);
 }
+
+// Rodada 58b — tempo total "em dias (se houver um ou mais), horas e
+// minutos", calculado do início ao fim da peregrinação. Ex.: "4 dias, 7
+// horas e 12 minutos" ou "9 horas e 5 minutos". Sem as datas, usa o texto
+// gravado no certificado.
+export function tempoNoCertificado(
+  inicio: string | null | undefined,
+  fim: string | null | undefined,
+  reserva?: string | null
+): string | null {
+  if (inicio && fim) {
+    const totalMin = Math.max(0, Math.floor((new Date(fim).getTime() - new Date(inicio).getTime()) / 60000));
+    const dias = Math.floor(totalMin / 1440);
+    const horas = Math.floor((totalMin % 1440) / 60);
+    const minutos = totalMin % 60;
+    const plural = (n: number, s: string, p: string) => `${n} ${n === 1 ? s : p}`;
+    const hm = `${plural(horas, "hora", "horas")} e ${plural(minutos, "minuto", "minutos")}`;
+    return dias > 0 ? `${plural(dias, "dia", "dias")}, ${hm}` : hm;
+  }
+  return reserva ?? null;
+}
