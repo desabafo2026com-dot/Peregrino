@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import Image from "next/image";
-import { Printer, Download, FileText, Award } from "lucide-react";
+import { Award } from "lucide-react";
 import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado, tempoNoCertificado } from "@/lib/certificado-texto";
 import type { Certificado } from "@/types/database";
+import AcoesCertificado from "@/components/AcoesCertificado";
 
 // Tamanho de página A4 paisagem, em mm — mesma orientação/proporção usada
 // pelo Certificado Plus (Rodada 16, a pedido do usuário: "o certificado
@@ -43,63 +44,11 @@ function formatarDataCurta(d: string | null) {
 // moldura/arte muda.
 export default function CertificadoGratuitoView({ certificado: c }: { certificado: Certificado }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [baixando, setBaixando] = useState(false);
-  const [gerandoPdf, setGerandoPdf] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
 
   // Rodada 58 — texto no formato pedido pelo usuário.
   const meio = meioNaFrase(c.meio_transporte, c.meio_transporte_outro_desc);
 
-  function imprimir() {
-    ref.current?.classList.add("print-alvo");
-    document.body.classList.add("imprimindo-certificado");
-    const limpar = () => {
-      document.body.classList.remove("imprimindo-certificado");
-      ref.current?.classList.remove("print-alvo");
-      window.removeEventListener("afterprint", limpar);
-    };
-    window.addEventListener("afterprint", limpar);
-    setTimeout(() => window.print(), 50);
-  }
 
-  async function baixarImagem() {
-    if (!ref.current) return;
-    setErro(null);
-    setBaixando(true);
-    try {
-      const { gerarPngDoElemento } = await import("@/lib/gerar-imagem");
-      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.max(1600, Math.round(ref.current.getBoundingClientRect().width * 2)) });
-      const link = document.createElement("a");
-      link.download = `certificado-peregrino-${c.codigo}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch {
-      setErro("Não foi possível gerar a imagem agora. Tente novamente.");
-    } finally {
-      setBaixando(false);
-    }
-  }
-
-  async function baixarPdf() {
-    if (!ref.current) return;
-    setErro(null);
-    setGerandoPdf(true);
-    try {
-      const [{ gerarPngDoElemento }, { jsPDF }] = await Promise.all([import("@/lib/gerar-imagem"), import("jspdf")]);
-      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.max(1600, Math.round(ref.current.getBoundingClientRect().width * 2)) });
-      const pdf = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: [A4_LARGURA_MM, A4_ALTURA_MM],
-      });
-      pdf.addImage(dataUrl, "PNG", 0, 0, A4_LARGURA_MM, A4_ALTURA_MM);
-      pdf.save(`certificado-peregrino-${c.codigo}.pdf`);
-    } catch {
-      setErro("Não foi possível gerar o PDF agora. Tente novamente.");
-    } finally {
-      setGerandoPdf(false);
-    }
-  }
 
   const dados = [
     { label: "Início", valor: formatarDataCurta(c.data_inicio) },
@@ -121,8 +70,17 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
         {/* Moldura dupla — referência clássica de certificado impresso, sem
             depender de nenhuma imagem externa. */}
         <div className="flex h-full w-full flex-col border-[3px] border-amber-800 p-[1.4cqw]">
-          <div className="flex h-full w-full flex-col items-center justify-between border border-amber-300 px-[3cqw] py-[2.2cqw] text-center">
-            <div className="flex flex-col items-center gap-[0.6cqw]">
+          <div className="relative flex h-full w-full flex-col items-center justify-between overflow-hidden border border-amber-300 px-[3cqw] py-[2.2cqw] text-center">
+            {/* Rodada 60 — desenho de Nossa Senhora Aparecida ao fundo, bem
+                claro e desfocado, para não atrapalhar a leitura. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/certificado/santa-fundo.webp"
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-[54%] w-[52%] -translate-x-1/2 -translate-y-1/2 select-none"
+            />
+            <div className="relative flex flex-col items-center gap-[0.6cqw]">
               <Image
                 src="/icons/logo-emblema.png"
                 alt=""
@@ -145,7 +103,7 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
               </h2>
             </div>
 
-            <div className="flex flex-col items-center gap-[0.5cqw]">
+            <div className="relative flex flex-col items-center gap-[0.5cqw]">
               <p className="text-neutral-500" style={{ fontSize: "1.3cqw" }}>
                 Certificamos que
               </p>
@@ -165,7 +123,7 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
             </div>
 
             <div
-              className="flex w-full items-stretch justify-center divide-x divide-amber-200"
+              className="relative flex w-full items-stretch justify-center divide-x divide-amber-200"
               style={{ fontSize: "1.15cqw" }}
             >
               {dados.map((d) => (
@@ -179,7 +137,7 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
             </div>
 
             <div
-              className="flex w-full items-center justify-between border-t border-dashed border-amber-200 pt-[0.8cqw] text-neutral-500"
+              className="relative flex w-full items-center justify-between border-t border-dashed border-amber-200 pt-[0.8cqw] text-neutral-500"
               style={{ fontSize: "1cqw" }}
             >
               <span>Emitido em {formatarData(c.emitido_em)}</span>
@@ -191,23 +149,8 @@ export default function CertificadoGratuitoView({ certificado: c }: { certificad
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col items-center gap-2 print:hidden">
-        <div className="flex flex-wrap justify-center gap-2">
-          <button onClick={baixarPdf} disabled={gerandoPdf} className="btn-primary flex items-center gap-2">
-            <FileText size={16} /> {gerandoPdf ? "Gerando PDF..." : "Baixar certificado (PDF)"}
-          </button>
-          <button onClick={baixarImagem} disabled={baixando} className="btn-secondary flex items-center gap-2">
-            <Download size={16} /> {baixando ? "Gerando imagem..." : "Baixar como imagem"}
-          </button>
-        </div>
-        {erro && <p className="text-xs text-red-600">{erro}</p>}
-        <button
-          onClick={imprimir}
-          className="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
-        >
-          <Printer size={14} /> imprimir (alternativa)
-        </button>
-      </div>
+      {/* Rodada 60 — baixar/imprimir revistos para o iPhone (AcoesCertificado). */}
+      <AcoesCertificado alvo={ref} nomeBase={`certificado-peregrino-${c.codigo}`} pdfLarguraMm={A4_LARGURA_MM} pdfAlturaMm={A4_ALTURA_MM} larguraMinima={1600} />
     </div>
   );
 }

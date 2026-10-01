@@ -582,6 +582,27 @@ function SeloPostal({ ano }: { ano: number }) {
   );
 }
 
+// Rodada 60 — nome curto de cidade para os carimbos quando são muitos.
+const ABREVIACOES_CIDADE: Record<string, string> = {
+  "sao jose dos campos": "S. J. Campos",
+  pindamonhangaba: "Pinda",
+  "cachoeira paulista": "Cach. Paulista",
+  guaratingueta: "Guará",
+  "santa isabel": "Sta. Isabel",
+  "rio de janeiro": "Rio de Jan.",
+  "sao paulo": "S. Paulo",
+};
+function abreviarCidade(cidade: string): string {
+  const chave = cidade.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/-sp$|\/sp$/, "").trim();
+  if (ABREVIACOES_CIDADE[chave]) return ABREVIACOES_CIDADE[chave];
+  if (cidade.length <= 12) return cidade;
+  // Genérico: abrevia as primeiras palavras ("Nova Cidade Grande" -> "N. C. Grande").
+  const palavras = cidade.trim().split(/\s+/);
+  if (palavras.length === 1) return `${cidade.slice(0, 10)}.`;
+  const ultima = palavras.pop() as string;
+  return [...palavras.map((p) => (/^(de|da|do|dos|das)$/i.test(p) ? "" : `${p[0].toUpperCase()}.`)).filter(Boolean), ultima].join(" ");
+}
+
 // Carimbo de cidade da "Credencial do peregrino" — cores, formatos e
 // inclinações alternados pela posição, para parecer carimbado à mão.
 const CORES_CARIMBO = ["#1d4ed8", "#b91c1c", "#15803d", "#7e22ce", "#b45309", "#0f766e"];
@@ -1230,8 +1251,14 @@ export default function RomariaPlusView({
     origem && !ehAparecida(origem) ? origem.trim() : (cidadesUnicas[0] ?? null);
   const carimbos = cidadesUnicas
     .filter((cidade) => !origemCarimbo || normalizar(cidade) !== normalizar(origemCarimbo))
-    .slice(0, 12);
-  const larguraPassagem = carimbos.length <= 6 ? 23 : 19;
+    .slice(0, 15);
+  // Rodada 60 — peregrinação longa (muitas cidades): carimbos menores e
+  // nomes abreviados, para tudo caber na credencial.
+  const muitasCidades = carimbos.length > 6;
+  const larguraPassagem =
+    carimbos.length <= 4 ? 23 : carimbos.length <= 6 ? 21 : carimbos.length <= 9 ? 17 : carimbos.length <= 12 ? 15 : 13;
+  const larguraPonta = carimbos.length <= 6 ? 30 : carimbos.length <= 9 ? 26 : 23;
+  const nomeCarimbo = (cidade: string) => (muitasCidades ? abreviarCidade(cidade) : cidade);
   const dataSaida = c.data_inicio ? formatarDataCurta(new Date(c.data_inicio)).slice(0, 5) : null;
   const dataChegada = c.data_fim ? formatarDataCurta(new Date(c.data_fim)).slice(0, 5) : String(ano);
 
@@ -2074,21 +2101,21 @@ export default function RomariaPlusView({
                   <div className="flex w-full flex-1 flex-wrap content-center items-center justify-center gap-x-[3%] gap-y-[2.5%] py-[3%]">
                     {origemCarimbo && (
                       <Carimbo
-                        cidade={origemCarimbo}
+                        cidade={nomeCarimbo(origemCarimbo)}
                         rotulo={dataSaida ? `Origem ${dataSaida}` : "Origem"}
                         indice={0}
-                        largura={30}
+                        largura={larguraPonta}
                       />
                     )}
                     {carimbos.map((cidade, i) => (
-                      <Carimbo key={cidade + i} cidade={cidade} rotulo="Passagem" indice={i + 1} largura={larguraPassagem} />
+                      <Carimbo key={cidade + i} cidade={nomeCarimbo(cidade)} rotulo="Passagem" indice={i + 1} largura={larguraPassagem} />
                     ))}
                     <Carimbo
                       cidade="Aparecida"
                       rotulo={`Chegada ${dataChegada}`}
                       indice={carimbos.length + 1}
                       destaque
-                      largura={30}
+                      largura={larguraPonta}
                     />
                   </div>
                 </div>

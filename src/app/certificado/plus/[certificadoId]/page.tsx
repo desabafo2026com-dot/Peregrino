@@ -54,7 +54,7 @@ export default async function CertificadoPlusPage({
   // aqui sem concluir) — volta para a tela de compra em vez de mostrar uma
   // página vazia, como pedido pelo usuário.
   if (!compra) {
-    redirect(`/certificado#romaria-plus-${certificadoId}`);
+    redirect(`/certificado/${certificadoId}#romaria-plus`);
   }
 
   const compraId = (compra as CompraRomariaPlus).id;
@@ -115,7 +115,7 @@ export default async function CertificadoPlusPage({
         </p>
         {/* Rodada 57 — o Certificado Plus (pergaminho) mudou para Meus certificados. */}
         <Link
-          href={`/certificado#certificado-${cert.id}`}
+          href={`/certificado/${cert.id}`}
           className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:underline dark:text-amber-500"
         >
           <Award size={15} /> Ver meu Certificado Plus em Meus certificados →

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import VoltarButton from "@/components/VoltarButton";
 import BotaoInstalarApp from "@/components/BotaoInstalarApp";
-import { Share2, Smartphone, Apple, Copy, Check, Download } from "lucide-react";
+import { Share2, Smartphone, Apple, Copy, Check, Download, FileText, Printer } from "lucide-react";
 
 type SistemaDetectado = "ios" | "android" | "outro";
 
@@ -31,12 +31,46 @@ Registre a caminhada em tempo real e receba um certificado!
 Receba e mande mensagens de ocorrências no trajeto.
 Pode adquirir artes de fotos para tornar sua experiência mais incrível (opcional).`;
 
+function ehIOS() {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+// Salva o arquivo: no iPhone pela folha de compartilhar ("Salvar Imagem" /
+// "Salvar em Arquivos"); nos outros, download normal.
+async function salvarArquivo(blob: Blob, nome: string) {
+  if (ehIOS()) {
+    const arquivo = new File([blob], nome, { type: blob.type });
+    if (navigator.canShare?.({ files: [arquivo] })) {
+      try {
+        await navigator.share({ files: [arquivo] });
+        return;
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+      }
+    }
+    window.open(URL.createObjectURL(blob), "_blank");
+    return;
+  }
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 30000);
+}
+
 export default function InstalarPage() {
   const [sistema, setSistema] = useState<SistemaDetectado>("outro");
   const [url, setUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [jaInstalado, setJaInstalado] = useState(false);
+  const [cartazPreview, setCartazPreview] = useState<string | null>(null);
+  const [gerandoCartaz, setGerandoCartaz] = useState<null | "pdf" | "png">(null);
+  const [erroCartaz, setErroCartaz] = useState<string | null>(null);
 
   useEffect(() => {
     // Detecção de sistema/URL só é possível no navegador (window/navigator
@@ -53,9 +87,43 @@ export default function InstalarPage() {
         color: { dark: "#723618" },
       });
       setQrDataUrl(dataUrl);
+      // Prévia do cartaz para imprimir (Rodada 60).
+      try {
+        const { gerarCartazQrCode } = await import("@/lib/cartaz-qrcode");
+        const cartaz = await gerarCartazQrCode(origem);
+        const mini = document.createElement("canvas");
+        mini.width = 496;
+        mini.height = Math.round((496 * cartaz.height) / cartaz.width);
+        mini.getContext("2d")?.drawImage(cartaz, 0, 0, mini.width, mini.height);
+        setCartazPreview(mini.toDataURL("image/jpeg", 0.85));
+      } catch {
+        // sem prévia; os botões continuam funcionando
+      }
     }
     detectar();
   }, []);
+
+  async function baixarCartaz(formato: "pdf" | "png") {
+    setErroCartaz(null);
+    setGerandoCartaz(formato);
+    try {
+      const { gerarCartazQrCode, canvasParaBlob, CARTAZ_LARGURA, CARTAZ_ALTURA } = await import("@/lib/cartaz-qrcode");
+      const cartaz = await gerarCartazQrCode(url || window.location.origin);
+      if (formato === "png") {
+        await salvarArquivo(await canvasParaBlob(cartaz), "cartaz-o-peregrino.png");
+      } else {
+        const { jsPDF } = await import("jspdf");
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        const jpg = cartaz.toDataURL("image/jpeg", 0.92);
+        pdf.addImage(jpg, "JPEG", 0, 0, 210, (210 * CARTAZ_ALTURA) / CARTAZ_LARGURA);
+        await salvarArquivo(pdf.output("blob"), "cartaz-o-peregrino.pdf");
+      }
+    } catch {
+      setErroCartaz("Não foi possível gerar o cartaz agora. Tente novamente.");
+    } finally {
+      setGerandoCartaz(null);
+    }
+  }
 
   async function compartilhar() {
     if (navigator.share) {
@@ -190,9 +258,49 @@ export default function InstalarPage() {
             download="peregrino-qrcode.png"
             className="flex items-center gap-1 text-xs font-medium text-amber-700"
           >
-            <Download size={14} /> Baixar QR code
+            <Download size={14} /> Baixar só o QR code
           </a>
         )}
+      </div>
+
+      {/* Rodada 60 — cartaz completo para imprimir e colar nos pontos do caminho. */}
+      <div className="card flex flex-col items-center gap-4 text-center">
+        <h2 className="flex items-center gap-2 text-base font-bold text-amber-800 dark:text-amber-500">
+          <Printer size={20} /> Cartaz para imprimir
+        </h2>
+        <p className="text-sm text-neutral-500" style={{ textAlign: "center" }}>
+          Folha A4 com o nome do app, o QR code e o que o peregrino ganha com ele. Imprima e cole em PAPs,
+          paróquias, comércios e pontos do caminho.
+        </p>
+        {cartazPreview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={cartazPreview}
+            alt="Prévia do cartaz do app O Peregrino com QR code"
+            className="w-48 rounded-lg border border-neutral-200 shadow-md dark:border-neutral-800"
+          />
+        ) : (
+          <div className="flex aspect-[210/297] w-48 items-center justify-center rounded-lg border border-dashed border-neutral-300 text-xs text-neutral-400">
+            preparando prévia...
+          </div>
+        )}
+        <div className="flex w-full flex-col gap-2 sm:flex-row">
+          <button
+            onClick={() => baixarCartaz("pdf")}
+            disabled={gerandoCartaz !== null}
+            className="btn-primary flex flex-1 items-center justify-center gap-2"
+          >
+            <FileText size={18} /> {gerandoCartaz === "pdf" ? "Gerando PDF..." : "Baixar cartaz (PDF)"}
+          </button>
+          <button
+            onClick={() => baixarCartaz("png")}
+            disabled={gerandoCartaz !== null}
+            className="btn-secondary flex flex-1 items-center justify-center gap-2"
+          >
+            <Download size={18} /> {gerandoCartaz === "png" ? "Gerando imagem..." : "Baixar como imagem"}
+          </button>
+        </div>
+        {erroCartaz && <p className="text-xs text-red-600">{erroCartaz}</p>}
       </div>
     </div>
   );

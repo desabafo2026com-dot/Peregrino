@@ -4817,3 +4817,159 @@ revoke all on function public.meu_cracha() from public;
 grant execute on function public.meu_cracha() to authenticated;
 
 -- FIM DA MIGRATION 49
+
+-- =====================================================================
+-- MIGRATION 50 — Rodada 60: aprovação de PAP, check-ins completados e
+-- check-ins na rodovia
+-- ---------------------------------------------------------------------
+-- 1) Todo PAP cadastrado por quem não é administrador nasce "pendente"
+--    (garantido pelo banco, não só pelo app).
+-- 2) PAP pré-cadastrado (lista pública) só sai do mapa quando o PAP do
+--    gerente que o vinculou for APROVADO — antes sumia assim que alguém
+--    vinculava, sem passar pela administração. View
+--    paps_pre_cadastro_visiveis.
+-- 3) Check-in completado: se o peregrino faz check-in numa cidade mais à
+--    frente (ex.: pulou duas), as cidades do meio do caminho são
+--    registradas automaticamente ("passou por elas").
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DAS MIGRATIONS 48 E 49.
+-- =====================================================================
+
+-- 1) PAP de não-admin sempre pendente --------------------------------
+create or replace function public.pontos_apoio_antes_de_inserir()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    new.status_aprovacao := 'pendente';
+    new.observacao_admin := null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists pontos_apoio_antes_de_inserir on public.pontos_apoio;
+create trigger pontos_apoio_antes_de_inserir
+  before insert on public.pontos_apoio
+  for each row execute function public.pontos_apoio_antes_de_inserir();
+
+-- 2) Pré-cadastros visíveis no mapa público ----------------------------
+create or replace view public.paps_pre_cadastro_visiveis as
+select pc.*
+from public.paps_pre_cadastro pc
+where not exists (
+    select 1 from public.pontos_apoio pa
+    where pa.pre_cadastro_id = pc.id and pa.status_aprovacao = 'aprovado'
+  )
+  and (
+    pc.reivindicado_por is null
+    or exists (
+      select 1 from public.pontos_apoio pa
+      where pa.pre_cadastro_id = pc.id and pa.status_aprovacao = 'pendente'
+    )
+  );
+
+comment on view public.paps_pre_cadastro_visiveis is 'Rodada 60 — PAPs da lista pública que continuam no mapa: sem gerente, ou com o PAP do gerente ainda aguardando aprovação da administração.';
+grant select on public.paps_pre_cadastro_visiveis to anon, authenticated;
+
+-- 3) Check-ins completados --------------------------------------------
+alter table public.checkins add column if not exists completado_automaticamente boolean not null default false;
+comment on column public.checkins.completado_automaticamente is 'Rodada 60 — check-in de uma cidade do meio do caminho, registrado sozinho porque o peregrino fez check-in numa cidade mais à frente.';
+
+create or replace function public.preencher_checkins_intermediarios()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_rota uuid;
+  v_cidade_inicio text;
+  v_ordem_novo integer;
+  v_ordem_inicio integer;
+begin
+  -- Só reage ao check-in "de verdade", não aos que ela mesma insere.
+  -- (os inseridos aqui têm completado_automaticamente = true; o check-in
+  -- automático por localização, que também vem de um gatilho, conta).
+  if new.ponto_checkin_id is null or new.completado_automaticamente then
+    return null;
+  end if;
+
+  select p.rota_id, p.cidade_inicio into v_rota, v_cidade_inicio
+  from public.peregrinacoes p where p.id = new.peregrinacao_id;
+  if v_rota is null then
+    return null;
+  end if;
+
+  select pc.ordem into v_ordem_novo
+  from public.pontos_checkin pc where pc.id = new.ponto_checkin_id and pc.rota_id = v_rota;
+  if v_ordem_novo is null then
+    return null;
+  end if;
+
+  select min(pc.ordem) into v_ordem_inicio
+  from public.pontos_checkin pc
+  where pc.rota_id = v_rota and pc.cidade = v_cidade_inicio;
+
+  if v_ordem_inicio is null then
+    select min(pc.ordem) into v_ordem_inicio
+    from public.checkins c join public.pontos_checkin pc on pc.id = c.ponto_checkin_id
+    where c.peregrinacao_id = new.peregrinacao_id and pc.rota_id = v_rota;
+  end if;
+  if v_ordem_inicio is null or v_ordem_novo - v_ordem_inicio < 2 then
+    return null;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('checkin_auto:' || new.peregrinacao_id::text));
+
+  insert into public.checkins
+    (peregrinacao_id, user_id, ponto_checkin_id, latitude, longitude, criado_em, completado_automaticamente)
+  select new.peregrinacao_id, new.user_id, pc.id, pc.latitude, pc.longitude,
+         new.criado_em - (v_ordem_novo - pc.ordem) * interval '1 second', true
+  from public.pontos_checkin pc
+  where pc.rota_id = v_rota
+    and pc.ordem > v_ordem_inicio
+    and pc.ordem < v_ordem_novo
+    and not exists (
+      select 1 from public.checkins c
+      where c.peregrinacao_id = new.peregrinacao_id and c.ponto_checkin_id = pc.id
+    )
+  order by pc.ordem;
+
+  return null;
+end;
+$$;
+
+revoke all on function public.preencher_checkins_intermediarios() from public;
+
+drop trigger if exists trg_preencher_checkins_intermediarios on public.checkins;
+create trigger trg_preencher_checkins_intermediarios
+  after insert on public.checkins
+  for each row execute function public.preencher_checkins_intermediarios();
+
+-- Completa também as peregrinações em andamento hoje (uma única vez).
+insert into public.checkins
+  (peregrinacao_id, user_id, ponto_checkin_id, latitude, longitude, criado_em, completado_automaticamente)
+select p.id, p.user_id, pc.id, pc.latitude, pc.longitude, ult.criado_em - interval '1 second', true
+from public.peregrinacoes p
+join lateral (
+  select max(pc2.ordem) as ordem_max, max(c2.criado_em) as criado_em
+  from public.checkins c2 join public.pontos_checkin pc2 on pc2.id = c2.ponto_checkin_id
+  where c2.peregrinacao_id = p.id and pc2.rota_id = p.rota_id
+) ult on ult.ordem_max is not null
+join lateral (
+  select min(pc3.ordem) as ordem_ini
+  from public.pontos_checkin pc3
+  where pc3.rota_id = p.rota_id and pc3.cidade = p.cidade_inicio
+) ini on ini.ordem_ini is not null
+join public.pontos_checkin pc
+  on pc.rota_id = p.rota_id and pc.ordem > ini.ordem_ini and pc.ordem < ult.ordem_max
+where p.status = 'em_andamento'
+  and not exists (
+    select 1 from public.checkins c where c.peregrinacao_id = p.id and c.ponto_checkin_id = pc.id
+  );
+
+-- FIM DA MIGRATION 50

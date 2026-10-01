@@ -72,6 +72,10 @@ const AZUL = { fundo: "#1f3b6b", icone: "#f5a54a" };
 const OURO = { fundo: "#e0892b", icone: "#ffffff" };
 const CREME = { fundo: "#fbe3c9", icone: "#b8621a" };
 
+function emitidoHaPoucosDias(iso: string, dias: number) {
+  return Date.now() - new Date(iso).getTime() < dias * 24 * 60 * 60 * 1000;
+}
+
 export default async function PainelPage() {
   const supabase = await createClient();
   const {
@@ -145,6 +149,16 @@ export default async function PainelPage() {
   const ultimoCertificadoId = (certificados?.[0]?.id as string | undefined) ?? null;
   const primeiroNome = perfil.nome_completo.trim().split(/\s+/)[0];
 
+  // Rodada 60 — acabou de concluir uma peregrinação (certificado dos
+  // últimos 30 dias) e ainda não tem a Romaria Plus dela: oferta em
+  // destaque no topo do painel.
+  const ultimoEmitidoEm = certificados?.[0]?.emitido_em as string | undefined;
+  const ofertaPlusRecente =
+    !!ultimoCertificadoId &&
+    !!ultimoEmitidoEm &&
+    emitidoHaPoucosDias(ultimoEmitidoEm, 30) &&
+    !compras.some((c) => c.tipo === "inicial" && c.certificado_id === ultimoCertificadoId);
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
       <header className="flex items-center gap-4">
@@ -192,6 +206,29 @@ export default async function PainelPage() {
         </span>
         <ChevronRight size={22} className="shrink-0 text-white/80" />
       </Link>
+
+      {ofertaPlusRecente && (
+        <Link
+          href={`/certificado/${ultimoCertificadoId}#romaria-plus`}
+          className="flex items-center gap-4 rounded-2xl border-2 border-amber-500 bg-amber-50 p-4 shadow-sm transition hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-950/70"
+        >
+          <span
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+            style={{ background: OURO.fundo, color: OURO.icone }}
+          >
+            <Sparkles size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-amber-900 dark:text-amber-300">
+              Parabéns, peregrinação concluída!
+            </span>
+            <span className="block text-sm text-amber-800 dark:text-amber-400">
+              Transforme 5 fotos da caminhada em artes e ganhe o Certificado Plus por {VALOR_PLUS}.
+            </span>
+          </span>
+          <ChevronRight size={22} className="shrink-0 text-amber-700" />
+        </Link>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Modulo href="/perfil" titulo="Perfil" descricao="Seus dados, foto e senha" Icone={UserRound} cor={AZUL} />
@@ -309,7 +346,7 @@ export default async function PainelPage() {
             </p>
             {ultimoCertificadoId ? (
               <Link
-                href={`/certificado#romaria-plus-${ultimoCertificadoId}`}
+                href={`/certificado/${ultimoCertificadoId}#romaria-plus`}
                 className="flex w-full flex-col items-center gap-0.5 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 text-white shadow-md transition hover:from-amber-700 hover:to-amber-900"
               >
                 <span className="flex items-center gap-2 text-lg font-black">

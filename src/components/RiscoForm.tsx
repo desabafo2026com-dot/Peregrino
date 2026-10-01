@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
-import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS, ROTA_FAIXA_KM, nomeRota } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS, ROTA_FAIXA_KM, nomeRota, kmPertenceARota } from "@/lib/constants";
 import { LocateFixed, Upload } from "lucide-react";
 import type { PontoRisco, Rota, Br } from "@/types/database";
 
@@ -68,6 +68,9 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
   );
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Rodada 60 — riscos já cadastrados, mostrados no mapa conforme os filtros
+  // de rota e sentido (os mesmos do módulo Rotas e Riscos).
+  const [riscosExistentes, setRiscosExistentes] = useState<PontoRisco[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -76,7 +79,23 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
       .select("*")
       .order("ordem")
       .then(({ data }) => setRotas((data ?? []) as Rota[]));
+    supabase
+      .from("pontos_risco")
+      .select("*")
+      .then(({ data }) => setRiscosExistentes((data ?? []) as PontoRisco[]));
   }, []);
+
+  const rotaSelecionada = rotas.find((r) => r.id === rotaId) ?? null;
+  const riscosNoMapa = riscosExistentes
+    .filter((r) => r.id !== riscoInicial?.id)
+    .filter((r) =>
+      !rotaSelecionada
+        ? true
+        : r.km_referencia != null
+          ? kmPertenceARota(r.km_referencia, rotaSelecionada.slug)
+          : r.rota_id === null || r.rota_id === rotaSelecionada.id
+    )
+    .filter((r) => !sentido || r.sentido === sentido);
 
   async function handleUploadFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -159,7 +178,53 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
           <LocateFixed size={18} /> Usar minha localização atual
         </button>
         <p className="mb-2 text-xs text-neutral-500">Ou toque no mapa para marcar o ponto exato.</p>
+        {/* Rodada 60 — filtros de rota e sentido iguais aos do módulo Rotas e
+            Riscos: definem a rota/sentido deste risco e mostram no mapa os
+            riscos já cadastrados nessa rota/sentido (bandeiras). */}
+        <div className="mb-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setRotaId("")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!rotaId ? "bg-amber-800 text-white" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"}`}
+          >
+            Ambas as rotas
+          </button>
+          {rotas.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => setRotaId(r.id)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${rotaId === r.id ? "bg-amber-800 text-white" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"}`}
+            >
+              {nomeRota(r)}
+              {ROTA_FAIXA_KM[r.slug] ? ` (${ROTA_FAIXA_KM[r.slug]})` : ""}
+            </button>
+          ))}
+        </div>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSentido("")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!sentido ? "bg-red-700 text-white" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"}`}
+          >
+            Ambos os sentidos
+          </button>
+          {SENTIDO_PISTA_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setSentido(o.value)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${sentido === o.value ? "bg-red-700 text-white" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"}`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="mb-2 text-xs text-neutral-500">
+          {riscosNoMapa.length} risco(s) já cadastrado(s) nesta rota/sentido aparecem no mapa como bandeiras.
+        </p>
         <MapView
+          pontosRisco={riscosNoMapa}
           pickMode
           onPick={(lat, lng) => setCoords({ lat, lng })}
           markerPreview={coords ? { lat: coords.lat, lng: coords.lng } : null}
@@ -250,32 +315,10 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
               onChange={(e) => setKmReferencia(e.target.value)}
             />
           </div>
-          <div>
-            <label className="label">Sentido da via</label>
-            <select className="input" value={sentido} onChange={(e) => setSentido(e.target.value)}>
-              <option value="">Não informado</option>
-              {SENTIDO_PISTA_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Rota</label>
-            <select className="input" value={rotaId} onChange={(e) => setRotaId(e.target.value)}>
-              <option value="">Ambas as rotas</option>
-              {rotas.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {nomeRota(r)}
-                  {ROTA_FAIXA_KM[r.slug] ? ` (${ROTA_FAIXA_KM[r.slug]})` : ""}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-neutral-500">
-              A faixa de km entre parênteses ajuda a escolher a rota certa a
-              partir do km real do local.
-            </p>
+          <div className="text-xs text-neutral-500 sm:col-span-2">
+            Rota: <strong>{rotaSelecionada ? nomeRota(rotaSelecionada) : "Ambas as rotas"}</strong> — Sentido:{" "}
+            <strong>{SENTIDO_PISTA_OPTIONS.find((o) => o.value === sentido)?.label ?? "Não informado"}</strong> (escolha nos
+            botões acima do mapa).
           </div>
           <div className="sm:col-span-2">
             <label className="label">Ponto de referência (opcional)</label>

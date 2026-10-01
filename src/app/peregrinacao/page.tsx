@@ -99,9 +99,8 @@ export default async function PeregrinacaoPage() {
     // admin), para o mapa daqui mostrar todos os PAP ativos, não só os já
     // vinculados por um gerente.
     supabase
-      .from("paps_pre_cadastro")
+      .from("paps_pre_cadastro_visiveis")
       .select("*")
-      .is("reivindicado_por", null)
       .contains("datas_funcionamento", [hojeISOStr]),
     supabase.from("paps_pre_cadastro").select("cidade, km"),
   ]);

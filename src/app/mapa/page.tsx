@@ -7,7 +7,8 @@ import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
 import type { PontoApoio, Rota, PontoCheckin, PapPreCadastro } from "@/types/database";
 import type { PapPreCadastroMapa } from "@/components/MapView";
 
-export default async function MapaPage() {
+export default async function MapaPage({ searchParams }: { searchParams: Promise<{ ativos?: string }> }) {
+  const { ativos } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -44,7 +45,10 @@ export default async function MapaPage() {
     // Só os ainda não vinculados a um gerente — assim que alguém vincula, o
     // ponto sai daqui e passa a ser representado pelo PAP real (pontos_apoio,
     // já com localização exata) quando a divulgação for aprovada.
-    supabase.from("paps_pre_cadastro").select("*").is("reivindicado_por", null),
+    // Rodada 60 — o PAP pré-cadastrado só sai do mapa quando o PAP do
+    // gerente que o vinculou for APROVADO pela administração (view da
+    // Migration 50).
+    supabase.from("paps_pre_cadastro_visiveis").select("*"),
     // Base inteira (vinculados ou não) só para estimar o km real médio de
     // cada cidade — quanto mais PAPs conhecidos numa cidade, mais confiável
     // a âncora usada na interpolação abaixo.
@@ -85,6 +89,7 @@ export default async function MapaPage() {
       </div>
 
       <MapClient
+        filtroAtivosInicial={ativos === "1"}
         pontosApoio={(pontosApoio ?? []) as PontoApoio[]}
         papsPreCadastro={papsPreCadastro}
         isAdmin={isAdmin}

@@ -20,6 +20,7 @@ interface Props {
   pontosApoio: PontoApoio[];
   papsPreCadastro: PapPreCadastroMapa[];
   isAdmin?: boolean;
+  filtroAtivosInicial?: boolean;
 }
 
 function hojeISO() {
@@ -70,8 +71,9 @@ const LIMITE_INICIAL = 30;
 // vínculo) aparecem de cara, e marcar o filtro estreita para só os que
 // estão ativos neste momento (mesmo critério do contador "PAP ativos" da
 // home).
-export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = false }: Props) {
-  const [somenteAtivos, setSomenteAtivos] = useState(false);
+export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = false, filtroAtivosInicial = false }: Props) {
+  // Rodada 60 — vindo do contador "PAP ativos" da home, já abre filtrado.
+  const [somenteAtivos, setSomenteAtivos] = useState(filtroAtivosInicial);
   const [busca, setBusca] = useState("");
   const [limite, setLimite] = useState(LIMITE_INICIAL);
   const [foco, setFoco] = useState<{ chave: string; seq: number } | null>(null);

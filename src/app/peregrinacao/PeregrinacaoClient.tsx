@@ -341,31 +341,36 @@ export default function PeregrinacaoClient({
   useEffect(() => {
     checkinsFeitosRef.current = checkinsFeitosIds;
   }, [checkinsFeitosIds]);
+  // Rodada 60 — busca a lista completa no banco, já na ordem do caminho
+  // (as cidades do meio "completadas" sozinhas, quando o peregrino faz
+  // check-in duas cidades à frente, entram com horário logo antes).
+  async function recarregarCheckins(peregrinacaoId: string, avisar: boolean) {
+    const { data, error } = await supabase
+      .from("checkins")
+      .select("ponto_checkin_id")
+      .eq("peregrinacao_id", peregrinacaoId)
+      .not("ponto_checkin_id", "is", null)
+      .order("criado_em", { ascending: true });
+    if (error || !data) return;
+    const ids = [...new Set(data.map((c) => c.ponto_checkin_id as string))];
+    const atuais = checkinsFeitosRef.current;
+    const novos = ids.filter((id) => !atuais.includes(id));
+    if (novos.length === 0 && ids.length === atuais.length) return;
+    checkinsFeitosRef.current = ids;
+    setCheckinsFeitosIds(ids);
+    setCheckinsCount(ids.length);
+    if (!avisar) return;
+    const cidades = novos
+      .map((id) => pontosCheckin.find((p) => p.id === id)?.cidade)
+      .filter(Boolean)
+      .join(", ");
+    if (cidades) setMsg(`Check-in automático em ${cidades} registrado.`);
+  }
+
   useEffect(() => {
     if (!emAndamento || !peregrinacao) return;
     const peregrinacaoId = peregrinacao.id;
-    const timer = window.setInterval(async () => {
-      const { data, error } = await supabase
-        .from("checkins")
-        .select("ponto_checkin_id")
-        .eq("peregrinacao_id", peregrinacaoId)
-        .not("ponto_checkin_id", "is", null)
-        .order("criado_em", { ascending: true });
-      if (error || !data) return;
-      const ids = data.map((c) => c.ponto_checkin_id as string);
-      // Mantém a ordem já conhecida e acrescenta os novos no fim.
-      const atuais = checkinsFeitosRef.current;
-      const novos = ids.filter((id) => !atuais.includes(id));
-      if (novos.length === 0) return;
-      checkinsFeitosRef.current = [...atuais, ...novos];
-      setCheckinsFeitosIds(checkinsFeitosRef.current);
-      setCheckinsCount((c) => c + novos.length);
-      const cidades = novos
-        .map((id) => pontosCheckin.find((p) => p.id === id)?.cidade)
-        .filter(Boolean)
-        .join(", ");
-      if (cidades) setMsg(`Check-in automático em ${cidades} registrado.`);
-    }, 30000);
+    const timer = window.setInterval(() => recarregarCheckins(peregrinacaoId, true), 30000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emAndamento, peregrinacao?.id]);
@@ -666,9 +671,17 @@ export default function PeregrinacaoClient({
           setErro(error.message);
           return;
         }
+        const antes = checkinsFeitosRef.current.length;
         setCheckinsCount((c) => c + 1);
         setCheckinsFeitosIds((ids) => (ids.includes(alvoPonto.id) ? ids : [...ids, alvoPonto.id]));
-        setMsg(`Check-in em ${alvoPonto.cidade} registrado com sucesso!`);
+        // As cidades do meio que ficaram para trás são completadas no banco.
+        await recarregarCheckins(peregrinacao.id, false);
+        const completadas = checkinsFeitosRef.current.length - antes - 1;
+        setMsg(
+          completadas > 0
+            ? `Check-in em ${alvoPonto.cidade} registrado com sucesso! ${completadas === 1 ? "A cidade anterior também foi completada" : `As ${completadas} cidades anteriores também foram completadas`} no seu trajeto.`
+            : `Check-in em ${alvoPonto.cidade} registrado com sucesso!`
+        );
       },
       () => setErro("Não foi possível acessar sua localização."),
       { enableHighAccuracy: true, timeout: 15000 }

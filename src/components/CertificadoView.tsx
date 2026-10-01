@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Printer, Download, FileText } from "lucide-react";
+import { useRef } from "react";
 import { meioNaFrase, nomeNoCertificado, checkinsNoCertificado, tempoNoCertificado } from "@/lib/certificado-texto";
 import type { Certificado } from "@/types/database";
+import AcoesCertificado from "@/components/AcoesCertificado";
 
 // Proporção real da imagem-modelo (public/certificado/modelo-certificado.jpg),
 // usada para reservar o espaço certo antes da imagem carregar e para
@@ -23,9 +23,6 @@ function formatarData(d: string | null) {
 
 export default function CertificadoView({ certificado: c }: { certificado: Certificado }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [baixando, setBaixando] = useState(false);
-  const [gerandoPdf, setGerandoPdf] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
 
   // Rodada 58 — texto no formato pedido pelo usuário: "concluiu com êxito,
   // nesta data, sua peregrinação (meio) até a Basílica..., saindo de
@@ -36,63 +33,7 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
   const checkins = checkinsNoCertificado(c.total_checkins);
   const tempo = tempoNoCertificado(c.data_inicio, c.data_fim, c.duracao_texto);
 
-  function imprimir() {
-    // Marca só este certificado (útil quando há vários na mesma página) para
-    // que o CSS de impressão esconda o restante da página.
-    ref.current?.classList.add("print-alvo");
-    document.body.classList.add("imprimindo-certificado");
-    const limpar = () => {
-      document.body.classList.remove("imprimindo-certificado");
-      ref.current?.classList.remove("print-alvo");
-      window.removeEventListener("afterprint", limpar);
-    };
-    window.addEventListener("afterprint", limpar);
-    // Dá um instante para o browser aplicar a classe antes de abrir o diálogo.
-    setTimeout(() => window.print(), 50);
-  }
 
-  async function baixarImagem() {
-    if (!ref.current) return;
-    setErro(null);
-    setBaixando(true);
-    try {
-      const { gerarPngDoElemento } = await import("@/lib/gerar-imagem");
-      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.max(1600, Math.round(ref.current.getBoundingClientRect().width * 2)) });
-      const link = document.createElement("a");
-      link.download = `certificado-peregrino-${c.codigo}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch {
-      setErro("Não foi possível gerar a imagem agora. Tente novamente.");
-    } finally {
-      setBaixando(false);
-    }
-  }
-
-  async function baixarPdf() {
-    if (!ref.current) return;
-    setErro(null);
-    setGerandoPdf(true);
-    try {
-      const [{ gerarPngDoElemento }, { jsPDF }] = await Promise.all([import("@/lib/gerar-imagem"), import("jspdf")]);
-      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.max(1600, Math.round(ref.current.getBoundingClientRect().width * 2)) });
-      // Página do PDF com a mesma proporção do certificado, na largura de
-      // uma A4 paisagem — a imagem preenche a página inteira, sem margens.
-      const larguraMm = 297;
-      const alturaMm = (larguraMm * MODELO_ALTURA) / MODELO_LARGURA;
-      const pdf = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: [larguraMm, alturaMm],
-      });
-      pdf.addImage(dataUrl, "PNG", 0, 0, larguraMm, alturaMm);
-      pdf.save(`certificado-peregrino-${c.codigo}.pdf`);
-    } catch {
-      setErro("Não foi possível gerar o PDF agora. Tente novamente.");
-    } finally {
-      setGerandoPdf(false);
-    }
-  }
 
   return (
     <div>
@@ -156,31 +97,8 @@ export default function CertificadoView({ certificado: c }: { certificado: Certi
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col items-center gap-2 print:hidden">
-        <div className="flex flex-wrap justify-center gap-2">
-          <button
-            onClick={baixarPdf}
-            disabled={gerandoPdf}
-            className="btn-primary flex items-center gap-2"
-          >
-            <FileText size={16} /> {gerandoPdf ? "Gerando PDF..." : "Baixar certificado (PDF)"}
-          </button>
-          <button
-            onClick={baixarImagem}
-            disabled={baixando}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <Download size={16} /> {baixando ? "Gerando imagem..." : "Baixar como imagem"}
-          </button>
-        </div>
-        {erro && <p className="text-xs text-red-600">{erro}</p>}
-        <button
-          onClick={imprimir}
-          className="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
-        >
-          <Printer size={14} /> imprimir (alternativa)
-        </button>
-      </div>
+      {/* Rodada 60 — baixar/imprimir revistos para o iPhone (AcoesCertificado). */}
+      <AcoesCertificado alvo={ref} nomeBase={`certificado-plus-${c.codigo}`} pdfLarguraMm={297} pdfAlturaMm={(297 * MODELO_ALTURA) / MODELO_LARGURA} larguraMinima={1600} />
     </div>
   );
 }

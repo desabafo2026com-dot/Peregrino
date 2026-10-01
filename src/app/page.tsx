@@ -163,8 +163,7 @@ export default async function Home() {
           <p className="mb-3 text-sm text-neutral-700 dark:text-neutral-300">
             O mapa de Pontos de Apoio, as rotas com os trechos de risco e os hotéis e restaurantes
             estão liberados para qualquer pessoa. Para registrar sua peregrinação ou informar algo
-            (Romaria, PAP, ocorrências no trajeto) é preciso ter cadastro — assim todos sabem quem
-            postou cada informação.
+            (Romaria, PAP, ocorrências no trajeto) é preciso ter cadastro.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link href="/mapa" className="btn-primary inline-flex items-center gap-1.5 text-sm">
@@ -223,14 +222,18 @@ export default async function Home() {
               Instalar no telefone
             </span>
           </BotaoInstalarApp>
-          <div className="card flex flex-col items-center justify-center gap-1">
+          {/* Rodada 60 — toque abre o mapa de PAP já com o filtro "ativos agora". */}
+          <Link
+            href="/mapa?ativos=1"
+            className="card flex flex-col items-center justify-center gap-1 transition hover:border-amber-300"
+          >
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <MapPin size={20} /> {stats.pontos_apoio_ativos}
             </p>
             <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
               PAP ativos
             </p>
-          </div>
+          </Link>
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
               <Award size={20} /> {stats.peregrinacoes_concluidas}

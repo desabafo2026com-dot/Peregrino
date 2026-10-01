@@ -1,27 +1,41 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
-import CertificadoView from "@/components/CertificadoView";
-import RomariaPlusCompra from "@/components/RomariaPlusCompra";
-import MensagemConquistaForm from "@/components/MensagemConquistaForm";
 import VoltarButton from "@/components/VoltarButton";
 import HistoricoPeregrinacoes, { type PeregrinacaoHistorico } from "@/components/HistoricoPeregrinacoes";
 import { nomeRota } from "@/lib/constants";
-import type { Certificado, CompraRomariaPlus, MensagemConquista, MeioTransporte, Peregrinacao } from "@/types/database";
+import type { Certificado, MeioTransporte, Peregrinacao } from "@/types/database";
 
-export default async function CertificadoPage() {
+// Rodada 60 — "Meus certificados" abre primeiro a lista das peregrinações
+// concluídas (por ano), cada uma com o link para o seu certificado; o
+// certificado, o Certificado Plus e a compra do Plus ficam numa página
+// própria (/certificado/[id]). Mais organizado para quem faz mais de uma
+// peregrinação no mesmo ano.
+export default async function CertificadoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ compra?: string; romaria_plus?: string }>;
+}) {
+  const { compra } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?redirect=/certificado");
 
+  // Volta do Mercado Pago de compras antigas (endereço anterior à Rodada 60).
+  if (compra) {
+    const { data: c } = await supabase
+      .from("compras_romaria_plus")
+      .select("certificado_id")
+      .eq("id", compra)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (c?.certificado_id) redirect(`/certificado/${c.certificado_id}?romaria_plus=retorno#romaria-plus`);
+  }
+
   const [{ data: certificados }, { data: concluidasData }, { data: ativa }, { data: rotasData }, { data: comprasPagasData }] =
     await Promise.all([
-      supabase.from("certificados").select("*").eq("user_id", user.id).order("emitido_em", { ascending: false }),
-      // Rodada 56 — "Peregrinações concluídas" (antes em Minha peregrinação).
+      supabase.from("certificados").select("id, peregrinacao_id").eq("user_id", user.id),
       supabase
         .from("peregrinacoes")
         .select("*")
@@ -36,11 +50,18 @@ export default async function CertificadoPage() {
         .limit(1)
         .maybeSingle(),
       supabase.from("rotas").select("id, slug, nome"),
-      supabase.from("compras_romaria_plus").select("certificado_id").eq("user_id", user.id).eq("status", "pago"),
+      supabase
+        .from("compras_romaria_plus")
+        .select("certificado_id")
+        .eq("user_id", user.id)
+        .eq("status", "pago")
+        .eq("tipo", "inicial"),
     ]);
 
   const certificadoPorPeregrinacao = new Map<string, string>();
-  ((certificados ?? []) as Certificado[]).forEach((c) => certificadoPorPeregrinacao.set(c.peregrinacao_id, c.id));
+  ((certificados ?? []) as Pick<Certificado, "id" | "peregrinacao_id">[]).forEach((c) =>
+    certificadoPorPeregrinacao.set(c.peregrinacao_id, c.id)
+  );
   const certificadosComPlus = new Set((comprasPagasData ?? []).map((c) => c.certificado_id as string));
   const rotaPorId = new Map((rotasData ?? []).map((r) => [r.id as string, r as { slug: string; nome: string }]));
   const historico: PeregrinacaoHistorico[] = ((concluidasData ?? []) as Peregrinacao[]).map((p) => {
@@ -59,131 +80,24 @@ export default async function CertificadoPage() {
     };
   });
 
-  if (!certificados?.length) {
-    return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-6">
-        <VoltarButton href="/painel" />
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      <VoltarButton href="/painel" />
+      <div>
         <h1 className="text-2xl font-bold">Meus certificados</h1>
+        <p className="text-sm text-neutral-500">
+          Suas peregrinações concluídas. Toque em <strong>Ver certificado</strong> para abrir o certificado e o
+          Certificado Plus.
+        </p>
+      </div>
+      {historico.length === 0 ? (
         <p className="card text-center text-neutral-500" style={{ textAlign: "center" }}>
-          Você ainda não tem certificado. Ao concluir uma peregrinação em Aparecida, ele aparece aqui
+          Você ainda não concluiu nenhuma peregrinação. Ao concluir em Aparecida, o certificado aparece aqui
           automaticamente.
         </p>
-        <HistoricoPeregrinacoes lista={historico} temPeregrinacaoAtiva={!!ativa} />
-      </div>
-    );
-  }
-
-  const certificadosLista = certificados as Certificado[];
-  const idsCertificados = certificadosLista.map((c) => c.id);
-
-  // As três consultas abaixo são independentes entre si — juntas num só
-  // Promise.all em vez de uma atrás da outra (Rodada 30, mesma otimização
-  // aplicada em /peregrinacao).
-  const [{ data: perfil }, { data: compras }, { data: mensagensConquista }] = await Promise.all([
-    supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
-    // Última compra de Romaria Plus conhecida por certificado (se houver
-    // mais de uma tentativa, a mais recente é a que importa). tipo="inicial"
-    // (Rodada 30): uma compra de PACOTE EXTRA de fotos não deve aparecer
-    // aqui — este card é só sobre o Certificado Plus em si (a compra
-    // inicial).
-    supabase
-      .from("compras_romaria_plus")
-      .select("*")
-      .in("certificado_id", idsCertificados)
-      .eq("tipo", "inicial")
-      .order("criado_em", { ascending: false }),
-    // Mensagens de conquista (Rodada 27) já publicadas para os certificados
-    // deste peregrino, se houver — usadas para mostrar "sua mensagem já
-    // está publicada" em vez do formulário em branco de novo.
-    supabase.from("mensagens_conquista").select("*").in("certificado_id", idsCertificados),
-  ]);
-  const isAdmin = !!perfil?.is_admin;
-
-  const compraPorCertificado = new Map<string, CompraRomariaPlus>();
-  ((compras ?? []) as CompraRomariaPlus[]).forEach((compra) => {
-    if (!compraPorCertificado.has(compra.certificado_id)) {
-      compraPorCertificado.set(compra.certificado_id, compra);
-    }
-  });
-
-  // Ano de conclusão (horário de Brasília) de cada certificado, mais recente primeiro.
-  const anoDe = (c: Certificado) =>
-    Number(
-      new Date(c.data_fim ?? c.emitido_em).toLocaleString("en-US", { timeZone: "America/Sao_Paulo", year: "numeric" })
-    );
-  const porAno = new Map<number, Certificado[]>();
-  certificadosLista.forEach((c) => {
-    const ano = anoDe(c);
-    porAno.set(ano, [...(porAno.get(ano) ?? []), c]);
-  });
-  const anos = Array.from(porAno.keys()).sort((a, b) => b - a);
-  const origemPorPeregrinacao = new Map(
-    ((concluidasData ?? []) as Peregrinacao[]).map((p) => [p.id, p.cidade_origem ?? p.cidade_inicio ?? null])
-  );
-
-  const mensagemPorCertificado = new Map<string, MensagemConquista>();
-  ((mensagensConquista ?? []) as MensagemConquista[]).forEach((m) => {
-    mensagemPorCertificado.set(m.certificado_id, m);
-  });
-
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-8">
-      <VoltarButton href="/painel" />
-      <h1 className="text-2xl font-bold">Meus certificados</h1>
-      {anos.map((ano) => (
-        <section key={ano} className="flex flex-col gap-8">
-          {/* Rodada 57 — certificados separados por ano. */}
-          <h2 className="flex items-center gap-3 text-xl font-extrabold">
-            <span className="rounded-full px-4 py-1 text-white" style={{ background: "#1f3b6b" }}>
-              {ano}
-            </span>
-            <span className="h-px flex-1 bg-amber-200 dark:bg-amber-900" />
-          </h2>
-          {porAno.get(ano)!.map((c) => {
-            const compra = compraPorCertificado.get(c.id) ?? null;
-            const pago = compra?.status === "pago";
-            const comOrigem: Certificado = { ...c, origem: c.origem ?? origemPorPeregrinacao.get(c.peregrinacao_id) ?? null };
-            return (
-              <div key={c.id} id={`certificado-${c.id}`} className="flex scroll-mt-6 flex-col gap-4">
-                <h3 className="text-lg font-bold text-amber-800 dark:text-amber-500">Certificado</h3>
-                <CertificadoGratuitoView certificado={comOrigem} />
-
-                <div
-                  id={`romaria-plus-${c.id}`}
-                  className="mt-2 flex scroll-mt-6 flex-col gap-4 border-t border-dashed border-amber-200 pt-6 dark:border-amber-900"
-                >
-                  <h3 className="text-center text-lg font-bold text-amber-800 dark:text-amber-500">Certificado Plus</h3>
-                  {pago && compra ? (
-                    <>
-                      {/* Rodada 57 — o Certificado Plus (pergaminho) fica aqui,
-                          em Meus certificados; a página do Plus ficou só com as fotos. */}
-                      <CertificadoView certificado={comOrigem} />
-                      <Link
-                        href={`/certificado/plus/${c.id}`}
-                        className="card flex items-center justify-center gap-2 text-center font-semibold text-amber-800 transition hover:border-amber-300 dark:text-amber-500"
-                      >
-                        <Sparkles size={18} /> Minhas fotos da Romaria Plus →
-                      </Link>
-                    </>
-                  ) : (
-                    <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} isAdmin={isAdmin} />
-                  )}
-                </div>
-
-                <MensagemConquistaForm
-                  certificadoId={c.id}
-                  userId={user.id}
-                  nome={c.nome_peregrino.trim().split(/\s+/)[0]}
-                  cidade={c.origem}
-                  mensagemInicial={mensagemPorCertificado.get(c.id) ?? null}
-                />
-              </div>
-            );
-          })}
-        </section>
-      ))}
-
-      <HistoricoPeregrinacoes lista={historico} temPeregrinacaoAtiva={!!ativa} />
+      ) : (
+        <HistoricoPeregrinacoes lista={historico} temPeregrinacaoAtiva={!!ativa} porAno />
+      )}
     </div>
   );
 }

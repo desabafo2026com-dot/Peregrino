@@ -101,9 +101,9 @@ export async function POST(request: NextRequest) {
         external_reference: compra.id,
         notification_url: `${origin}/api/mercadopago/webhook`,
         back_urls: {
-          success: `${origin}/certificado?romaria_plus=retorno&compra=${compra.id}`,
-          pending: `${origin}/certificado?romaria_plus=retorno&compra=${compra.id}`,
-          failure: `${origin}/certificado?romaria_plus=retorno&compra=${compra.id}`,
+          success: `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
+          pending: `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
+          failure: `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
         },
         auto_return: "approved",
       }),

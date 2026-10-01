@@ -295,6 +295,8 @@ export interface Checkin {
   latitude: number;
   longitude: number;
   criado_em: string;
+  // Rodada 60 — cidade do meio completada sozinha (Migration 50).
+  completado_automaticamente?: boolean;
 }
 
 export interface Certificado {

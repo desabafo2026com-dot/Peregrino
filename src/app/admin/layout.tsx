@@ -18,6 +18,7 @@ import {
   Hotel,
   Megaphone,
   BellRing,
+  MapPin,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -57,7 +58,10 @@ const ADMIN_LINK_GROUPS = [
   },
   {
     titulo: "Riscos",
-    links: [{ href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert }],
+    links: [
+      { href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert },
+      { href: "/admin/checkins", label: "Pontos de check-in", icon: MapPin },
+    ],
   },
   {
     titulo: "Romaria Plus",
