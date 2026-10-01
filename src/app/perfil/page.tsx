@@ -8,8 +8,10 @@ import VoltarButton from "@/components/VoltarButton";
 import Link from "next/link";
 import { IdCard } from "lucide-react";
 import type { Profile, MensagemContato } from "@/types/database";
+import { lerTipoConta, destinoAposPrimeiroPerfil, type TipoConta } from "@/lib/tipo-conta";
 
-export default async function PerfilPage() {
+export default async function PerfilPage({ searchParams }: { searchParams: Promise<{ tipo?: string }> }) {
+  const { tipo: tipoParam } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -50,6 +52,14 @@ export default async function PerfilPage() {
   // cadastro (ver registrar_aceite_termos, Rodada 19).
   const perfilCompleto = !!(perfil as Profile | null)?.cidade;
 
+  // Rodada 59 — para onde ir depois de completar o perfil pela primeira vez,
+  // conforme o jeito de usar o app escolhido no cadastro.
+  const { data: gerenteLinha } = await supabase.from("gerentes_pap").select("id").eq("id", user.id).maybeSingle();
+  const tipoConta: TipoConta | null =
+    lerTipoConta(tipoParam) ??
+    lerTipoConta(user.user_metadata?.tipo_conta as string | undefined) ??
+    (gerenteLinha ? "gerente_pap" : null);
+
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href={perfilCompleto ? "/painel" : "/"} />
@@ -67,6 +77,8 @@ export default async function PerfilPage() {
         telefoneInicial={(user.user_metadata?.telefone as string) ?? ""}
         aceitaCompartilharInicial={!!user.user_metadata?.aceita_termos}
         perfilExistente={perfil as Profile | null}
+        destinoPrimeiroCadastro={destinoAposPrimeiroPerfil(tipoConta)}
+        marcarOrganizador={tipoConta === "organizador"}
       />
       {perfilCompleto && (
         // Rodada 54 — credencial (crachá) para imprimir e levar na mochila.

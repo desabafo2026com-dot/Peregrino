@@ -1,3 +1,5 @@
+import { lerTipoConta } from "@/lib/tipo-conta";
+import { caminhoInterno } from "@/lib/caminho-interno";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,21 +18,11 @@ import { createClient } from "@/lib/supabase/server";
 // e-mail e nunca clicou no link de confirmação) — os dados guardados no
 // cadastro (tipo de conta, nome, telefone) continuam valendo.
 
-// Só aceita caminhos internos do próprio app ("/algo"), nunca um endereço
-// externo ou "//outro-site" — evita usar este link como redirecionador.
-function caminhoInterno(valor: string | null): string | null {
-  if (!valor || !valor.startsWith("/") || valor.startsWith("//") || valor.startsWith("/\\")) {
-    return null;
-  }
-  return valor;
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const tipoParam = searchParams.get("tipo");
-  const tipoPreset =
-    tipoParam === "peregrino" || tipoParam === "gerente_pap" ? tipoParam : null;
+  const tipoPreset = lerTipoConta(searchParams.get("tipo"));
   const redirectParam = caminhoInterno(searchParams.get("redirect"));
 
   // Sem código (ex.: a pessoa cancelou na tela do Google) ou código
@@ -72,6 +64,9 @@ export async function GET(request: NextRequest) {
     destino = tipoPreset === "peregrino" && !perfil ? "/perfil" : "/gerente-pap";
   } else if (tipoPreset === "gerente_pap") {
     destino = "/gerente-pap/cadastro";
+  } else if (tipoPreset === "organizador") {
+    // Rodada 59 — "Sou organizador de Romaria" com conta que já existia.
+    destino = "/romarias-grupo/cadastro";
   }
   return NextResponse.redirect(`${origin}${destino}`);
 }

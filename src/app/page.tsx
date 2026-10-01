@@ -65,7 +65,8 @@ export default async function Home() {
   // as aprovadas (romarias_grupo_select_publico), o filtro por data abaixo
   // decide quais ainda valem a pena mostrar (ver romariaAindaAtivaOuFutura).
   const { data: romariasGrupoData } = await supabase
-    .from("romarias_grupo")
+    // Rodada 59 — view pública (organizador/telefone só se autorizados).
+    .from("romarias_grupo_publico")
     .select("*")
     .eq("status", "aprovado")
     .order("data_inicio", { ascending: true });
@@ -97,7 +98,9 @@ export default async function Home() {
       // em vez de pedir e-mail/senha de novo em /login — antes disso mandava
       // sempre para /login, obrigando a pessoa já autenticada a passar de
       // novo pela tela de e-mail/senha sem necessidade.
-      href: isGerente ? "/gerente-pap" : user ? "/gerente-pap/cadastro" : "/login?tipo=gerente_pap",
+      // Rodada 59 — sem conta, vai para a escolha "Sou peregrino / gerente /
+      // organizador" (/cadastro): todos precisam de cadastro.
+      href: isGerente ? "/gerente-pap" : user ? "/gerente-pap/cadastro" : "/cadastro",
       icon: MapPinPlus,
       title: "PAP — vincular ou cadastrar",
       desc: isGerente
@@ -122,10 +125,10 @@ export default async function Home() {
       // virou a chamada "Sou organizador de Romaria a pé"; o cadastro em si
       // continua sendo puramente informativo, sem exigir nada além de já
       // estar logado.
-      href: user ? "/romarias-grupo/cadastro" : "/login?tipo=peregrino&redirect=/romarias-grupo/cadastro",
+      href: user ? "/romarias-grupo/cadastro" : "/cadastro",
       icon: IconePeregrinosFila,
-      title: "Sou organizador de Romaria a pé",
-      desc: "Cadastre sua Romaria de Peregrinos para que autoridades e outros peregrinos saibam que seu grupo estará na estrada.",
+      title: "Sou organizador de Romaria",
+      desc: "Cadastre sua Romaria para que autoridades, Pontos de Apoio e outros peregrinos saibam que seu grupo estará na estrada.",
     },
   ];
 
@@ -155,12 +158,13 @@ export default async function Home() {
       {!user && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
           <p className="mb-1 font-bold text-amber-900 dark:text-amber-200">
-            Pode usar sem cadastro
+            Consulte sem cadastro
           </p>
           <p className="mb-3 text-sm text-neutral-700 dark:text-neutral-300">
             O mapa de Pontos de Apoio, as rotas com os trechos de risco e os hotéis e restaurantes
-            estão liberados para qualquer pessoa. O cadastro só é preciso para registrar sua
-            peregrinação, fazer check-in e receber o certificado.
+            estão liberados para qualquer pessoa. Para registrar sua peregrinação ou informar algo
+            (Romaria, PAP, ocorrências no trajeto) é preciso ter cadastro — assim todos sabem quem
+            postou cada informação.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link href="/mapa" className="btn-primary inline-flex items-center gap-1.5 text-sm">
@@ -241,12 +245,12 @@ export default async function Home() {
       {mensagensConquista.length > 0 && <MensagensConquistaCarrossel mensagens={mensagensConquista} />}
 
       <Link
-        href={!user ? "/login" : isGerente ? "/gerente-pap" : "/peregrinacao"}
+        href={!user ? "/cadastro" : isGerente ? "/gerente-pap" : "/peregrinacao"}
         className="flex items-center justify-center gap-2 rounded-2xl bg-amber-700 py-4 text-lg font-bold text-white shadow-sm hover:bg-amber-800"
       >
         <Footprints size={22} />
         {!user
-          ? "SOU PEREGRINO — ENTRAR"
+          ? "SOU PEREGRINO"
           : isGerente
             ? "MEU PAP — GERENCIAR"
             : temPeregrinacao

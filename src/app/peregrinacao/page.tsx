@@ -83,7 +83,7 @@ export default async function PeregrinacaoPage() {
     // entram os que estão marcados como ativos, aprovados e com a data de
     // hoje no calendário de funcionamento.
     supabase
-      .from("pontos_apoio")
+      .from("pontos_apoio_publico")
       .select("*")
       .eq("ativo", true)
       .eq("status_aprovacao", "aprovado")
@@ -161,7 +161,8 @@ export default async function PeregrinacaoPage() {
             // não o que a conta logada tem permissão de enxergar por outro
             // motivo.
             supabase
-              .from("riscos_informados")
+              // Rodada 59 — view pública dos avisos (sem identificar quem enviou).
+              .from("avisos_publicos")
               .select("*")
               .or(`rota_id.eq.${peregrinacao.rota_id},rota_id.is.null`)
               .order("criado_em", { ascending: false }),

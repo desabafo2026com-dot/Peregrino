@@ -15,6 +15,11 @@ interface Props {
   telefoneInicial: string;
   aceitaCompartilharInicial?: boolean;
   perfilExistente?: Profile | null;
+  // Rodada 59 — destino depois de completar o perfil pela 1ª vez (painel,
+  // área do gerente ou Minha peregrinação do organizador) e se marca a
+  // conta como organizador de Romaria.
+  destinoPrimeiroCadastro?: string;
+  marcarOrganizador?: boolean;
 }
 
 export default function ProfileForm({
@@ -23,6 +28,8 @@ export default function ProfileForm({
   telefoneInicial,
   aceitaCompartilharInicial = false,
   perfilExistente,
+  destinoPrimeiroCadastro = "/painel",
+  marcarOrganizador = false,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -132,6 +139,7 @@ export default function ProfileForm({
         perfilExistente?.aceita_compartilhar_localizacao ?? aceitaCompartilharInicial,
       avatar_url: avatarUrl || null,
       atualizado_em: new Date().toISOString(),
+      ...(marcarOrganizador ? { is_organizador: true } : {}),
     };
 
     const { error } = await supabase.from("profiles").upsert(payload);
@@ -160,8 +168,7 @@ export default function ProfileForm({
     // painel inicial (/painel), com recarga completa pelo mesmo motivo acima.
     if (!perfilExistente?.cidade) {
       // Recarga completa de propósito (atualiza o menu, ver acima).
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = "/painel";
+      window.location.href = destinoPrimeiroCadastro;
       return;
     }
 

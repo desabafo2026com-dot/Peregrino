@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), payment=()" },
+          // Rodada 59 — política de conteúdo mínima, sem risco de quebrar o
+          // app: bloqueia plugins (<object>/<embed>), troca de <base> e
+          // incorporação em iframe.
+          { key: "Content-Security-Policy", value: "object-src 'none'; base-uri 'self'; frame-ancestors 'none'" },
         ],
       },
     ];

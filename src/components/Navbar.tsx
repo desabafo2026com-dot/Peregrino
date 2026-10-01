@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, UserRound, ChevronDown, Tent, UserCog, LayoutGrid } from "lucide-react";
+import { LogOut, UserRound, ChevronDown, Tent, UserCog, LayoutGrid, Home } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthRole } from "./AuthRoleProvider";
 import ThemeToggle from "./ThemeToggle";
@@ -47,16 +47,26 @@ export default function Navbar() {
   return (
     <header className="safe-top sticky top-0 z-30 border-b border-neutral-200 bg-white/90 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-2.5">
-        <Link href="/" className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-500">
-          <Image
-            src="/icons/icon-192.png"
-            alt="Símbolo do app O Peregrino"
-            width={30}
-            height={30}
-            className="rounded-lg"
-          />
-          <span className="hidden sm:inline">O Peregrino</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-500">
+            <Image
+              src="/icons/icon-192.png"
+              alt="Símbolo do app O Peregrino"
+              width={30}
+              height={30}
+              className="rounded-lg"
+            />
+            <span className="hidden sm:inline">O Peregrino</span>
+          </Link>
+          {/* Rodada 59 — botão HOME, que leva para a página inicial como o título. */}
+          <Link
+            href="/"
+            aria-label="Página inicial"
+            className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-bold text-amber-800 hover:bg-neutral-100 dark:border-neutral-800 dark:text-amber-500 dark:hover:bg-neutral-900"
+          >
+            <Home size={15} /> HOME
+          </Link>
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Rodada 45 — avisos da administração para todos. */}

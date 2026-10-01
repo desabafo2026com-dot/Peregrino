@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, Trash2 } from "lucide-react";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
 import { STATUS_ROMARIA_GRUPO_LABELS, MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
 import type { RomariaGrupo, MeioTransporte } from "@/types/database";
@@ -36,6 +36,21 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sucesso, setSucesso] = useState(false);
+
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
+
+  async function excluir(id: string) {
+    if (!confirm("Excluir esta Romaria? Ela deixa de aparecer na lista pública.")) return;
+    setExcluindoId(id);
+    const { error } = await createClient().from("romarias_grupo").delete().eq("id", id);
+    setExcluindoId(null);
+    if (error) {
+      setErro("Não foi possível excluir agora. Tente novamente.");
+      return;
+    }
+    setMinhasRomarias((prev) => prev.filter((r) => r.id !== id));
+    router.refresh();
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +85,13 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
       .single();
     setLoading(false);
     if (error) {
-      setErro("Não foi possível enviar o cadastro agora. Tente novamente.");
+      // Rodada 59 — Migration 48 recusa Romaria repetida (mesmo nome, mesma
+      // cidade de origem e mesma data de início).
+      setErro(
+        error.message?.includes("romaria_duplicada")
+          ? "Já existe uma Romaria cadastrada com este nome, cidade de origem e data de início."
+          : "Não foi possível enviar o cadastro agora. Tente novamente."
+      );
       return;
     }
     setMinhasRomarias((prev) => [data as RomariaGrupo, ...prev]);
@@ -95,8 +116,8 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
         <div className="card flex items-start gap-2 border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
           <CheckCircle2 className="mt-0.5 shrink-0 text-green-600" size={20} />
           <p className="text-sm text-green-800 dark:text-green-300">
-            Cadastro enviado! Ele fica pendente até a administração aprovar — depois disso aparece
-            na lista pública da home enquanto estiver dentro do período previsto.
+            Romaria cadastrada! Ela já aparece na lista pública da página inicial enquanto estiver
+            dentro do período previsto.
           </p>
         </div>
       )}
@@ -223,7 +244,7 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
         {erro && <p className="text-sm text-red-600">{erro}</p>}
 
         <button type="submit" disabled={loading} className="btn-primary">
-          {loading ? "Enviando..." : "Enviar para aprovação"}
+          {loading ? "Enviando..." : "Cadastrar Romaria"}
         </button>
       </form>
 
@@ -252,9 +273,19 @@ export default function RomariaGrupoForm({ userId, minhasRomariasIniciais }: Pro
                     ? r.meio_deslocamento_outro_desc || "outro meio de deslocamento"
                     : MEIO_TRANSPORTE_LABELS[r.meio_deslocamento] ?? r.meio_deslocamento}
                 </p>
-                <p className={`text-xs font-medium ${STATUS_COLOR[r.status]}`}>
-                  {STATUS_ROMARIA_GRUPO_LABELS[r.status] ?? r.status}
-                </p>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className={`text-xs font-medium ${STATUS_COLOR[r.status]}`}>
+                    {r.status === "aprovado" ? "Publicada" : (STATUS_ROMARIA_GRUPO_LABELS[r.status] ?? r.status)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => excluir(r.id)}
+                    disabled={excluindoId === r.id}
+                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                  >
+                    <Trash2 size={13} /> {excluindoId === r.id ? "Excluindo..." : "Excluir"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

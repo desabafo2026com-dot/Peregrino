@@ -141,9 +141,11 @@ export async function POST(request: NextRequest) {
 
     if (!resposta.ok) {
       const detalhe = await resposta.text().catch(() => "");
+      // Rodada 59 — o detalhe fica só no log do servidor, não vai para o navegador.
+      console.error("Mercado Pago recusou a preferência:", detalhe.slice(0, 500));
       await admin.from("compras_romaria_plus").update({ status: "cancelado" }).eq("id", compraExtra.id);
       return NextResponse.json(
-        { erro: "O Mercado Pago recusou a criação do pagamento.", detalhe },
+        { erro: "O Mercado Pago recusou a criação do pagamento." },
         { status: 502 }
       );
     }

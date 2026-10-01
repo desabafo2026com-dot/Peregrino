@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Sparkles,
   Plus,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
@@ -214,6 +215,15 @@ export default async function PainelPage() {
         />
         {ehGerente && (
           <Modulo href="/gerente-pap" titulo="Meu PAP" descricao="Seu Ponto de Apoio ao Peregrino" Icone={Tent} cor={AZUL} />
+        )}
+        {perfil.is_organizador && (
+          <Modulo
+            href="/romarias-grupo/cadastro"
+            titulo="Minhas Romarias"
+            descricao="Cadastrar e ver as Romarias do seu grupo"
+            Icone={Users}
+            cor={OURO}
+          />
         )}
       </div>
 

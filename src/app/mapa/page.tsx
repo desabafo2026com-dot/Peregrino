@@ -31,7 +31,8 @@ export default async function MapaPage() {
     { data: todosPapsPreCadastro },
   ] = await Promise.all([
     supabase
-      .from("pontos_apoio")
+      // Rodada 59 — view pública (telefone/responsável só se autorizados).
+      .from("pontos_apoio_publico")
       .select("*")
       .eq("status_aprovacao", "aprovado"),
     // rotas/pontosCheckin não desenham mais linha nenhuma nesta página desde

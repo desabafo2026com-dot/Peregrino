@@ -14,6 +14,7 @@ import {
   Radio,
   Award,
   Footprints,
+  Users,
   Bike,
   LocateFixed,
   Tent,
@@ -24,6 +25,7 @@ import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTO
 import InformarSinistro from "@/components/InformarSinistro";
 import TrajetoTimelineCompact from "@/components/TrajetoTimelineCompact";
 import ParabensConclusao from "@/components/ParabensConclusao";
+import Link from "next/link";
 import { cidadeDoCaminhoProxima } from "@/lib/checkin-cidade";
 import { kmReferenciaAtual, riscoAindaAFrente } from "@/lib/km-dutra";
 import { votarAviso } from "@/lib/avisos-votos";
@@ -302,6 +304,9 @@ export default function PeregrinacaoClient({
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // Rodada 59 — organizador de Romaria escolhe entre planejar a própria
+  // peregrinação ou cadastrar a Romaria.
+  const [organizadorPlanejando, setOrganizadorPlanejando] = useState(false);
   const [parabens, setParabens] = useState(false);
 
   // Rodada 46 — posição do peregrino no mapa, acompanhando enquanto ele
@@ -810,7 +815,39 @@ export default function PeregrinacaoClient({
 
   let principal: ReactNode;
 
-  if (!peregrinacao) {
+  if (!peregrinacao && perfil.is_organizador && !organizadorPlanejando) {
+    principal = (
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => setOrganizadorPlanejando(true)}
+          className="card flex items-center gap-4 text-left transition hover:border-amber-400"
+        >
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl" style={{ background: "#1f3b6b", color: "#f5a54a" }}>
+            <Footprints size={28} />
+          </span>
+          <span>
+            <span className="block font-bold">Planejar peregrinação</span>
+            <span className="block text-sm text-neutral-500">
+              Planeje a sua caminhada, registre os check-ins e receba o certificado.
+            </span>
+          </span>
+        </button>
+        <Link href="/romarias-grupo/cadastro" className="card flex items-center gap-4 transition hover:border-amber-400">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl" style={{ background: "#e0892b", color: "#ffffff" }}>
+            <Users size={28} />
+          </span>
+          <span>
+            <span className="block font-bold">Cadastrar Romaria</span>
+            <span className="block text-sm text-neutral-500">
+              Dado público — para que Autoridades, Pontos de Apoio e outros peregrinos tomem conhecimento do
+              seu grupo na estrada.
+            </span>
+          </span>
+        </Link>
+      </div>
+    );
+  } else if (!peregrinacao) {
     principal = (
       <div className="card">
         <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">

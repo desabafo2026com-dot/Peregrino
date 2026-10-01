@@ -19,7 +19,10 @@ export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   const tipo = body?.type ?? searchParams.get("topic");
-  const paymentId = body?.data?.id ?? searchParams.get("id");
+  const paymentIdBruto = body?.data?.id ?? searchParams.get("id");
+  // Rodada 59 (segurança) — o id do pagamento do Mercado Pago é sempre
+  // numérico; qualquer outra coisa é ignorada (não vai para a URL da API).
+  const paymentId = paymentIdBruto != null && /^\d{1,20}$/.test(String(paymentIdBruto)) ? String(paymentIdBruto) : null;
 
   if (tipo !== "payment" || !paymentId) {
     return NextResponse.json({ ok: true });

@@ -4333,3 +4333,487 @@ alter table public.compras_romaria_plus
                     'basilica', 'santa', 'terco', 'postal', 'credencial'));
 
 -- FIM DA MIGRATION 47
+
+-- =====================================================================
+-- MIGRATION 48 — Rodada 59: organizador de Romaria e Romarias sem aprovação
+-- ---------------------------------------------------------------------
+-- 1) profiles.is_organizador — quem se cadastra como "Sou organizador de
+--    Romaria" (ou cadastra uma Romaria) ganha a opção "Cadastrar Romaria"
+--    em Minha peregrinação e o módulo "Minhas Romarias" no painel.
+-- 2) Romarias de Peregrinos não precisam mais de aprovação da
+--    administração: entram direto na lista pública. As que estavam
+--    pendentes passam a publicadas.
+-- 3) Evita Romaria repetida: mesmo nome + mesma cidade de origem + mesma
+--    data de início (sem diferenciar maiúsculas, acentos e espaços).
+-- (idempotente — pode ser executado novamente sem problema)
+-- =====================================================================
+
+alter table public.profiles add column if not exists is_organizador boolean not null default false;
+comment on column public.profiles.is_organizador is 'Rodada 59 — organizador de Romaria (autodeclarado no cadastro ou ao cadastrar uma Romaria).';
+
+-- Quem já cadastrou alguma Romaria passa a ser organizador.
+update public.profiles p
+set is_organizador = true
+where not p.is_organizador
+  and exists (select 1 from public.romarias_grupo r where r.user_id = p.id);
+
+-- Romarias publicadas direto.
+alter table public.romarias_grupo alter column status set default 'aprovado';
+update public.romarias_grupo
+set status = 'aprovado', aprovado_em = coalesce(aprovado_em, now())
+where status = 'pendente';
+
+comment on table public.romarias_grupo is 'Cadastro público de caravanas/grupos de romaria — informativo, para autoridades, PAPs e outros peregrinos saberem de um grupo na estrada. Desde a Rodada 59 entra direto na lista pública (sem aprovação); a administração pode excluir qualquer uma. Fica visível na home enquanto hoje estiver entre data_inicio e data_inicio + previsao_dias - 1.';
+
+-- Texto normalizado para comparar nomes/cidades (minúsculas, sem acento,
+-- espaços simples).
+create or replace function public.normalizar_texto_romaria(p text)
+returns text
+language sql
+immutable
+as $$
+  select btrim(regexp_replace(
+    translate(lower(coalesce(p, '')),
+      'áàâãäéèêëíìîïóòôõöúùûüçñ',
+      'aaaaaeeeeiiiiooooouuuucn'),
+    '\s+', ' ', 'g'));
+$$;
+
+create or replace function public.romarias_grupo_antes_de_gravar()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Não-admin nunca grava status diferente de publicado (não dá para se
+  -- auto-"rejeitar" ou deixar pendente por engano); admin pode tudo.
+  if tg_op = 'INSERT' and not public.is_admin() then
+    new.status := 'aprovado';
+    new.aprovado_em := now();
+  end if;
+
+  if exists (
+    select 1 from public.romarias_grupo r
+    where r.id is distinct from new.id
+      and r.status <> 'rejeitado'
+      and r.data_inicio = new.data_inicio
+      and public.normalizar_texto_romaria(r.nome) = public.normalizar_texto_romaria(new.nome)
+      and public.normalizar_texto_romaria(r.cidade_origem) = public.normalizar_texto_romaria(new.cidade_origem)
+  ) then
+    raise exception 'romaria_duplicada: já existe uma Romaria com este nome, cidade de origem e data de início';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists romarias_grupo_antes_de_gravar on public.romarias_grupo;
+create trigger romarias_grupo_antes_de_gravar
+  before insert or update of nome, cidade_origem, data_inicio on public.romarias_grupo
+  for each row execute function public.romarias_grupo_antes_de_gravar();
+
+-- O próprio organizador não pode mudar o status (só a administração).
+drop policy if exists "romarias_grupo_update_own" on public.romarias_grupo;
+create policy "romarias_grupo_update_own" on public.romarias_grupo for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id and status = 'aprovado');
+
+-- FIM DA MIGRATION 48
+
+-- =====================================================================
+-- MIGRATION 49 — Rodada 59: revisão de segurança e privacidade dos dados
+-- ---------------------------------------------------------------------
+-- Resultado da revisão geral pedida pelo usuário. Fecha acessos que
+-- deixavam dados pessoais visíveis para qualquer pessoa ou permitiam
+-- gravar informação falsa. Em resumo:
+--  1) Check-ins (com a posição GPS) deixam de ser públicos: só o dono,
+--     administração e agentes.
+--  2) PAP: telefone e nome do responsável só aparecem para o público
+--     quando o gerente autorizou (view pontos_apoio_publico).
+--  3) Romarias: nome e telefone do organizador só quando autorizado
+--     (view romarias_grupo_publico).
+--  4) Avisos de peregrinos: o público vê o aviso sem o id de quem enviou
+--     (view avisos_publicos).
+--  5) Avisos novos sempre entram como "pendente" (ninguém consegue criar
+--     um aviso já "confirmado pela administração").
+--  6) Certificado: o servidor confere a peregrinação (dono, concluída e
+--     com check-in em Aparecida) e preenche nome/datas/check-ins sozinho.
+--  7) Check-in e localização só na própria peregrinação.
+--  8) Fotos de perfil e do Plus: ninguém consegue listar os arquivos de
+--     outras pessoas (o link público de cada foto continua funcionando).
+--  9) Romaria e mensagem de conquista: o dono não muda o que a
+--     administração decidiu (status / ocultar).
+-- 10) Código da credencial (crachá) novo com 8 caracteres aleatórios
+--     fortes (os já impressos continuam valendo).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 48.
+-- =====================================================================
+
+-- 1) CHECK-INS ---------------------------------------------------------
+drop policy if exists "checkins_select_all" on public.checkins;
+drop policy if exists "checkins_select_own_ou_admin" on public.checkins;
+create policy "checkins_select_own_ou_admin" on public.checkins for select to authenticated
+  using (auth.uid() = user_id or public.is_admin() or public.is_agente());
+revoke select on public.checkins from anon;
+
+-- 7) Check-in e localização só na própria peregrinação
+drop policy if exists "checkins_insert_own" on public.checkins;
+create policy "checkins_insert_own" on public.checkins for insert to authenticated
+  with check (
+    auth.uid() = user_id
+    and (
+      peregrinacao_id is null
+      or exists (select 1 from public.peregrinacoes p where p.id = peregrinacao_id and p.user_id = auth.uid())
+      or public.is_admin()
+    )
+  );
+
+drop policy if exists "localizacoes_upsert_own" on public.localizacoes_ativas;
+create policy "localizacoes_upsert_own" on public.localizacoes_ativas for insert to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (select 1 from public.peregrinacoes p where p.id = peregrinacao_id and p.user_id = auth.uid())
+  );
+
+drop policy if exists "localizacoes_update_own" on public.localizacoes_ativas;
+create policy "localizacoes_update_own" on public.localizacoes_ativas for update to authenticated
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (select 1 from public.peregrinacoes p where p.id = peregrinacao_id and p.user_id = auth.uid())
+  );
+
+-- 2) PAP ---------------------------------------------------------------
+-- A tabela em si: só o gerente do PAP, quem cadastrou, administração e
+-- agentes. O público (mapa, página do PAP, Minha peregrinação) lê a view.
+drop policy if exists "pontos_apoio_select_all" on public.pontos_apoio;
+drop policy if exists "pontos_apoio_select_dono_ou_admin" on public.pontos_apoio;
+create policy "pontos_apoio_select_dono_ou_admin" on public.pontos_apoio for select to authenticated
+  using (
+    gerente_id = auth.uid()
+    or criado_por = auth.uid()
+    or public.is_admin()
+    or public.is_agente()
+  );
+
+create or replace view public.pontos_apoio_publico as
+select
+  id,
+  null::uuid as criado_por,
+  gerente_id,
+  nome,
+  case when exibir_telefone then responsavel end as responsavel,
+  case when exibir_telefone then telefone end as telefone,
+  latitude,
+  longitude,
+  km_referencia,
+  periodo_funcionamento,
+  servicos,
+  contato_doacao,
+  observacoes,
+  ativo,
+  status_aprovacao,
+  aberto_agora,
+  null::text as observacao_admin,
+  rota_id,
+  cidade,
+  sentido_pista,
+  exibir_telefone,
+  aceita_doacoes,
+  doacao_necessidade,
+  datas_funcionamento,
+  br,
+  pre_cadastro_id,
+  ponto_referencia,
+  foto_url,
+  criado_em,
+  atualizado_em
+from public.pontos_apoio
+where status_aprovacao = 'aprovado';
+
+comment on view public.pontos_apoio_publico is 'Rodada 59 — PAPs aprovados para o público; responsável e telefone só quando exibir_telefone = true.';
+grant select on public.pontos_apoio_publico to anon, authenticated;
+
+-- 3) ROMARIAS -----------------------------------------------------------
+drop policy if exists "romarias_grupo_select_publico" on public.romarias_grupo;
+
+create or replace view public.romarias_grupo_publico as
+select
+  id,
+  null::uuid as user_id,
+  nome,
+  cidade_origem,
+  quantidade,
+  data_inicio,
+  previsao_dias,
+  case when exibir_organizador then organizador_nome end as organizador_nome,
+  exibir_organizador,
+  case when exibir_telefone then organizador_telefone end as organizador_telefone,
+  exibir_telefone,
+  meio_deslocamento,
+  meio_deslocamento_outro_desc,
+  status,
+  null::text as observacao_admin,
+  criado_em,
+  aprovado_em
+from public.romarias_grupo
+where status = 'aprovado';
+
+comment on view public.romarias_grupo_publico is 'Rodada 59 — Romarias publicadas; nome/telefone do organizador só quando autorizados.';
+grant select on public.romarias_grupo_publico to anon, authenticated;
+revoke select on public.romarias_grupo from anon;
+
+-- 9) Romaria: dono não muda status/decisão da administração
+create or replace function public.romarias_grupo_antes_de_gravar()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    if tg_op = 'INSERT' then
+      new.status := 'aprovado';
+      new.aprovado_em := now();
+      new.observacao_admin := null;
+    else
+      new.status := old.status;
+      new.aprovado_em := old.aprovado_em;
+      new.observacao_admin := old.observacao_admin;
+      new.user_id := old.user_id;
+    end if;
+  end if;
+
+  if tg_op = 'INSERT'
+     or new.nome is distinct from old.nome
+     or new.cidade_origem is distinct from old.cidade_origem
+     or new.data_inicio is distinct from old.data_inicio then
+    if exists (
+      select 1 from public.romarias_grupo r
+      where r.id is distinct from new.id
+        and r.status <> 'rejeitado'
+        and r.data_inicio = new.data_inicio
+        and public.normalizar_texto_romaria(r.nome) = public.normalizar_texto_romaria(new.nome)
+        and public.normalizar_texto_romaria(r.cidade_origem) = public.normalizar_texto_romaria(new.cidade_origem)
+    ) then
+      raise exception 'romaria_duplicada: já existe uma Romaria com este nome, cidade de origem e data de início';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists romarias_grupo_antes_de_gravar on public.romarias_grupo;
+create trigger romarias_grupo_antes_de_gravar
+  before insert or update on public.romarias_grupo
+  for each row execute function public.romarias_grupo_antes_de_gravar();
+
+drop policy if exists "romarias_grupo_update_own" on public.romarias_grupo;
+create policy "romarias_grupo_update_own" on public.romarias_grupo for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- 4) AVISOS DE PEREGRINOS -----------------------------------------------
+-- Mesma regra de visibilidade da Migration 41, agora numa view sem o id de
+-- quem enviou e sem a observação interna da administração.
+drop policy if exists "riscos_informados_select_publicos" on public.riscos_informados;
+
+create or replace view public.avisos_publicos as
+select
+  id,
+  null::uuid as user_id,
+  titulo,
+  descricao,
+  categoria,
+  tipo,
+  nivel_risco,
+  latitude,
+  longitude,
+  km_referencia,
+  rota_id,
+  status,
+  null::text as observacao_admin,
+  ponto_risco_id,
+  criado_em,
+  confirmacoes,
+  nao_existe,
+  ultima_confirmacao_em
+from public.riscos_informados
+where status <> 'rejeitado'
+  and greatest(criado_em, coalesce(ultima_confirmacao_em, criado_em)) > now() - interval '1 hour'
+  and (
+    status = 'aprovado'
+    or categoria = 'chuva'
+    or criado_em <= now() - interval '30 minutes'
+  );
+
+comment on view public.avisos_publicos is 'Rodada 59 — avisos de peregrinos visíveis ao público (mesma regra da Migration 41), sem identificar quem enviou.';
+grant select on public.avisos_publicos to authenticated;
+
+-- 5) Aviso novo sempre "pendente", sem votos e com a hora do servidor
+create or replace function public.riscos_informados_antes_de_inserir()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    new.status := 'pendente';
+    new.observacao_admin := null;
+    new.ponto_risco_id := null;
+    new.confirmacoes := 0;
+    new.nao_existe := 0;
+    new.ultima_confirmacao_em := null;
+    new.criado_em := now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists riscos_informados_antes_de_inserir on public.riscos_informados;
+create trigger riscos_informados_antes_de_inserir
+  before insert on public.riscos_informados
+  for each row execute function public.riscos_informados_antes_de_inserir();
+
+-- 6) CERTIFICADO --------------------------------------------------------
+create or replace function public.certificados_antes_de_inserir()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_p public.peregrinacoes;
+  v_nome text;
+begin
+  if public.is_admin() then
+    return new;
+  end if;
+
+  select * into v_p from public.peregrinacoes where id = new.peregrinacao_id;
+  if not found or v_p.user_id is distinct from auth.uid() or new.user_id is distinct from auth.uid() then
+    raise exception 'certificado_invalido: peregrinação não encontrada';
+  end if;
+  if v_p.status <> 'concluida' then
+    raise exception 'certificado_invalido: a peregrinação ainda não foi concluída';
+  end if;
+  if not exists (
+    select 1
+    from public.checkins c
+    join public.pontos_checkin pc on pc.id = c.ponto_checkin_id
+    where c.peregrinacao_id = v_p.id
+      and lower(btrim(pc.cidade)) = 'aparecida'
+  ) then
+    raise exception 'certificado_invalido: falta o check-in em Aparecida';
+  end if;
+
+  select nome_completo into v_nome from public.profiles where id = auth.uid();
+
+  -- Dados oficiais vêm do servidor, não do aparelho.
+  new.nome_peregrino := coalesce(nullif(btrim(v_nome), ''), new.nome_peregrino);
+  new.data_inicio := v_p.data_inicio;
+  new.data_fim := coalesce(v_p.data_fim, now());
+  new.origem := coalesce(v_p.cidade_origem, v_p.cidade_inicio, new.origem);
+  new.meio_transporte := v_p.meio_transporte;
+  new.meio_transporte_outro_desc := v_p.meio_transporte_outro_desc;
+  new.total_checkins := (select count(*) from public.checkins c where c.peregrinacao_id = v_p.id);
+  new.emitido_em := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists certificados_antes_de_inserir on public.certificados;
+create trigger certificados_antes_de_inserir
+  before insert on public.certificados
+  for each row execute function public.certificados_antes_de_inserir();
+
+-- 8) STORAGE: sem listar arquivos dos outros -----------------------------
+drop policy if exists "avatars_select_all" on storage.objects;
+drop policy if exists "avatars_select_own_ou_admin" on storage.objects;
+create policy "avatars_select_own_ou_admin" on storage.objects for select to authenticated
+  using (bucket_id = 'avatars' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));
+
+drop policy if exists "romaria_plus_fotos_select_all" on storage.objects;
+drop policy if exists "romaria_plus_fotos_select_own_ou_admin" on storage.objects;
+create policy "romaria_plus_fotos_select_own_ou_admin" on storage.objects for select to authenticated
+  using (bucket_id = 'romaria-plus-fotos' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));
+
+-- 9) Mensagem de conquista: dono não reativa o que a administração ocultou
+create or replace function public.mensagens_conquista_antes_de_atualizar()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    new.ativo := old.ativo;
+    new.nome := old.nome;
+    new.cidade := old.cidade;
+    new.certificado_id := old.certificado_id;
+    new.user_id := old.user_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists mensagens_conquista_antes_de_atualizar on public.mensagens_conquista;
+create trigger mensagens_conquista_antes_de_atualizar
+  before update on public.mensagens_conquista
+  for each row execute function public.mensagens_conquista_antes_de_atualizar();
+
+-- 10) CRACHÁ: código novo com 8 caracteres de sorteio forte ----------------
+create or replace function public.meu_cracha()
+returns public.crachas_peregrino
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_linha public.crachas_peregrino;
+  v_codigo text;
+  v_letras constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  v_bytes bytea;
+  i int;
+  v_tentativa int := 0;
+begin
+  if v_uid is null then
+    raise exception 'Entre na sua conta para gerar a credencial.';
+  end if;
+
+  select * into v_linha from public.crachas_peregrino where user_id = v_uid;
+  if found then
+    return v_linha;
+  end if;
+
+  loop
+    v_tentativa := v_tentativa + 1;
+    v_bytes := decode(replace(gen_random_uuid()::text, '-', ''), 'hex');
+    v_codigo := 'PER-';
+    -- bytes do UUID v4 que são 100% aleatórios (o 6º guarda a versão)
+    foreach i in array array[0, 1, 2, 3, 4, 5, 7, 9] loop
+      v_codigo := v_codigo || substr(v_letras, 1 + (get_byte(v_bytes, i) % 32), 1);
+    end loop;
+    begin
+      insert into public.crachas_peregrino (user_id, codigo) values (v_uid, v_codigo)
+      returning * into v_linha;
+      return v_linha;
+    exception when unique_violation then
+      select * into v_linha from public.crachas_peregrino where user_id = v_uid;
+      if found then
+        return v_linha;
+      end if;
+      if v_tentativa > 20 then
+        raise;
+      end if;
+    end;
+  end loop;
+end;
+$$;
+
+revoke all on function public.meu_cracha() from public;
+grant execute on function public.meu_cracha() to authenticated;
+
+-- FIM DA MIGRATION 49

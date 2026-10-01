@@ -29,6 +29,21 @@ function escaparHtml(texto: string) {
     .replace(/'/g, "&#39;");
 }
 
+// Rodada 59 (revisão de segurança) — TODO texto que vai para dentro do
+// HTML dos balões passa por aqui (nome de PAP, cidade, descrição... são
+// digitados por gerentes/peregrinos e não podem virar código na página).
+function e(valor: unknown): string {
+  if (valor == null) return "";
+  return escaparHtml(String(valor));
+}
+
+// Foto só de endereço http(s) ou do próprio site — nada de "javascript:".
+function urlSegura(valor: string | null | undefined): string {
+  if (!valor) return "";
+  const v = valor.trim();
+  return /^https?:\/\//i.test(v) || (v.startsWith("/") && !v.startsWith("//")) ? escaparHtml(v) : "";
+}
+
 function textoConfirmacoes(n: number) {
   return n === 1 ? "Confirmado por 1 peregrino" : `Confirmado por ${n} peregrinos`;
 }
@@ -268,27 +283,27 @@ export default function MapView({
           // mostrar "—".
           new maplibregl.Popup({ offset: papDestacado ? 24 : 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
-              ${p.foto_url ? `<img src="${p.foto_url}" alt="Foto do PAP" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
-              <strong>${p.nome}</strong><br/>
-              ${p.cidade ? `Cidade: ${p.cidade}<br/>` : ""}
+              ${urlSegura(p.foto_url) ? `<img src="${urlSegura(p.foto_url)}" alt="Foto do PAP" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
+              <strong>${e(p.nome)}</strong><br/>
+              ${p.cidade ? `Cidade: ${e(p.cidade)}<br/>` : ""}
               ${kmSentidoLabel(p.km_referencia, p.sentido_pista) ? `${kmSentidoLabel(p.km_referencia, p.sentido_pista)}<br/>` : ""}
               Dias de funcionamento: ${formatarDatasFuncionamento(p.datas_funcionamento)}${
                 ativoHoje(p.datas_funcionamento)
                   ? ` <span style="color:#16a34a;font-weight:600">(ativo hoje)</span>`
                   : ""
               }<br/>
-              ${p.periodo_funcionamento ? `Horário: ${p.periodo_funcionamento}<br/>` : ""}
-              O que oferece: ${servicosLabel(p.servicos)}<br/>
+              ${p.periodo_funcionamento ? `Horário: ${e(p.periodo_funcionamento)}<br/>` : ""}
+              O que oferece: ${e(servicosLabel(p.servicos))}<br/>
               ${
                 p.aceita_doacoes
-                  ? `<span style="color:#92400e;font-weight:600">Aceita doações: ${p.doacao_necessidade || "não especificado o quê"}</span><br/>`
+                  ? `<span style="color:#92400e;font-weight:600">Aceita doações: ${e(p.doacao_necessidade || "não especificado o quê")}</span><br/>`
                   : ""
               }
-              ${p.responsavel && p.exibir_telefone !== false ? `Responsável: ${p.responsavel}<br/>` : ""}
-              ${p.telefone && p.exibir_telefone !== false ? `Telefone: ${p.telefone}` : ""}
+              ${p.responsavel && p.exibir_telefone !== false ? `Responsável: ${e(p.responsavel)}<br/>` : ""}
+              ${p.telefone && p.exibir_telefone !== false ? `Telefone: ${e(p.telefone)}` : ""}
               ${
                 linkEditarPapAdmin
-                  ? `<a href="/admin/pap/${p.id}/editar" style="display:inline-block;margin-top:8px;color:#8f3f19;font-weight:700;text-decoration:underline">Editar este PAP (administração)</a>`
+                  ? `<a href="/admin/pap/${encodeURIComponent(p.id)}/editar" style="display:inline-block;margin-top:8px;color:#8f3f19;font-weight:700;text-decoration:underline">Editar este PAP (administração)</a>`
                   : ""
               }
             </div>
@@ -316,11 +331,11 @@ export default function MapView({
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
-              ${r.foto_url ? `<img src="${r.foto_url}" alt="Foto do local de risco" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
-              <strong style="color:${cor}">🚩 ${r.titulo}</strong><br/>
-              ${kmSentidoLabel(r.km_referencia, r.sentido) ? `${kmSentidoLabel(r.km_referencia, r.sentido)}<br/>` : ""}
-              ${r.descricao ?? ""}<br/>
-              Nível de risco: ${NIVEL_RISCO_LABELS[r.nivel_risco] ?? r.nivel_risco}
+              ${urlSegura(r.foto_url) ? `<img src="${urlSegura(r.foto_url)}" alt="Foto do local de risco" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
+              <strong style="color:${cor}">🚩 ${e(r.titulo)}</strong><br/>
+              ${kmSentidoLabel(r.km_referencia, r.sentido) ? `${e(kmSentidoLabel(r.km_referencia, r.sentido))}<br/>` : ""}
+              ${e(r.descricao)}<br/>
+              Nível de risco: ${e(NIVEL_RISCO_LABELS[r.nivel_risco] ?? r.nivel_risco)}
             </div>
           `)
         )
@@ -477,9 +492,9 @@ export default function MapView({
           new maplibregl.Popup({ offset: papDestacado ? 22 : 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
               <span style="font-size:10px;letter-spacing:.05em;color:#737373;font-weight:700">PAP AGUARDANDO VÍNCULO</span><br/>
-              <strong>${p.nome}</strong><br/>
-              ${p.cidade}${p.km != null ? ` — km ${p.km}` : ""}${
-                p.sentido_pista ? ` (${SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista})` : ""
+              <strong>${e(p.nome)}</strong><br/>
+              ${e(p.cidade)}${p.km != null ? ` — km ${e(p.km)}` : ""}${
+                p.sentido_pista ? ` (${e(SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista)})` : ""
               }<br/>
               Dias de funcionamento: ${formatarDatasFuncionamento(p.datas_funcionamento)}
               ${
@@ -534,14 +549,14 @@ export default function MapView({
         .setPopup(
           new maplibregl.Popup({ offset: 20 }).setHTML(`
             <div style="font-family:sans-serif;max-width:220px;color:#1f1f1f">
-              ${c.foto_url ? `<img src="${c.foto_url}" alt="Foto de ${c.nome}" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
-              <span style="font-size:10px;letter-spacing:.05em;color:${cor};font-weight:700">${TIPO_COMERCIO_LABELS[c.tipo] ?? c.tipo}</span><br/>
-              <strong>${c.nome}</strong><br/>
-              ${c.telefone && c.exibir_telefone !== false ? `Telefone: ${c.telefone}<br/>` : ""}
-              ${c.cidade ? `Cidade: ${c.cidade}<br/>` : ""}
-              ${kmSentidoLabel(c.km_referencia, c.sentido_pista) ? `${kmSentidoLabel(c.km_referencia, c.sentido_pista)}<br/>` : ""}
-              ${c.ponto_referencia ? `${c.ponto_referencia}<br/>` : ""}
-              ${c.descricao ? `${c.descricao}` : ""}
+              ${urlSegura(c.foto_url) ? `<img src="${urlSegura(c.foto_url)}" alt="Foto de ${e(c.nome)}" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : ""}
+              <span style="font-size:10px;letter-spacing:.05em;color:${cor};font-weight:700">${e(TIPO_COMERCIO_LABELS[c.tipo] ?? c.tipo)}</span><br/>
+              <strong>${e(c.nome)}</strong><br/>
+              ${c.telefone && c.exibir_telefone !== false ? `Telefone: ${e(c.telefone)}<br/>` : ""}
+              ${c.cidade ? `Cidade: ${e(c.cidade)}<br/>` : ""}
+              ${kmSentidoLabel(c.km_referencia, c.sentido_pista) ? `${e(kmSentidoLabel(c.km_referencia, c.sentido_pista))}<br/>` : ""}
+              ${c.ponto_referencia ? `${e(c.ponto_referencia)}<br/>` : ""}
+              ${c.descricao ? `${e(c.descricao)}` : ""}
             </div>
           `)
         )
@@ -647,7 +662,7 @@ export default function MapView({
           .setLngLat([p.lng, p.lat])
           .setPopup(
             new maplibregl.Popup({ offset: 14 }).setHTML(
-              `<div style="font-family:sans-serif"><strong>${p.cidade}</strong><br/>${status}</div>`
+              `<div style="font-family:sans-serif"><strong>${e(p.cidade)}</strong><br/>${e(status)}</div>`
             )
           )
           .addTo(map!);

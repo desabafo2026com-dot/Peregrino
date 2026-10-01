@@ -26,7 +26,7 @@ export default async function PapPublicoPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = await createClient();
   const { data: ponto } = await supabase
-    .from("pontos_apoio")
+    .from("pontos_apoio_publico")
     .select("*")
     .eq("id", id)
     .eq("status_aprovacao", "aprovado")

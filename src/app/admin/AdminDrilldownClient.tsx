@@ -32,6 +32,7 @@ import {
   MessageCircle,
   MailWarning,
   UserPlus,
+  Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -438,30 +439,17 @@ export default function AdminDrilldownClient({
     router.refresh();
   }
 
-  async function aprovarRomariaGrupo(id: string) {
+  // Rodada 59 — Romarias não precisam mais de aprovação (entram direto
+  // na lista pública); a administração pode excluir qualquer uma.
+  async function excluirRomariaGrupo(id: string) {
+    if (!confirm("Excluir esta Romaria? Ela some da lista pública e do cadastro do organizador.")) return;
     setProcessandoId(id);
     const supabase = createClient();
-    const { error } = await supabase
-      .from("romarias_grupo")
-      .update({ status: "aprovado", aprovado_em: new Date().toISOString() })
-      .eq("id", id);
+    const { error } = await supabase.from("romarias_grupo").delete().eq("id", id);
     if (!error) {
-      setRomariasGrupo((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: "aprovado" as const } : r))
-      );
-    }
-    setProcessandoId(null);
-    router.refresh();
-  }
-
-  async function rejeitarRomariaGrupo(id: string) {
-    setProcessandoId(id);
-    const supabase = createClient();
-    const { error } = await supabase.from("romarias_grupo").update({ status: "rejeitado" }).eq("id", id);
-    if (!error) {
-      setRomariasGrupo((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: "rejeitado" as const } : r))
-      );
+      setRomariasGrupo((prev) => prev.filter((r) => r.id !== id));
+    } else {
+      alert("Não foi possível excluir agora.");
     }
     setProcessandoId(null);
     router.refresh();
@@ -758,15 +746,6 @@ export default function AdminDrilldownClient({
             onClick={() => abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos cadastradas", filtro: "todas" })}
           />
           <Card
-            icon={Clock}
-            label="Pendentes"
-            value={romariasGrupoPendentes.length}
-            destaque={romariasGrupoPendentes.length > 0}
-            onClick={() =>
-              abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos pendentes de aprovação", filtro: "pendentes" })
-            }
-          />
-          <Card
             icon={CalendarClock}
             label="Previstas hoje"
             value={romariasGrupoPrevistasHoje.length}
@@ -774,6 +753,12 @@ export default function AdminDrilldownClient({
               abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos com início hoje", filtro: "hoje" })
             }
           />
+          <Link
+            href="/romarias-grupo/cadastro"
+            className="flex items-center gap-2 self-stretch rounded-xl border border-dashed border-amber-400 px-4 py-3 text-sm font-semibold text-amber-800 hover:bg-amber-50 dark:text-amber-500 dark:hover:bg-amber-950/30"
+          >
+            <UserPlus size={16} /> Cadastrar Romaria
+          </Link>
         </div>
       </section>
 
@@ -1047,26 +1032,15 @@ export default function AdminDrilldownClient({
                         )}
                         <p className="mt-1 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-xs font-medium text-neutral-500">
-                            {r.status === "pendente" ? "Pendente" : r.status === "aprovado" ? "Aprovada" : "Rejeitada"}
+                            {r.status === "rejeitado" ? "Oculta (rejeitada antes)" : "Publicada"}
                           </span>
-                          {r.status === "pendente" && (
-                            <span className="flex gap-2">
-                              <button
-                                disabled={processandoId === r.id}
-                                onClick={() => aprovarRomariaGrupo(r.id)}
-                                className="flex items-center gap-1 rounded-lg bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 hover:bg-green-200 dark:bg-green-950/40 dark:text-green-300"
-                              >
-                                <Check size={14} /> Aprovar
-                              </button>
-                              <button
-                                disabled={processandoId === r.id}
-                                onClick={() => rejeitarRomariaGrupo(r.id)}
-                                className="flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-950/40 dark:text-red-400"
-                              >
-                                <Ban size={14} /> Rejeitar
-                              </button>
-                            </span>
-                          )}
+                          <button
+                            disabled={processandoId === r.id}
+                            onClick={() => excluirRomariaGrupo(r.id)}
+                            className="flex items-center gap-1 rounded-lg bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-950/40 dark:text-red-400"
+                          >
+                            <Trash2 size={14} /> Excluir
+                          </button>
                         </p>
                       </div>
                     );

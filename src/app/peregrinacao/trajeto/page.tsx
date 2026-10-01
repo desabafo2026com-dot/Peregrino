@@ -39,7 +39,7 @@ export default async function TrajetoPage() {
       // `avisoVisivelPublicamente` reaplica a regra de visibilidade aqui no
       // app (Rodada 21).
       supabase
-        .from("riscos_informados")
+        .from("avisos_publicos")
         .select("*")
         .or(`rota_id.eq.${peregrinacao.rota_id},rota_id.is.null`)
         .order("criado_em", { ascending: false }),

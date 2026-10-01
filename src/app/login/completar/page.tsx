@@ -6,9 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { validarNomeCompleto } from "@/lib/validation";
 import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
-import { Footprints, MapPinPlus, UserCheck, ArrowLeft } from "lucide-react";
-
-type TipoConta = "peregrino" | "gerente_pap";
+import { UserCheck, ArrowLeft } from "lucide-react";
+import EscolhaTipoConta from "@/components/EscolhaTipoConta";
+import { lerTipoConta, NOME_TIPO_CONTA, type TipoConta } from "@/lib/tipo-conta";
 
 // Rodada 40 — última etapa de quem entrou pela primeira vez com o Google.
 // O Google já confirmou o e-mail, então aqui não tem senha nem e-mail de
@@ -18,9 +18,7 @@ type TipoConta = "peregrino" | "gerente_pap";
 function CompletarForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tipoParam = searchParams.get("tipo");
-  const tipoPreset: TipoConta | null =
-    tipoParam === "peregrino" || tipoParam === "gerente_pap" ? tipoParam : null;
+  const tipoPreset: TipoConta | null = lerTipoConta(searchParams.get("tipo"));
 
   const [carregandoConta, setCarregandoConta] = useState(true);
   const [emailConta, setEmailConta] = useState("");
@@ -121,17 +119,11 @@ function CompletarForm() {
         setErro("Não foi possível concluir o cadastro de gerente agora. Tente novamente.");
         return;
       }
-      await supabase.rpc("registrar_aceite_termos", {});
-      router.push("/gerente-pap");
-    } else {
-      // Cria a linha mínima em profiles com o aceite registrado pelo
-      // servidor; o restante do perfil de peregrino é preenchido em /perfil.
-      await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome.trim() });
-      const redirect = searchParams.get("redirect");
-      const destino =
-        redirect && redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : "/perfil";
-      router.push(destino);
     }
+    // Rodada 59 — todos (inclusive gerente e organizador) ganham o perfil de
+    // peregrino: cria a linha mínima com o aceite e segue para completar em /perfil.
+    await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome.trim() });
+    router.push(`/perfil?tipo=${tipoConta}`);
     router.refresh();
   }
 
@@ -157,36 +149,7 @@ function CompletarForm() {
           . {tipoConta ? "Confira seus dados para terminar." : "Como você vai usar o app?"}
         </p>
 
-        {!tipoConta && (
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => setTipoConta("peregrino")}
-              className="flex items-center gap-3 rounded-xl border border-neutral-200 p-4 text-left hover:border-amber-400 dark:border-neutral-800"
-            >
-              <Footprints className="shrink-0 text-amber-700" size={26} />
-              <span>
-                <span className="block font-semibold">Sou peregrino</span>
-                <span className="block text-xs text-neutral-500">
-                  Quero informações de apoio, rotas e emergência.
-                </span>
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTipoConta("gerente_pap")}
-              className="flex items-center gap-3 rounded-xl border border-neutral-200 p-4 text-left hover:border-amber-400 dark:border-neutral-800"
-            >
-              <MapPinPlus className="shrink-0 text-amber-700" size={26} />
-              <span>
-                <span className="block font-semibold">Sou gerente de PAP</span>
-                <span className="block text-xs text-neutral-500">
-                  Quero cadastrar ou gerenciar meu Ponto de Apoio ao Peregrino.
-                </span>
-              </span>
-            </button>
-          </div>
-        )}
+        {!tipoConta && <EscolhaTipoConta onEscolher={(t) => setTipoConta(t)} />}
 
         {tipoConta && (
           <form onSubmit={concluir} className="flex flex-col gap-4">
@@ -199,7 +162,7 @@ function CompletarForm() {
                 }}
                 className="flex w-fit items-center gap-1 text-xs font-medium text-neutral-500 hover:text-amber-700"
               >
-                <ArrowLeft size={14} /> {tipoConta === "gerente_pap" ? "Gerente de PAP" : "Peregrino"} — trocar
+                <ArrowLeft size={14} /> {NOME_TIPO_CONTA[tipoConta]} — trocar
               </button>
             )}
             <div>
@@ -247,8 +210,7 @@ function CompletarForm() {
                   Política de Privacidade
                 </Link>
                 . Declaro ter 18 anos ou mais.
-                {tipoConta === "peregrino" &&
-                  " Autorizo o compartilhamento da minha localização durante o trajeto, do início ao fim de cada peregrinação, para registro dos check-ins, registro do local de sinistros informados, para que a equipe de apoio possa avisar sobre condições adversas na rota e para localização em caso de emergência."}
+                {" Autorizo o compartilhamento da minha localização durante o trajeto, do início ao fim de cada peregrinação, para registro dos check-ins, registro do local de sinistros informados, para que a equipe de apoio possa avisar sobre condições adversas na rota e para localização em caso de emergência."}
               </label>
             </div>
 

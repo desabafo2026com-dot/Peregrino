@@ -18,7 +18,22 @@ export default async function RomariaGrupoCadastroPage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login?tipo=peregrino&redirect=/romarias-grupo/cadastro");
+    redirect("/login?tipo=organizador&redirect=/romarias-grupo/cadastro");
+  }
+
+  // Rodada 59 — o organizador também tem o perfil de peregrino: sem perfil
+  // completo, completa primeiro; e quem cadastra Romaria vira organizador
+  // (aparece a opção "Cadastrar Romaria" em Minha peregrinação).
+  const { data: perfil } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!perfil?.cidade) {
+    redirect("/perfil?tipo=organizador");
+  }
+  if (!perfil.is_organizador) {
+    await supabase.from("profiles").update({ is_organizador: true }).eq("id", user.id);
   }
 
   const { data: minhasRomarias } = await supabase
@@ -29,13 +44,12 @@ export default async function RomariaGrupoCadastroPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <VoltarButton href="/" />
-      <h1 className="mb-1 text-2xl font-bold">Cadastrar minha Romaria de Peregrinos</h1>
+      <VoltarButton href="/peregrinacao" />
+      <h1 className="mb-1 text-2xl font-bold">Cadastrar Romaria</h1>
       <p className="mb-6 text-sm text-neutral-500">
-        Vai em caravana ou grupo? Cadastre aqui para que autoridades e outros peregrinos saibam do
-        seu grupo na estrada. <strong>Essas informações serão públicas</strong> assim que a
-        administração aprovar o cadastro — nome do organizador e telefone só aparecem se você
-        autorizar.
+        <strong>Dado público</strong> — para que Autoridades, Pontos de Apoio e outros peregrinos tomem
+        conhecimento do seu grupo na estrada. A Romaria aparece na lista pública assim que você
+        cadastrar. Nome do organizador e telefone só aparecem se você autorizar.
       </p>
       <RomariaGrupoForm userId={user.id} minhasRomariasIniciais={(minhasRomarias ?? []) as RomariaGrupo[]} />
     </div>

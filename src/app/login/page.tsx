@@ -8,10 +8,13 @@ import { validarNomeCompleto } from "@/lib/validation";
 import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
 import EntrarComGoogle from "@/components/EntrarComGoogle";
-import { LogIn, Mail, Footprints, MapPinPlus, ArrowLeft } from "lucide-react";
+import EscolhaTipoConta from "@/components/EscolhaTipoConta";
+import { lerTipoConta, NOME_TIPO_CONTA, type TipoConta } from "@/lib/tipo-conta";
+import { caminhoInterno } from "@/lib/caminho-interno";
+import { LogIn, Mail, ArrowLeft } from "lucide-react";
 
 type Passo = "email" | "senha" | "tipo" | "cadastro" | "verifique";
-type TipoConta = "peregrino" | "gerente_pap";
+
 
 // Entrada única do app: o peregrino (ou gerente de PAP) digita o e-mail
 // primeiro. Se já existe conta, pedimos a senha; se não existe, começa o
@@ -24,9 +27,8 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const avisoConfirmeEmail = searchParams.get("aviso") === "confirme-email";
   const erroGoogle = searchParams.get("erro") === "google";
-  const tipoParam = searchParams.get("tipo");
-  const tipoPreset: TipoConta | null =
-    tipoParam === "peregrino" || tipoParam === "gerente_pap" ? tipoParam : null;
+  const tipoPreset: TipoConta | null = lerTipoConta(searchParams.get("tipo"));
+  const redirectSeguro = caminhoInterno(searchParams.get("redirect"));
 
   const [passo, setPasso] = useState<Passo>("email");
   const [tipoConta, setTipoConta] = useState<TipoConta | null>(null);
@@ -92,7 +94,7 @@ function LoginForm() {
     // Contas de Gerente de PAP têm sua própria área e nunca devem cair no
     // fluxo de peregrino — verificamos o papel da conta antes de decidir
     // para onde ir, ignorando o parâmetro de redirect quando for o caso.
-    let destino = searchParams.get("redirect") || "/painel";
+    let destino = redirectSeguro || "/painel";
     if (data.user) {
       const [{ data: gerente }, { data: perfilPeregrino }] = await Promise.all([
         supabase.from("gerentes_pap").select("id").eq("id", data.user.id).maybeSingle(),
@@ -116,6 +118,10 @@ function LoginForm() {
         // gerente. Agora mandamos para a página que permite virar gerente
         // de PAP com a mesma conta.
         destino = "/gerente-pap/cadastro";
+      } else if (tipoPreset === "organizador") {
+        // Rodada 59 — entrou pelo "Sou organizador de Romaria": vai direto
+        // para o cadastro da Romaria (que pede o perfil antes, se faltar).
+        destino = "/romarias-grupo/cadastro";
       }
     }
 
@@ -184,6 +190,9 @@ function LoginForm() {
     setPasso("verifique");
   }
 
+  // Rodada 59 — cadastro comum para todos: cria o perfil de peregrino
+  // (linha mínima com o aceite dos termos) e segue para completar o perfil
+  // em /perfil; o gerente de PAP também ganha a linha de gerente.
   async function finalizarCadastro() {
     const supabase = createClient();
     if (tipoConta === "gerente_pap") {
@@ -197,17 +206,9 @@ function LoginForm() {
           telefone,
         });
       }
-      // O aceite (checkbox obrigatório acima) já foi dado — registra a
-      // versão/data no servidor agora que a linha em gerentes_pap existe.
-      await supabase.rpc("registrar_aceite_termos", {});
-      router.push("/gerente-pap");
-    } else {
-      // Para peregrino, o perfil completo só é preenchido depois em
-      // /perfil — passamos o nome para a função poder já criar uma linha
-      // mínima em profiles com o aceite registrado (ver Migration 25).
-      await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome });
-      router.push("/perfil");
     }
+    await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome });
+    router.push(`/perfil?tipo=${tipoConta ?? "peregrino"}`);
     router.refresh();
   }
 
@@ -235,10 +236,7 @@ function LoginForm() {
           {passo === "email" && "Entre ou crie sua conta com o Google ou com seu e-mail."}
           {passo === "senha" && "Este e-mail já tem conta. Informe sua senha."}
           {passo === "tipo" && "Este e-mail ainda não tem conta. Como você vai usar o app?"}
-          {passo === "cadastro" &&
-            (tipoConta === "gerente_pap"
-              ? "Cadastro de Gerente de PAP — dados de acesso."
-              : "Criar conta de peregrino — dados de acesso.")}
+          {passo === "cadastro" && `Criar conta (${NOME_TIPO_CONTA[tipoConta ?? "peregrino"]}) — dados de acesso.`}
           {passo === "verifique" && "Falta só confirmar seu e-mail."}
         </p>
 
@@ -258,7 +256,7 @@ function LoginForm() {
             caminho que não passa pelo e-mail de confirmação. */}
         {passo === "email" && (
           <div className="mb-5">
-            <EntrarComGoogle tipo={tipoPreset} redirect={searchParams.get("redirect")} />
+            <EntrarComGoogle tipo={tipoPreset} redirect={redirectSeguro} />
             <div className="mt-5 flex items-center gap-3 text-xs text-neutral-400">
               <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
               ou use seu e-mail
@@ -323,38 +321,13 @@ function LoginForm() {
         {passo === "tipo" && (
           <div className="flex flex-col gap-3">
             <BotaoVoltarEmail email={email} onVoltar={voltarParaEmail} />
-            <button
-              onClick={() => {
-                setTipoConta("peregrino");
+            <EscolhaTipoConta
+              onEscolher={(t) => {
+                setTipoConta(t);
                 setPasso("cadastro");
                 setErro(null);
               }}
-              className="flex items-center gap-3 rounded-xl border border-neutral-200 p-4 text-left hover:border-amber-400 dark:border-neutral-800"
-            >
-              <Footprints className="shrink-0 text-amber-700" size={26} />
-              <span>
-                <span className="block font-semibold">Sou peregrino</span>
-                <span className="block text-xs text-neutral-500">
-                  Quero informações de apoio, rotas e emergência.
-                </span>
-              </span>
-            </button>
-            <button
-              onClick={() => {
-                setTipoConta("gerente_pap");
-                setPasso("cadastro");
-                setErro(null);
-              }}
-              className="flex items-center gap-3 rounded-xl border border-neutral-200 p-4 text-left hover:border-amber-400 dark:border-neutral-800"
-            >
-              <MapPinPlus className="shrink-0 text-amber-700" size={26} />
-              <span>
-                <span className="block font-semibold">Sou gerente de PAP</span>
-                <span className="block text-xs text-neutral-500">
-                  Quero cadastrar ou gerenciar meu Ponto de Apoio ao Peregrino.
-                </span>
-              </span>
-            </button>
+            />
           </div>
         )}
 
@@ -437,8 +410,7 @@ function LoginForm() {
                   Política de Privacidade
                 </Link>
                 . Declaro ter 18 anos ou mais.
-                {tipoConta === "peregrino" &&
-                  " Autorizo o compartilhamento da minha localização durante o trajeto, do início ao fim de cada peregrinação, para registro dos check-ins, registro do local de sinistros informados, para que a equipe de apoio possa avisar sobre condições adversas na rota e para localização em caso de emergência."}
+                {" Autorizo o compartilhamento da minha localização durante o trajeto, do início ao fim de cada peregrinação, para registro dos check-ins, registro do local de sinistros informados, para que a equipe de apoio possa avisar sobre condições adversas na rota e para localização em caso de emergência."}
               </label>
             </div>
 

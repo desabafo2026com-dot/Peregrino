@@ -51,10 +51,19 @@ export async function verificarPapDuplicado(
     return true;
   };
 
-  const [{ data: pontos }, { data: preCadastros }] = await Promise.all([
+  // Rodada 59 — a tabela pontos_apoio agora só mostra ao gerente os PAPs
+  // dele; os demais (aprovados) vêm da view pública. Junta os dois.
+  const [{ data: publicos }, { data: meus }, { data: preCadastros }] = await Promise.all([
+    supabase.from("pontos_apoio_publico").select("id, nome, cidade, gerente_id"),
     supabase.from("pontos_apoio").select("id, nome, cidade, gerente_id"),
     supabase.from("paps_pre_cadastro").select("*").is("reivindicado_por", null),
   ]);
+  const vistos = new Set<string>();
+  const pontos = [...(meus ?? []), ...(publicos ?? [])].filter((p) => {
+    if (vistos.has(p.id as string)) return false;
+    vistos.add(p.id as string);
+    return true;
+  });
 
   const pontoBatido = ((pontos ?? []) as PontoApoioResumo[]).find((p) => bate(p.nome, p.cidade));
   if (pontoBatido) {

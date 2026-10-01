@@ -46,6 +46,8 @@ export interface Profile {
   avatar_url: string | null;
   is_admin: boolean;
   is_agente: boolean;
+  // Rodada 59 — organizador de Romaria (Migration 48).
+  is_organizador?: boolean;
   // Versão dos Termos de Uso/Política de Privacidade aceita por último, e
   // quando — gravados só pela função registrar_aceite_termos (Rodada 19),
   // nunca escritos direto pelo app. Nulo = nunca aceitou (ver TermosGate).
