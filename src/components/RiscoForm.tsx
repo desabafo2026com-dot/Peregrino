@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
+import { comprimirImagem, CACHE_UM_ANO } from "@/lib/comprimir-imagem";
 import { NIVEL_RISCO_LABELS, SENTIDO_PISTA_OPTIONS, BR_OPTIONS, ROTA_FAIXA_KM, nomeRota, kmPertenceARota } from "@/lib/constants";
 import { LocateFixed, Upload } from "lucide-react";
 import type { PontoRisco, Rota, Br } from "@/types/database";
@@ -100,8 +101,10 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
   async function handleUploadFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      setErro("A foto deve ter no máximo 4MB.");
+    // Rodada 61 — a foto é reduzida antes do envio, então aceita fotos
+    // grandes direto da câmera.
+    if (file.size > 25 * 1024 * 1024) {
+      setErro("A foto deve ter no máximo 25MB.");
       return;
     }
     setEnviandoFoto(true);
@@ -115,11 +118,12 @@ export default function RiscoForm({ riscoInicial, onSalvar, submitLabel, submitL
       setErro("Sua sessão expirou. Faça login novamente.");
       return;
     }
-    const ext = file.name.split(".").pop() || "jpg";
+    const reduzida = await comprimirImagem(file, { maxLado: 1280 });
+    const ext = reduzida.type === "image/jpeg" ? "jpg" : file.name.split(".").pop() || "jpg";
     const path = `${user.id}/${riscoInicial?.id ?? "novo"}-${Date.now()}.${ext}`;
     const { error: uploadError } = await supabase.storage
       .from("risco-fotos")
-      .upload(path, file, { upsert: true });
+      .upload(path, reduzida, { upsert: true, cacheControl: CACHE_UM_ANO, contentType: reduzida.type || undefined });
     setEnviandoFoto(false);
     if (uploadError) {
       setErro("Não foi possível enviar a foto: " + uploadError.message);

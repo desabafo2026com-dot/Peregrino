@@ -22,6 +22,7 @@ import {
   Medal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { comprimirImagem, CACHE_UM_ANO } from "@/lib/comprimir-imagem";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
 
 // Fonte própria para o título — auto-hospedada como arquivos estáticos em
@@ -223,21 +224,30 @@ const FOTO_ESCALA_PADRAO = 100;
 // para a mesma compra, já que o upload usa upsert).
 async function enviarFotoParaStorage(caminho: string, arquivo: File) {
   const supabase = createClient();
+  // Rodada 61 — foto reduzida antes do envio (economia de tráfego do Storage).
+  const reduzida = await comprimirImagem(arquivo, { maxLado: 1600, qualidade: 0.85 });
   const { error: erroUpload } = await supabase.storage
     .from("romaria-plus-fotos")
-    .upload(caminho, arquivo, { upsert: true, contentType: arquivo.type || "image/jpeg" });
+    .upload(caminho, reduzida, {
+      upsert: true,
+      cacheControl: CACHE_UM_ANO,
+      contentType: reduzida.type || arquivo.type || "image/jpeg",
+    });
   if (erroUpload) throw erroUpload;
   const { data } = supabase.storage.from("romaria-plus-fotos").getPublicUrl(caminho);
   return `${data.publicUrl}?v=${Date.now()}`;
 }
 
 // Rodada 56 — guarda a arte pronta (PNG) no mesmo bucket, ao lado da foto.
+// Rodada 61 — guardada em JPEG (bem mais leve que PNG); o arquivo que a
+// pessoa baixa na hora continua sendo o PNG em alta.
 async function enviarArteParaStorage(caminho: string, dataUrl: string) {
-  const blob = await (await fetch(dataUrl)).blob();
+  const png = await (await fetch(dataUrl)).blob();
+  const blob = await comprimirImagem(png, { maxLado: 1920, qualidade: 0.9 });
   const supabase = createClient();
   const { error } = await supabase.storage
     .from("romaria-plus-fotos")
-    .upload(caminho, blob, { upsert: true, contentType: "image/png" });
+    .upload(caminho, blob, { upsert: true, cacheControl: CACHE_UM_ANO, contentType: blob.type || "image/png" });
   if (error) throw error;
   const { data } = supabase.storage.from("romaria-plus-fotos").getPublicUrl(caminho);
   return `${data.publicUrl}?v=${Date.now()}`;
@@ -1113,7 +1123,7 @@ export default function RomariaPlusView({
         ajusteTimeoutRef.current = null;
       }
       await persistirFoto(modelo, ajuste);
-      const url = await enviarArteParaStorage(`${userId}/${compraId}/arte-${indice}.png`, dataUrl);
+      const url = await enviarArteParaStorage(`${userId}/${compraId}/arte-${indice}.jpg`, dataUrl);
       const supabase = createClient();
       const { error } = await supabase.rpc("salvar_arte_romaria_plus", {
         p_compra_id: compraId,

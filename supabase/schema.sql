@@ -4973,3 +4973,213 @@ where p.status = 'em_andamento'
   );
 
 -- FIM DA MIGRATION 50
+
+-- =====================================================================
+-- MIGRATION 51 — Rodada 61: primeira arte da Romaria Plus grátis
+-- ---------------------------------------------------------------------
+-- Cada conta pode criar UMA arte com a sua foto sem pagar (em qualquer
+-- certificado que ainda não tenha a Romaria Plus). Ela fica numa "compra"
+-- de cortesia (tipo = 'cortesia', valor 0) com espaço para 1 foto.
+-- Se depois a pessoa compra a Romaria Plus DESSE MESMO certificado, a arte
+-- grátis passa para a compra paga e conta como a 1ª das 5 (a compra libera
+-- mais 4 + o Certificado Plus).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 50.
+-- =====================================================================
+
+-- 1) Novo tipo de compra -----------------------------------------------
+alter table public.compras_romaria_plus
+  drop constraint if exists compras_romaria_plus_tipo_check;
+alter table public.compras_romaria_plus
+  add constraint compras_romaria_plus_tipo_check check (tipo in ('inicial', 'extra', 'cortesia'));
+
+comment on column public.compras_romaria_plus.tipo is 'Rodada 30: "inicial" é a compra do Certificado Plus (5 fotos); "extra" é um pacote avulso de +5 fotos. Rodada 61: "cortesia" é a arte grátis (1 foto, uma por conta), sem Certificado Plus.';
+
+-- Uma cortesia por conta.
+create unique index if not exists uq_compras_romaria_plus_cortesia_por_usuario
+  on public.compras_romaria_plus(user_id) where tipo = 'cortesia';
+
+-- 2) Liberar a arte grátis ---------------------------------------------
+create or replace function public.liberar_arte_gratis_romaria_plus(p_certificado_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cert_user uuid;
+  v_ano int;
+  v_cortesia record;
+  v_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'é preciso estar logado';
+  end if;
+
+  select user_id, extract(year from coalesce(data_fim, emitido_em))::int
+    into v_cert_user, v_ano
+    from public.certificados where id = p_certificado_id;
+  if v_cert_user is null or v_cert_user <> auth.uid() then
+    raise exception 'certificado não encontrado';
+  end if;
+
+  select id, certificado_id into v_cortesia
+  from public.compras_romaria_plus
+  where user_id = auth.uid() and tipo = 'cortesia';
+  if found then
+    if v_cortesia.certificado_id = p_certificado_id then
+      return v_cortesia.id;
+    end if;
+    raise exception 'arte_gratis_ja_usada: a arte grátis já foi usada em outra peregrinação';
+  end if;
+
+  if exists (
+    select 1 from public.compras_romaria_plus
+    where certificado_id = p_certificado_id and user_id = auth.uid() and tipo = 'inicial' and status = 'pago'
+  ) then
+    raise exception 'ja_tem_plus: esta peregrinação já tem a Romaria Plus';
+  end if;
+
+  insert into public.compras_romaria_plus (certificado_id, user_id, valor_centavos, status, pago_em, ano, tipo)
+  values (p_certificado_id, auth.uid(), 0, 'pago', now(), v_ano, 'cortesia')
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+revoke all on function public.liberar_arte_gratis_romaria_plus(uuid) from public;
+grant execute on function public.liberar_arte_gratis_romaria_plus(uuid) to authenticated;
+
+-- 3) Salvar foto / arte aceitam a cortesia (com espaço para 1 foto) ----
+create or replace function public.salvar_foto_romaria_plus_slot(
+  p_compra_id uuid,
+  p_indice int,
+  p_foto_url text,
+  p_modelo text,
+  p_ajuste_overlay jsonb default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_tipo text;
+  v_pacotes_extra int;
+  v_max_permitido int;
+begin
+  select user_id, tipo into v_user_id, v_tipo
+  from public.compras_romaria_plus
+  where id = p_compra_id and user_id = auth.uid() and status = 'pago' and tipo in ('inicial', 'cortesia');
+
+  if v_user_id is null then
+    raise exception 'compra não encontrada, não paga, ou não pertence a este usuário';
+  end if;
+
+  if v_tipo = 'cortesia' then
+    v_max_permitido := 1;
+  else
+    select count(*) into v_pacotes_extra
+    from public.compras_romaria_plus
+    where compra_pai_id = p_compra_id and status = 'pago' and tipo = 'extra';
+    v_max_permitido := 5 + 5 * v_pacotes_extra;
+  end if;
+
+  if p_indice < 1 or p_indice > v_max_permitido then
+    raise exception 'índice % fora do limite permitido para esta compra (máximo %)', p_indice, v_max_permitido;
+  end if;
+
+  if exists (
+    select 1 from public.romaria_plus_fotos
+    where compra_id = p_compra_id and indice = p_indice and arte_url is not null
+  ) then
+    raise exception 'a arte da foto % já foi salva e não pode mais ser alterada', p_indice;
+  end if;
+
+  insert into public.romaria_plus_fotos (compra_id, user_id, indice, foto_url, modelo, ajuste_overlay)
+  values (p_compra_id, v_user_id, p_indice, p_foto_url, p_modelo, p_ajuste_overlay)
+  on conflict (compra_id, indice) do update
+    set foto_url = excluded.foto_url,
+        modelo = excluded.modelo,
+        ajuste_overlay = excluded.ajuste_overlay,
+        atualizado_em = now();
+end;
+$$;
+
+grant execute on function public.salvar_foto_romaria_plus_slot(uuid, int, text, text, jsonb) to authenticated;
+
+create or replace function public.salvar_arte_romaria_plus(
+  p_compra_id uuid,
+  p_indice int,
+  p_arte_url text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_arte_url is null or p_arte_url = '' then
+    raise exception 'arte vazia';
+  end if;
+
+  if not exists (
+    select 1 from public.compras_romaria_plus
+    where id = p_compra_id and user_id = auth.uid() and status = 'pago' and tipo in ('inicial', 'cortesia')
+  ) then
+    raise exception 'compra não encontrada, não paga, ou não pertence a este usuário';
+  end if;
+
+  update public.romaria_plus_fotos
+  set arte_url = p_arte_url,
+      arte_salva_em = coalesce(arte_salva_em, now()),
+      atualizado_em = now()
+  where compra_id = p_compra_id and indice = p_indice and user_id = auth.uid();
+
+  if not found then
+    raise exception 'foto % não encontrada nesta compra', p_indice;
+  end if;
+end;
+$$;
+
+grant execute on function public.salvar_arte_romaria_plus(uuid, int, text) to authenticated;
+
+-- 4) Comprou a Romaria Plus do mesmo certificado: a arte grátis vira a
+--    1ª das 5 da compra paga.
+create or replace function public.romaria_plus_levar_arte_gratis()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.tipo <> 'inicial' or new.status <> 'pago' then
+    return null;
+  end if;
+  if tg_op = 'UPDATE' and old.status = 'pago' then
+    return null;
+  end if;
+
+  update public.romaria_plus_fotos f
+  set compra_id = new.id, atualizado_em = now()
+  from public.compras_romaria_plus c
+  where f.compra_id = c.id
+    and c.tipo = 'cortesia'
+    and c.user_id = new.user_id
+    and c.certificado_id = new.certificado_id
+    and not exists (
+      select 1 from public.romaria_plus_fotos x where x.compra_id = new.id and x.indice = f.indice
+    );
+  return null;
+end;
+$$;
+
+revoke all on function public.romaria_plus_levar_arte_gratis() from public;
+
+drop trigger if exists trg_romaria_plus_levar_arte_gratis on public.compras_romaria_plus;
+create trigger trg_romaria_plus_levar_arte_gratis
+  after insert or update of status on public.compras_romaria_plus
+  for each row execute function public.romaria_plus_levar_arte_gratis();
+
+-- FIM DA MIGRATION 51

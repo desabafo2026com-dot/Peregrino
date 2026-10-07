@@ -4,16 +4,13 @@ import VoltarButton from "@/components/VoltarButton";
 import Link from "next/link";
 import { Award } from "lucide-react";
 import RomariaPlusFotos from "@/components/RomariaPlusFotos";
+import RomariaPlusCompra from "@/components/RomariaPlusCompra";
 import type { Certificado, CompraRomariaPlus, RomariaPlusFoto } from "@/types/database";
 
 // Página separada (Rodada 18) para quem já pagou a Romaria Plus — antes a
 // arte/editor de foto ficava embutida direto na página do certificado
 // grátis; agora fica no seu próprio espaço, com as até 5 fotos da pessoa.
-export default async function CertificadoPlusPage({
-  params,
-}: {
-  params: Promise<{ certificadoId: string }>;
-}) {
+export default async function CertificadoPlusPage({ params }: { params: Promise<{ certificadoId: string }> }) {
   const { certificadoId } = await params;
   const supabase = await createClient();
   const {
@@ -50,20 +47,40 @@ export default async function CertificadoPlusPage({
     .order("criado_em", { ascending: false })
     .maybeSingle();
 
+  // Rodada 61 — sem a Romaria Plus paga, mas com a arte grátis liberada
+  // para este certificado: abre o editor com espaço para 1 foto.
+  const { data: cortesia } = compra
+    ? { data: null }
+    : await supabase
+        .from("compras_romaria_plus")
+        .select("*")
+        .eq("certificado_id", certificadoId)
+        .eq("user_id", user.id)
+        .eq("status", "pago")
+        .eq("tipo", "cortesia")
+        .maybeSingle();
+
   // Sem compra paga (ainda não comprou, cancelou, ou por algum motivo caiu
   // aqui sem concluir) — volta para a tela de compra em vez de mostrar uma
   // página vazia, como pedido pelo usuário.
-  if (!compra) {
+  if (!compra && !cortesia) {
     redirect(`/certificado/${certificadoId}#romaria-plus`);
   }
 
-  const compraId = (compra as CompraRomariaPlus).id;
+  const ehCortesia = !compra;
+  const compraId = ((compra ?? cortesia) as CompraRomariaPlus).id;
 
   // As duas consultas abaixo dependem só de compraId, não uma da outra —
   // juntas num só Promise.all (Rodada 30, mesma otimização de
   // /peregrinacao e /certificado).
   const cert = certificado as Certificado;
-  const [{ data: fotos }, { data: pacotesExtra }, { data: peregrinacao }, { data: checkinsCidades }, { data: perfilLogado }] = await Promise.all([
+  const [
+    { data: fotos },
+    { data: pacotesExtra },
+    { data: peregrinacao },
+    { data: checkinsCidades },
+    { data: perfilLogado },
+  ] = await Promise.all([
     supabase.from("romaria_plus_fotos").select("*").eq("compra_id", compraId).order("indice"),
     // Pacotes extra de +5 fotos (Rodada 30) — quantos já foram pagos
     // (define o limite atual da galeria) e o mais recente ainda pendente,
@@ -78,11 +95,7 @@ export default async function CertificadoPlusPage({
     // Rodada 49 — origem da própria peregrinação, para certificados antigos
     // que não gravaram a origem (a arte mostrava só "Início"), e as cidades
     // com check-in, na ordem, para os carimbos da "Credencial do peregrino".
-    supabase
-      .from("peregrinacoes")
-      .select("cidade_origem, cidade_inicio")
-      .eq("id", cert.peregrinacao_id)
-      .maybeSingle(),
+    supabase.from("peregrinacoes").select("cidade_origem, cidade_inicio").eq("id", cert.peregrinacao_id).maybeSingle(),
     supabase
       .from("checkins")
       .select("criado_em, pontos_checkin(cidade)")
@@ -97,7 +110,11 @@ export default async function CertificadoPlusPage({
     ...cert,
     origem: cert.origem ?? peregrinacao?.cidade_origem ?? peregrinacao?.cidade_inicio ?? null,
   };
-  const cidadesCheckin = ((checkinsCidades ?? []) as { pontos_checkin: { cidade: string } | { cidade: string }[] | null }[])
+  const cidadesCheckin = (
+    (checkinsCidades ?? []) as {
+      pontos_checkin: { cidade: string } | { cidade: string }[] | null;
+    }[]
+  )
     .map((c) => (Array.isArray(c.pontos_checkin) ? c.pontos_checkin[0]?.cidade : c.pontos_checkin?.cidade))
     .filter((cidade): cidade is string => !!cidade);
 
@@ -109,17 +126,23 @@ export default async function CertificadoPlusPage({
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <VoltarButton href="/painel" />
       <div>
-        <h1 className="mb-1 text-2xl font-bold text-amber-800 dark:text-amber-500">Minhas fotos — Romaria Plus</h1>
+        <h1 className="mb-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
+          {ehCortesia ? "Minha arte grátis" : "Minhas fotos — Romaria Plus"}
+        </h1>
         <p className="text-sm text-neutral-500">
-          Transforme suas fotos desta peregrinação em artes prontas para baixar ou compartilhar.
+          {ehCortesia
+            ? "Escolha uma foto da sua caminhada e um modelo. A primeira arte é por nossa conta!"
+            : "Transforme suas fotos desta peregrinação em artes prontas para baixar ou compartilhar."}
         </p>
         {/* Rodada 57 — o Certificado Plus (pergaminho) mudou para Meus certificados. */}
-        <Link
-          href={`/certificado/${cert.id}`}
-          className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:underline dark:text-amber-500"
-        >
-          <Award size={15} /> Ver meu Certificado Plus em Meus certificados →
-        </Link>
+        {!ehCortesia && (
+          <Link
+            href={`/certificado/${cert.id}`}
+            className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:underline dark:text-amber-500"
+          >
+            <Award size={15} /> Ver meu Certificado Plus em Meus certificados →
+          </Link>
+        )}
       </div>
       <RomariaPlusFotos
         certificado={certificadoComOrigem}
@@ -130,7 +153,20 @@ export default async function CertificadoPlusPage({
         fotosIniciais={(fotos ?? []) as RomariaPlusFoto[]}
         pacotesExtraPagos={pacotesExtraPagos}
         pacoteExtraPendente={pacoteExtraPendente}
+        cortesia={ehCortesia}
       />
+      {ehCortesia && (
+        <section className="flex flex-col gap-3 border-t border-dashed border-amber-200 pt-6 dark:border-amber-900">
+          <h2 className="text-center text-lg font-bold text-amber-800 dark:text-amber-500">Gostou? Faça mais 4</h2>
+          <RomariaPlusCompra
+            certificadoId={cert.id}
+            compraInicial={null}
+            isAdmin={!!perfilLogado?.is_admin}
+            arteGratis="usada_aqui"
+            mostrarLinkArteGratis={false}
+          />
+        </section>
+      )}
     </div>
   );
 }

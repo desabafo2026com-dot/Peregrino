@@ -56,7 +56,7 @@ export default function HospedagemAdminClient({ comerciosIniciais }: { comercios
               <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900">
                 {c.foto_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.foto_url} alt={c.nome} className="h-full w-full object-cover" />
+                  <img src={c.foto_url} alt={c.nome} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-neutral-400">
                     <Icon size={20} />

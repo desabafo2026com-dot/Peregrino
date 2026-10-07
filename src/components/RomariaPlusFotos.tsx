@@ -21,6 +21,9 @@ interface Props {
   // Rodada 49 — cidades com check-in, na ordem (carimbos da "Credencial").
   cidadesCheckin?: string[];
   ehAdmin?: boolean;
+  // Rodada 61 — arte grátis (compra de cortesia): só 1 foto, sem pacote
+  // extra; ao salvar, convida a adquirir a Romaria Plus.
+  cortesia?: boolean;
 }
 
 const MAX_FOTOS_INICIAL = 5;
@@ -43,8 +46,9 @@ export default function RomariaPlusFotos({
   pacoteExtraPendente,
   cidadesCheckin = [],
   ehAdmin = false,
+  cortesia = false,
 }: Props) {
-  const MAX_FOTOS = MAX_FOTOS_INICIAL + ROMARIA_PLUS_FOTOS_POR_PACOTE * pacotesExtraPagos;
+  const MAX_FOTOS = cortesia ? 1 : MAX_FOTOS_INICIAL + ROMARIA_PLUS_FOTOS_POR_PACOTE * pacotesExtraPagos;
   const [fotos, setFotos] = useState<Record<number, RomariaPlusFoto>>(() => {
     const mapa: Record<number, RomariaPlusFoto> = {};
     fotosIniciais.forEach((f) => {
@@ -73,7 +77,12 @@ export default function RomariaPlusFotos({
   const abas = [...indicesExistentes];
   if (podeAdicionarNova && !abas.includes(proximoIndiceLivre)) abas.push(proximoIndiceLivre);
 
-  function aoSalvar(dados: { indice: number; foto_url: string; modelo: Modelo; ajuste_overlay: RomariaPlusFoto["ajuste_overlay"] }) {
+  function aoSalvar(dados: {
+    indice: number;
+    foto_url: string;
+    modelo: Modelo;
+    ajuste_overlay: RomariaPlusFoto["ajuste_overlay"];
+  }) {
     setFotos((prev) => ({
       ...prev,
       [dados.indice]: {
@@ -118,6 +127,10 @@ export default function RomariaPlusFotos({
     if (proxima) {
       setAviso(`Foto ${dados.indice} salva na sua galeria! Agora você pode criar a Foto ${proxima}.`);
       setSlotAtivo(proxima);
+    } else if (cortesia) {
+      setAviso(
+        "Sua arte grátis está salva! Para criar mais 4 artes e ganhar o Certificado Plus, adquira a Romaria Plus."
+      );
     } else {
       setAviso(`Foto ${dados.indice} salva na sua galeria! Você usou todas as ${MAX_FOTOS} fotos.`);
     }
@@ -128,34 +141,40 @@ export default function RomariaPlusFotos({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap justify-center gap-2">
-        {abas.map((i) => {
-          const existe = i in fotos;
-          const ehNova = !existe;
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={() => {
-                setSlotAtivo(i);
-                setAviso(null);
-              }}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium ${
-                slotAtivo === i
-                  ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
-                  : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              }`}
-            >
-              {existe && fotos[i]?.arte_url && <Check size={13} className="text-green-600 dark:text-green-400" />}
-              {existe && !fotos[i]?.arte_url && <Pencil size={13} />}
-              {ehNova && <Plus size={13} />}
-              {ehNova ? "Nova foto" : `Foto ${i}`}
-            </button>
-          );
-        })}
-      </div>
+      {!cortesia && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {abas.map((i) => {
+            const existe = i in fotos;
+            const ehNova = !existe;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  setSlotAtivo(i);
+                  setAviso(null);
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                  slotAtivo === i
+                    ? "border-amber-600 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-400"
+                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                }`}
+              >
+                {existe && fotos[i]?.arte_url && <Check size={13} className="text-green-600 dark:text-green-400" />}
+                {existe && !fotos[i]?.arte_url && <Pencil size={13} />}
+                {ehNova && <Plus size={13} />}
+                {ehNova ? "Nova foto" : `Foto ${i}`}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <p className="text-center text-xs text-neutral-400">
-        {salvas} de {MAX_FOTOS} fotos salvas — pode fazer uma de cada vez, no seu tempo.
+        {cortesia
+          ? salvas > 0
+            ? "Arte grátis salva."
+            : "Sua arte grátis: escolha a foto e o modelo. Ela fica salva quando você baixar ou compartilhar."
+          : `${salvas} de ${MAX_FOTOS} fotos salvas — pode fazer uma de cada vez, no seu tempo.`}
       </p>
 
       {aviso && (
@@ -170,22 +189,22 @@ export default function RomariaPlusFotos({
       {fotoDoSlotAtivo?.arte_url ? (
         <ArteSalva key={slotAtivo} foto={fotoDoSlotAtivo} codigo={certificado.codigo} compraId={compraId} />
       ) : (
-      <RomariaPlusView
-        key={slotAtivo}
-        certificado={certificado}
-        compraId={compraId}
-        userId={userId}
-        indice={slotAtivo}
-        fotoUrlInicial={fotoDoSlotAtivo?.foto_url ?? null}
-        modeloInicial={fotoDoSlotAtivo?.modelo ?? null}
-        ajusteInicial={fotoDoSlotAtivo?.ajuste_overlay ?? null}
-        contadorDownloadsInicial={fotoDoSlotAtivo?.contador_downloads ?? 0}
-        contadorCompartilhamentosInicial={fotoDoSlotAtivo?.contador_compartilhamentos ?? 0}
-        cidadesCheckin={cidadesCheckin}
-        ehAdmin={ehAdmin}
-        onSalvo={aoSalvar}
-        onArteSalva={aoSalvarArte}
-      />
+        <RomariaPlusView
+          key={slotAtivo}
+          certificado={certificado}
+          compraId={compraId}
+          userId={userId}
+          indice={slotAtivo}
+          fotoUrlInicial={fotoDoSlotAtivo?.foto_url ?? null}
+          modeloInicial={fotoDoSlotAtivo?.modelo ?? null}
+          ajusteInicial={fotoDoSlotAtivo?.ajuste_overlay ?? null}
+          contadorDownloadsInicial={fotoDoSlotAtivo?.contador_downloads ?? 0}
+          contadorCompartilhamentosInicial={fotoDoSlotAtivo?.contador_compartilhamentos ?? 0}
+          cidadesCheckin={cidadesCheckin}
+          ehAdmin={ehAdmin}
+          onSalvo={aoSalvar}
+          onArteSalva={aoSalvarArte}
+        />
       )}
 
       {/* Pacote extra de +5 fotos (Rodada 30) — só aparece depois que todos
@@ -194,7 +213,7 @@ export default function RomariaPlusFotos({
           completar as 5 que ele adquiriu"). */}
       {/* Rodada 57 — "adquirir mais 5" aparece quando TODAS as fotos
           liberadas até agora já foram salvas (baixadas/compartilhadas). */}
-      {(salvas >= MAX_FOTOS || pacoteExtraPendente) && (
+      {!cortesia && (salvas >= MAX_FOTOS || pacoteExtraPendente) && (
         <RomariaPlusComprarExtra compraId={compraId} pacoteExtraPendenteInicial={pacoteExtraPendente} />
       )}
     </div>
@@ -208,7 +227,8 @@ function ArteSalva({ foto, codigo, compraId }: { foto: RomariaPlusFoto; codigo: 
   const [downloads, setDownloads] = useState(foto.contador_downloads);
   const [compartilhamentos, setCompartilhamentos] = useState(foto.contador_compartilhamentos);
   const [erro, setErro] = useState<string | null>(null);
-  const nome = `romaria-plus-${codigo}-${foto.indice}.png`;
+  const ehJpg = /\.jpe?g(\?|$)/i.test(foto.arte_url ?? "");
+  const nome = `romaria-plus-${codigo}-${foto.indice}.${ehJpg ? "jpg" : "png"}`;
 
   function registrar(evento: "download" | "compartilhamento") {
     if (evento === "download") setDownloads((n) => n + 1);
@@ -219,10 +239,10 @@ function ArteSalva({ foto, codigo, compraId }: { foto: RomariaPlusFoto; codigo: 
   }
 
   async function obterArquivo() {
-    const resposta = await fetch(foto.arte_url as string, { cache: "no-store" });
+    const resposta = await fetch(foto.arte_url as string);
     if (!resposta.ok) throw new Error("falha ao baixar");
     const blob = await resposta.blob();
-    return new File([blob], nome, { type: "image/png" });
+    return new File([blob], nome, { type: blob.type || (ehJpg ? "image/jpeg" : "image/png") });
   }
 
   function salvarNoAparelho(arquivo: File) {
@@ -276,6 +296,7 @@ function ArteSalva({ foto, codigo, compraId }: { foto: RomariaPlusFoto; codigo: 
       <img
         src={foto.arte_url as string}
         alt={`Arte da Foto ${foto.indice}`}
+        decoding="async"
         className="w-full max-w-sm rounded-2xl shadow-lg"
       />
       <p className="flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">

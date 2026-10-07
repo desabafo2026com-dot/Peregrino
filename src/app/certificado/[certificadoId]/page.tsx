@@ -28,18 +28,31 @@ export default async function CertificadoDetalhePage({ params }: { params: Promi
   if (!certificado) redirect("/certificado");
   const c = certificado as Certificado;
 
-  const [{ data: perfil }, { data: compras }, { data: mensagem }, { data: peregrinacao }] = await Promise.all([
-    supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
-    supabase
-      .from("compras_romaria_plus")
-      .select("*")
-      .eq("certificado_id", c.id)
-      .eq("tipo", "inicial")
-      .order("criado_em", { ascending: false })
-      .limit(1),
-    supabase.from("mensagens_conquista").select("*").eq("certificado_id", c.id).maybeSingle(),
-    supabase.from("peregrinacoes").select("cidade_origem, cidade_inicio").eq("id", c.peregrinacao_id).maybeSingle(),
-  ]);
+  const [{ data: perfil }, { data: compras }, { data: mensagem }, { data: peregrinacao }, { data: cortesia }] =
+    await Promise.all([
+      supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("compras_romaria_plus")
+        .select("*")
+        .eq("certificado_id", c.id)
+        .eq("tipo", "inicial")
+        .order("criado_em", { ascending: false })
+        .limit(1),
+      supabase.from("mensagens_conquista").select("*").eq("certificado_id", c.id).maybeSingle(),
+      supabase.from("peregrinacoes").select("cidade_origem, cidade_inicio").eq("id", c.peregrinacao_id).maybeSingle(),
+      // Rodada 61 — arte grátis da conta (uma só), se já foi liberada.
+      supabase
+        .from("compras_romaria_plus")
+        .select("id, certificado_id")
+        .eq("user_id", user.id)
+        .eq("tipo", "cortesia")
+        .maybeSingle(),
+    ]);
+  const arteGratis: "disponivel" | "usada_aqui" | "indisponivel" = !cortesia
+    ? "disponivel"
+    : cortesia.certificado_id === c.id
+      ? "usada_aqui"
+      : "indisponivel";
 
   const compra = ((compras ?? []) as CompraRomariaPlus[])[0] ?? null;
   const pago = compra?.status === "pago";
@@ -83,7 +96,12 @@ export default async function CertificadoDetalhePage({ params }: { params: Promi
             </Link>
           </>
         ) : (
-          <RomariaPlusCompra certificadoId={c.id} compraInicial={compra} isAdmin={!!perfil?.is_admin} />
+          <RomariaPlusCompra
+            certificadoId={c.id}
+            compraInicial={compra}
+            isAdmin={!!perfil?.is_admin}
+            arteGratis={arteGratis}
+          />
         )}
       </section>
 

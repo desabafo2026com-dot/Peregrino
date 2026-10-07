@@ -60,7 +60,7 @@ export default function RiscosAdminClient({
             <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900">
               {r.foto_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.foto_url} alt={r.titulo} className="h-full w-full object-cover" />
+                <img src={r.foto_url} alt={r.titulo} loading="lazy" decoding="async" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-neutral-400">
                   <TriangleAlert size={20} />

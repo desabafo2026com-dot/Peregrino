@@ -7,6 +7,8 @@ import { ROMARIA_PLUS_VALOR_CENTAVOS } from "@/lib/constants";
 import { Sparkles, Ticket, ShieldCheck } from "lucide-react";
 import type { CompraRomariaPlus } from "@/types/database";
 import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
+import BotaoArteGratis from "@/components/BotaoArteGratis";
+import Link from "next/link";
 
 interface Props {
   certificadoId: string;
@@ -17,11 +19,23 @@ interface Props {
   // Certificado Plus do próprio admin sem pagamento nem cupom, só para
   // testar a arte e o editor de foto (Rodada 16).
   isAdmin?: boolean;
+  // Rodada 61 — arte grátis (uma por conta): "disponivel" mostra o botão
+  // para criar; "usada_aqui" = já criada neste certificado (a compra libera
+  // mais 4 + Certificado Plus); "indisponivel" = usada em outra peregrinação.
+  arteGratis?: "disponivel" | "usada_aqui" | "indisponivel";
+  // Falso na própria página da arte grátis (o link levaria para ela mesma).
+  mostrarLinkArteGratis?: boolean;
 }
 
 const VALOR_LABEL = `R$ ${(ROMARIA_PLUS_VALOR_CENTAVOS / 100).toFixed(2).replace(".", ",")}`;
 
-export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmin = false }: Props) {
+export default function RomariaPlusCompra({
+  certificadoId,
+  compraInicial,
+  isAdmin = false,
+  arteGratis = "indisponivel",
+  mostrarLinkArteGratis = true,
+}: Props) {
   const router = useRouter();
   const [compra, setCompra] = useState(compraInicial);
   const [loading, setLoading] = useState(false);
@@ -76,11 +90,7 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
     }
     const supabase = createClient();
     const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from("compras_romaria_plus")
-        .select("*")
-        .eq("id", compra.id)
-        .maybeSingle();
+      const { data } = await supabase.from("compras_romaria_plus").select("*").eq("id", compra.id).maybeSingle();
       if (data) {
         setCompra(data as CompraRomariaPlus);
         if ((data as CompraRomariaPlus).status === "pago") {
@@ -166,12 +176,9 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
   if (pendente) {
     return (
       <div className="card border-amber-200 text-center dark:border-amber-900">
-        <p className="mb-1 font-semibold text-amber-800 dark:text-amber-500">
-          Confirmando pagamento...
-        </p>
+        <p className="mb-1 font-semibold text-amber-800 dark:text-amber-500">Confirmando pagamento...</p>
         <p className="text-sm text-neutral-500">
-          Isso costuma levar só alguns segundos. Se demorar, atualize a
-          página em instantes.
+          Isso costuma levar só alguns segundos. Se demorar, atualize a página em instantes.
         </p>
       </div>
     );
@@ -187,10 +194,36 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
         Veja alguns exemplos feitos com fotos de peregrinos:
       </p>
       <ModelosPlusVitrine />
+      {arteGratis === "disponivel" && (
+        <div className="mt-3 mb-1 flex flex-col items-center gap-1">
+          <BotaoArteGratis certificadoId={certificadoId} />
+          <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+            Experimente: a primeira arte é por nossa conta (uma por pessoa).
+          </p>
+        </div>
+      )}
+      {arteGratis === "usada_aqui" && mostrarLinkArteGratis && (
+        <Link
+          href={`/certificado/plus/${certificadoId}`}
+          className="mt-3 mb-1 inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:underline dark:text-amber-500"
+        >
+          <Sparkles size={15} /> Ver minha arte grátis →
+        </Link>
+      )}
       <p className="mt-2 mb-3 text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "center" }}>
-        A Romaria Plus inclui <strong>5 artes com as suas fotos</strong> (com os dados reais desta
-        peregrinação, prontas para baixar e compartilhar) e o <strong>Certificado Plus</strong>, a versão com
-        arte de pergaminho. Depois de usar as 5, dá para comprar mais 5.
+        {arteGratis === "usada_aqui" ? (
+          <>
+            A Romaria Plus libera <strong>mais 4 artes com as suas fotos</strong> (sua arte grátis conta como a 1ª das
+            5) e o <strong>Certificado Plus</strong>, a versão com arte de pergaminho. Depois de usar as 5, dá para
+            comprar mais 5.
+          </>
+        ) : (
+          <>
+            A Romaria Plus inclui <strong>5 artes com as suas fotos</strong> (com os dados reais desta peregrinação,
+            prontas para baixar e compartilhar) e o <strong>Certificado Plus</strong>, a versão com arte de pergaminho.
+            Depois de usar as 5, dá para comprar mais 5.
+          </>
+        )}
       </p>
       {erro && <p className="mb-2 text-sm text-red-600">{erro}</p>}
       {/* Rodada 23: a pedido do usuário ("o botão de romaria plus devia ser
@@ -210,7 +243,9 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
           <>
             <span className="text-3xl leading-tight font-black tracking-tight">{VALOR_LABEL}</span>
             <span className="text-sm font-semibold text-amber-50">
-              5 artes com suas fotos + Certificado Plus
+              {arteGratis === "usada_aqui"
+                ? "+4 artes com suas fotos + Certificado Plus"
+                : "5 artes com suas fotos + Certificado Plus"}
             </span>
           </>
         )}
@@ -229,11 +264,7 @@ export default function RomariaPlusCompra({ certificadoId, compraInicial, isAdmi
             className="rounded-lg border border-neutral-300 px-3 py-2 text-center font-mono uppercase tracking-widest dark:border-neutral-700 dark:bg-neutral-900"
           />
           {erroCupom && <p className="text-xs text-red-600">{erroCupom}</p>}
-          <button
-            onClick={resgatarCupom}
-            disabled={resgatando || !codigoCupom.trim()}
-            className="btn-secondary"
-          >
+          <button onClick={resgatarCupom} disabled={resgatando || !codigoCupom.trim()} className="btn-secondary">
             {resgatando ? "Resgatando..." : "Resgatar cupom"}
           </button>
         </div>

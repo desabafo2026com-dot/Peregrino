@@ -19,6 +19,7 @@ import {
   Megaphone,
   BellRing,
   MapPin,
+  ImageDown,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -77,6 +78,7 @@ const ADMIN_LINK_GROUPS = [
       { href: "/admin/mensagens-conquista", label: "Mensagens de conquista", icon: Megaphone },
       { href: "/admin/avisos", label: "Avisos para todos", icon: BellRing },
       { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
+      { href: "/admin/otimizar-fotos", label: "Otimizar fotos", icon: ImageDown },
     ],
   },
 ];

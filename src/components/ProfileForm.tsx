@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { comprimirImagem, CACHE_UM_ANO } from "@/lib/comprimir-imagem";
 import { SEXO_OPTIONS, RELIGIOES, AVATARES_PEREGRINO, normalizarReligiaoAntiga } from "@/lib/constants";
 import { CIDADES_POR_UF, UF_OPTIONS } from "@/lib/cidades";
 import { validarNomeCompleto } from "@/lib/validation";
@@ -82,25 +83,28 @@ export default function ProfileForm({
   async function handleUploadFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      setErro("A foto deve ter no máximo 3MB.");
+    // Rodada 61 — a foto é reduzida antes do envio, então aceita fotos
+    // grandes direto da câmera.
+    if (file.size > 25 * 1024 * 1024) {
+      setErro("A foto deve ter no máximo 25MB.");
       return;
     }
     setEnviandoFoto(true);
     setErro(null);
     const supabase = createClient();
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${userId}/foto.${ext}`;
+    const reduzida = await comprimirImagem(file, { maxLado: 480 });
+    const ext = reduzida.type === "image/jpeg" ? "jpg" : file.name.split(".").pop() || "jpg";
+    const path = `${userId}/foto-${Date.now()}.${ext}`;
     const { error: uploadError } = await supabase.storage
       .from("avatars")
-      .upload(path, file, { upsert: true });
+      .upload(path, reduzida, { upsert: true, cacheControl: CACHE_UM_ANO, contentType: reduzida.type || undefined });
     setEnviandoFoto(false);
     if (uploadError) {
       setErro("Não foi possível enviar a foto: " + uploadError.message);
       return;
     }
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-    setAvatarUrl(`${data.publicUrl}?t=${Date.now()}`);
+    setAvatarUrl(data.publicUrl);
   }
 
   async function handleSubmit(e: React.FormEvent) {
