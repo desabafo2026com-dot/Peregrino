@@ -3,6 +3,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, Smartphone, ShieldCheck } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
+import SigaNosRedes from "@/components/SigaNosRedes";
 import BotaoInstalarApp from "@/components/BotaoInstalarApp";
 import DoacaoCard from "@/components/DoacaoCard";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
@@ -270,6 +271,7 @@ export default async function Home() {
           </Link>
         ))}
         <CompartilharInstalarCard />
+        <SigaNosRedes className="sm:col-span-2" />
       </section>
 
       {romariasGrupo.length > 0 && (

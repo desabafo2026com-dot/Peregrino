@@ -122,6 +122,8 @@ export interface PontoApoio {
   br: Br;
   pre_cadastro_id: string | null;
   ponto_referencia: string | null;
+  // Rodada 62 — Instagram, Facebook, site etc. (texto livre).
+  redes_sociais?: string | null;
   foto_url: string | null;
   criado_em: string;
   atualizado_em: string;

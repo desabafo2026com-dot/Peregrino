@@ -9,7 +9,7 @@ import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
 import EntrarComGoogle from "@/components/EntrarComGoogle";
 import EscolhaTipoConta from "@/components/EscolhaTipoConta";
-import { lerTipoConta, NOME_TIPO_CONTA, type TipoConta } from "@/lib/tipo-conta";
+import { lerTipoConta, NOME_TIPO_CONTA, destinoAposCadastro, marcarOrganizadorSeFor, type TipoConta } from "@/lib/tipo-conta";
 import { caminhoInterno } from "@/lib/caminho-interno";
 import { LogIn, Mail, ArrowLeft } from "lucide-react";
 
@@ -18,7 +18,7 @@ type Passo = "email" | "senha" | "tipo" | "cadastro" | "verifique";
 
 // Entrada única do app: o peregrino (ou gerente de PAP) digita o e-mail
 // primeiro. Se já existe conta, pedimos a senha; se não existe, começa o
-// cadastro (nome/telefone/senha) e enviamos um e-mail de confirmação com
+// cadastro (nome/senha — Rodada 62: sem telefone) e enviamos um e-mail de confirmação com
 // link — o Supabase, no plano gratuito sem SMTP próprio, não deixa
 // personalizar o template para mostrar um código em vez do link (ver
 // deploy-info.md), então por ora a confirmação continua sendo por link.
@@ -36,7 +36,6 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [nome, setNome] = useState("");
-  const [telefone, setTelefone] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [aceitaTermos, setAceitaTermos] = useState(false);
 
@@ -162,7 +161,6 @@ function LoginForm() {
       options: {
         data: {
           nome_completo: nome,
-          telefone,
           tipo_conta: tipoConta,
           aceita_termos: true,
           termos_versao: TERMOS_VERSAO_ATUAL,
@@ -200,15 +198,19 @@ function LoginForm() {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        // Rodada 62 — sem telefone no cadastro (o PAP tem o seu próprio).
         await supabase.from("gerentes_pap").insert({
           id: user.id,
           nome_completo: nome,
-          telefone,
         });
       }
     }
     await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome });
-    router.push(`/perfil?tipo=${tipoConta ?? "peregrino"}`);
+    // Rodada 62 — sem pedir o perfil completo logo no cadastro: só o nome
+    // (o que o certificado precisa). O restante é pedido ao planejar a
+    // peregrinação, em Minha peregrinação.
+    await marcarOrganizadorSeFor(supabase, tipoConta);
+    router.push(destinoAposCadastro(tipoConta));
     router.refresh();
   }
 
@@ -356,16 +358,6 @@ function LoginForm() {
               <p className="mt-1 text-xs text-neutral-500">
                 Informe nome e sobrenome, como em seu documento.
               </p>
-            </div>
-            <div>
-              <label className="label">Telefone</label>
-              <input
-                required
-                className="input"
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
-                placeholder="(00) 00000-0000"
-              />
             </div>
             <div>
               <label className="label">Senha</label>

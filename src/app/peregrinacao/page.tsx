@@ -37,16 +37,39 @@ export default async function PeregrinacaoPage() {
   // novo. Continua chegando aqui, como sempre, só por navegação explícita —
   // o link/atalho de "Meu PAP"/"Área do Gerente de PAP" nunca aponta para
   // cá sozinho.
-  if (!perfil) {
+  // Rodada 62 — o cadastro só pede o nome; aqui, para planejar e registrar
+  // a peregrinação, o perfil precisa estar completo.
+  const p0 = perfil as Profile | null;
+  const perfilCompletoParaPeregrinar = !!(p0 && p0.cidade && p0.telefone && p0.data_nascimento && p0.sexo);
+  // Quem já está no meio de uma caminhada nunca é barrado aqui.
+  const { data: emAndamento } = perfilCompletoParaPeregrinar
+    ? { data: null }
+    : await supabase
+        .from("peregrinacoes")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "em_andamento")
+        .limit(1)
+        .maybeSingle();
+  if (!p0 || (!perfilCompletoParaPeregrinar && !emAndamento)) {
     return (
-      <div className="mx-auto max-w-md text-center">
-        <VoltarButton href="/" />
-        <p className="mb-4 text-neutral-600 dark:text-neutral-300">
-          Complete seu perfil antes de iniciar a peregrinação.
-        </p>
-        <Link href="/perfil" className="btn-primary inline-block">
-          Completar perfil
-        </Link>
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
+        <VoltarButton href="/painel" />
+        <div className="card flex flex-col items-center gap-3">
+          <p className="font-bold text-amber-800 dark:text-amber-500">Falta pouco para planejar sua peregrinação</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "center" }}>
+            Para registrar a caminhada, os check-ins e emitir o certificado, complete seu perfil com telefone,
+            data de nascimento, cidade e sexo. É rapidinho.
+          </p>
+          <Link href="/perfil?completar=peregrinacao" className="btn-primary inline-block">
+            Completar perfil
+          </Link>
+          {p0?.is_organizador && (
+            <Link href="/romarias-grupo/cadastro" className="btn-secondary inline-block">
+              Cadastrar Romaria (organizador)
+            </Link>
+          )}
+        </div>
       </div>
     );
   }

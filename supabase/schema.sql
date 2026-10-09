@@ -5183,3 +5183,228 @@ create trigger trg_romaria_plus_levar_arte_gratis
   for each row execute function public.romaria_plus_levar_arte_gratis();
 
 -- FIM DA MIGRATION 51
+
+-- =====================================================================
+-- MIGRATION 52 — Rodada 62
+-- ---------------------------------------------------------------------
+-- 1) PAP: redes sociais (texto livre) nas informações públicas.
+-- 2) Pontos de check-in: incluir, editar (nome, km, ordem, posição) e
+--    excluir pela administração.
+-- 3) Avisos (sininho) com público: todos (padrão), só gerentes de PAP,
+--    só organizadores de Romaria ou só peregrinos.
+-- 4) Cadastro sem telefone: gerentes_pap.telefone deixa de ser obrigatório.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR ANTES DE SUBIR OS ARQUIVOS DA RODADA 62 (o cadastro de gerente sem
+-- telefone depende do item 4). Depois da Migration 51.
+-- =====================================================================
+
+-- 1) Redes sociais do PAP ----------------------------------------------
+alter table public.pontos_apoio add column if not exists redes_sociais text;
+alter table public.pontos_apoio drop constraint if exists pontos_apoio_redes_sociais_tamanho;
+alter table public.pontos_apoio
+  add constraint pontos_apoio_redes_sociais_tamanho check (redes_sociais is null or char_length(redes_sociais) <= 300);
+comment on column public.pontos_apoio.redes_sociais is 'Rodada 62 — Instagram, Facebook, site etc. do PAP (texto livre, público).';
+
+create or replace view public.pontos_apoio_publico as
+select
+  id,
+  null::uuid as criado_por,
+  gerente_id,
+  nome,
+  case when exibir_telefone then responsavel end as responsavel,
+  case when exibir_telefone then telefone end as telefone,
+  latitude,
+  longitude,
+  km_referencia,
+  periodo_funcionamento,
+  servicos,
+  contato_doacao,
+  observacoes,
+  ativo,
+  status_aprovacao,
+  aberto_agora,
+  null::text as observacao_admin,
+  rota_id,
+  cidade,
+  sentido_pista,
+  exibir_telefone,
+  aceita_doacoes,
+  doacao_necessidade,
+  datas_funcionamento,
+  br,
+  pre_cadastro_id,
+  ponto_referencia,
+  foto_url,
+  criado_em,
+  atualizado_em,
+  redes_sociais
+from public.pontos_apoio
+where status_aprovacao = 'aprovado';;
+
+grant select on public.pontos_apoio_publico to anon, authenticated;
+
+-- 2) Pontos de check-in -------------------------------------------------
+-- p_ordem é a POSIÇÃO desejada na rota (1 = primeira). As demais cidades
+-- são renumeradas 1..n na ordem.
+create or replace function public.admin_salvar_ponto_checkin(
+  p_id uuid,
+  p_rota_id uuid,
+  p_cidade text,
+  p_km numeric,
+  p_latitude double precision,
+  p_longitude double precision,
+  p_ordem int
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid := p_id;
+  v_rota uuid;
+  v_cidade_antiga text;
+  v_ids uuid[];
+  v_pos int;
+begin
+  if not public.is_admin() then
+    raise exception 'apenas administradores';
+  end if;
+  if p_cidade is null or char_length(trim(p_cidade)) = 0 then
+    raise exception 'informe o nome da cidade';
+  end if;
+  if p_latitude is null or p_longitude is null then
+    raise exception 'marque a posição no mapa';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('pontos_checkin_ordem'));
+
+  if v_id is null then
+    v_rota := p_rota_id;
+    if not exists (select 1 from public.rotas where id = v_rota) then
+      raise exception 'rota não encontrada';
+    end if;
+    insert into public.pontos_checkin (rota_id, cidade, ordem, km_aproximado, latitude, longitude)
+    values (v_rota, trim(p_cidade), 32000, p_km, p_latitude, p_longitude)
+    returning id into v_id;
+  else
+    select rota_id, cidade into v_rota, v_cidade_antiga from public.pontos_checkin where id = v_id;
+    if v_rota is null then
+      raise exception 'ponto de check-in não encontrado';
+    end if;
+    update public.pontos_checkin
+      set cidade = trim(p_cidade), km_aproximado = p_km, latitude = p_latitude, longitude = p_longitude
+      where id = v_id;
+    -- A mesma cidade nas outras rotas fica no mesmo lugar (como na Rodada 60).
+    update public.pontos_checkin
+      set latitude = p_latitude, longitude = p_longitude
+      where cidade = v_cidade_antiga and rota_id <> v_rota;
+  end if;
+
+  -- Reordena a rota inteira com o ponto na posição pedida.
+  select coalesce(array_agg(id order by ordem, criado_em), '{}')
+    into v_ids
+    from public.pontos_checkin
+    where rota_id = v_rota and id <> v_id;
+  v_pos := greatest(1, least(coalesce(p_ordem, coalesce(array_length(v_ids, 1), 0) + 1), coalesce(array_length(v_ids, 1), 0) + 1));
+  v_ids := v_ids[1:v_pos - 1] || v_id || v_ids[v_pos:];
+
+  update public.pontos_checkin set ordem = ordem + 10000 where rota_id = v_rota and ordem < 10000;
+  update public.pontos_checkin set ordem = 20000 where id = v_id;
+  update public.pontos_checkin p
+    set ordem = x.n
+    from unnest(v_ids) with ordinality as x(id, n)
+    where p.id = x.id;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.admin_salvar_ponto_checkin(uuid, uuid, text, numeric, double precision, double precision, int) from public;
+grant execute on function public.admin_salvar_ponto_checkin(uuid, uuid, text, numeric, double precision, double precision, int) to authenticated;
+
+create or replace function public.admin_excluir_ponto_checkin(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_rota uuid;
+  v_ids uuid[];
+begin
+  if not public.is_admin() then
+    raise exception 'apenas administradores';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('pontos_checkin_ordem'));
+  delete from public.pontos_checkin where id = p_id returning rota_id into v_rota;
+  if v_rota is null then
+    return;
+  end if;
+  select coalesce(array_agg(id order by ordem, criado_em), '{}') into v_ids
+    from public.pontos_checkin where rota_id = v_rota;
+  update public.pontos_checkin set ordem = ordem + 10000 where rota_id = v_rota and ordem < 10000;
+  update public.pontos_checkin p
+    set ordem = x.n
+    from unnest(v_ids) with ordinality as x(id, n)
+    where p.id = x.id;
+end;
+$$;
+
+revoke all on function public.admin_excluir_ponto_checkin(uuid) from public;
+grant execute on function public.admin_excluir_ponto_checkin(uuid) to authenticated;
+
+-- 3) Avisos com público -------------------------------------------------
+-- (A coluna de organizador vem da Migration 48; garantida aqui também,
+-- para esta migration funcionar mesmo se a 48 não tiver sido rodada.)
+alter table public.profiles add column if not exists is_organizador boolean not null default false;
+alter table public.avisos_gerais add column if not exists publico text not null default 'todos';
+alter table public.avisos_gerais drop constraint if exists avisos_gerais_publico_check;
+alter table public.avisos_gerais
+  add constraint avisos_gerais_publico_check check (publico in ('todos', 'gerentes', 'organizadores', 'peregrinos'));
+comment on column public.avisos_gerais.publico is 'Rodada 62 — quem vê o aviso: todos (padrão), gerentes (de PAP), organizadores (de Romaria) ou peregrinos.';
+
+-- Quem é cada um (lido com permissão própria, sem depender das regras de
+-- leitura das outras tabelas).
+create or replace function public.aviso_para_mim(p_publico text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case p_publico
+    when 'todos' then true
+    when 'gerentes' then exists (select 1 from public.gerentes_pap g where g.id = auth.uid())
+    when 'organizadores' then exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_organizador)
+    -- Peregrino: tem perfil e não é gerente nem organizador, ou já tem
+    -- alguma peregrinação cadastrada (gerente/organizador que também caminha).
+    when 'peregrinos' then exists (select 1 from public.profiles p where p.id = auth.uid())
+      and (
+        exists (select 1 from public.peregrinacoes pe where pe.user_id = auth.uid())
+        or (
+          not exists (select 1 from public.gerentes_pap g where g.id = auth.uid())
+          and not exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_organizador)
+        )
+      )
+    else false
+  end;
+$$;
+
+grant execute on function public.aviso_para_mim(text) to anon, authenticated;
+
+drop policy if exists "avisos_gerais_select_vigentes" on public.avisos_gerais;
+create policy "avisos_gerais_select_vigentes" on public.avisos_gerais for select
+  to anon, authenticated
+  using (
+    public.is_admin()
+    or (
+      (expira_em is null or expira_em > now())
+      and public.aviso_para_mim(publico)
+    )
+  );
+
+-- 4) Cadastro sem telefone ----------------------------------------------
+alter table public.gerentes_pap alter column telefone drop not null;
+
+-- FIM DA MIGRATION 52

@@ -102,6 +102,9 @@ export const SERVICOS_PONTO_APOIO: { value: string; label: string }[] = [
   { value: "pernoite", label: "Pernoite" },
   { value: "carga_celular", label: "Carregar celular" },
   { value: "apoio_espiritual", label: "Apoio espiritual" },
+  // Rodada 62
+  { value: "dietas_restritivas", label: "Dietas restritivas" },
+  { value: "massagem", label: "Massagem" },
 ];
 
 export const MEIO_TRANSPORTE_OPTIONS: { value: string; label: string }[] = [

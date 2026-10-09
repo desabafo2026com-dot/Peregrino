@@ -10,8 +10,14 @@ import { IdCard } from "lucide-react";
 import type { Profile, MensagemContato } from "@/types/database";
 import { lerTipoConta, destinoAposPrimeiroPerfil, type TipoConta } from "@/lib/tipo-conta";
 
-export default async function PerfilPage({ searchParams }: { searchParams: Promise<{ tipo?: string }> }) {
-  const { tipo: tipoParam } = await searchParams;
+export default async function PerfilPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tipo?: string; completar?: string }>;
+}) {
+  const { tipo: tipoParam, completar } = await searchParams;
+  // Rodada 62 — vindo de Minha peregrinação: pede o perfil completo e volta.
+  const modoPeregrinacao = completar === "peregrinacao";
   const supabase = await createClient();
   const {
     data: { user },
@@ -62,14 +68,14 @@ export default async function PerfilPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="mx-auto max-w-2xl">
-      <VoltarButton href={perfilCompleto ? "/painel" : "/"} />
+      <VoltarButton href={modoPeregrinacao ? "/peregrinacao" : "/painel"} />
       <h1 className="mb-1 text-2xl font-bold">
-        {perfilCompleto ? "Meu perfil" : "Complete seu cadastro"}
+        {modoPeregrinacao ? "Complete seu perfil para a peregrinação" : "Meu perfil"}
       </h1>
       <p className="mb-6 text-sm text-neutral-500">
-        {perfilCompleto
-          ? "Atualize suas informações quando precisar."
-          : "Passo 2 de 2: conte um pouco sobre sua peregrinação."}
+        {modoPeregrinacao
+          ? "Para planejar e registrar sua peregrinação precisamos de mais alguns dados (telefone, data de nascimento, cidade e sexo). Depois de salvar, você volta para Minha peregrinação."
+          : "Atualize suas informações quando precisar. Só o nome é obrigatório aqui; o restante é pedido quando você for planejar sua peregrinação."}
       </p>
       <ProfileForm
         userId={user.id}
@@ -79,6 +85,8 @@ export default async function PerfilPage({ searchParams }: { searchParams: Promi
         perfilExistente={perfil as Profile | null}
         destinoPrimeiroCadastro={destinoAposPrimeiroPerfil(tipoConta)}
         marcarOrganizador={tipoConta === "organizador"}
+        modoPeregrinacao={modoPeregrinacao}
+        voltarPara={modoPeregrinacao ? "/peregrinacao" : undefined}
       />
       {perfilCompleto && (
         // Rodada 54 — credencial (crachá) para imprimir e levar na mochila.

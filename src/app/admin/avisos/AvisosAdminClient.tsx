@@ -10,7 +10,23 @@ export interface AvisoAdmin {
   mensagem: string;
   criado_em: string;
   expira_em: string | null;
+  publico?: Publico | null;
 }
+
+// Rodada 62 — para quem vai o aviso (padrão: todos).
+type Publico = "todos" | "gerentes" | "organizadores" | "peregrinos";
+const PUBLICOS: [Publico, string][] = [
+  ["todos", "Todos"],
+  ["gerentes", "Só gerentes de PAP"],
+  ["organizadores", "Só organizadores de Romaria"],
+  ["peregrinos", "Só peregrinos"],
+];
+const NOME_PUBLICO: Record<Publico, string> = {
+  todos: "todos",
+  gerentes: "gerentes de PAP",
+  organizadores: "organizadores de Romaria",
+  peregrinos: "peregrinos",
+};
 
 type Duracao = "horas" | "dias" | "fixo";
 
@@ -34,6 +50,8 @@ export default function AvisosAdminClient({ avisosIniciais }: { avisosIniciais: 
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [duracao, setDuracao] = useState<Duracao>("dias");
+  const [publico, setPublico] = useState<Publico>("todos");
+  const [publicoEnviado, setPublicoEnviado] = useState<Publico>("todos");
   const [quantidade, setQuantidade] = useState("1");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -62,8 +80,14 @@ export default function AvisosAdminClient({ avisosIniciais }: { avisosIniciais: 
     const supabase = createClient();
     const { data, error } = await supabase
       .from("avisos_gerais")
-      .insert({ titulo: titulo.trim(), mensagem: mensagem.trim(), expira_em: expiraEm })
-      .select("id, titulo, mensagem, criado_em, expira_em")
+      .insert({
+        titulo: titulo.trim(),
+        mensagem: mensagem.trim(),
+        expira_em: expiraEm,
+        // Só envia a coluna quando não é "todos" (funciona mesmo antes da Migration 52).
+        ...(publico !== "todos" ? { publico } : {}),
+      })
+      .select("*")
       .single();
     setEnviando(false);
     if (error) {
@@ -73,6 +97,8 @@ export default function AvisosAdminClient({ avisosIniciais }: { avisosIniciais: 
     setAvisos((prev) => [data as AvisoAdmin, ...prev]);
     setTitulo("");
     setMensagem("");
+    setPublicoEnviado(publico);
+    setPublico("todos");
     setOk(true);
   }
 
@@ -114,6 +140,25 @@ export default function AvisosAdminClient({ avisosIniciais }: { avisosIniciais: 
             placeholder="Escreva o aviso para todos os peregrinos e gerentes..."
           />
           <p className="mt-1 text-right text-xs text-neutral-400">{mensagem.length}/2000</p>
+        </div>
+        <div>
+          <label className="label">Para quem?</label>
+          <div className="flex flex-wrap gap-2">
+            {PUBLICOS.map(([valor, rotulo]) => (
+              <button
+                key={valor}
+                type="button"
+                onClick={() => setPublico(valor)}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                  publico === valor
+                    ? "bg-amber-800 text-white"
+                    : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                }`}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
         </div>
         <div>
           <label className="label">Por quanto tempo fica no ar?</label>
@@ -161,11 +206,11 @@ export default function AvisosAdminClient({ avisosIniciais }: { avisosIniciais: 
         )}
         {ok && (
           <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800 dark:bg-green-950/40 dark:text-green-300">
-            Aviso publicado! Ele já aparece para todos no sininho do topo.
+            Aviso publicado! Ele já aparece para {NOME_PUBLICO[publicoEnviado]} no sininho do topo.
           </p>
         )}
         <button type="submit" disabled={enviando} className="btn-primary flex items-center justify-center gap-2">
-          <Send size={16} /> {enviando ? "Publicando..." : "Publicar para todos"}
+          <Send size={16} /> {enviando ? "Publicando..." : `Publicar para ${NOME_PUBLICO[publico]}`}
         </button>
       </form>
 
@@ -182,6 +227,9 @@ export default function AvisosAdminClient({ avisosIniciais }: { avisosIniciais: 
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold">{a.titulo}</p>
+                    <span className="mt-0.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
+                      Para {NOME_PUBLICO[(a.publico ?? "todos") as Publico] ?? "todos"}
+                    </span>
                     <p className="mt-1 text-sm whitespace-pre-line text-neutral-600 dark:text-neutral-300">
                       {a.mensagem}
                     </p>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import VoltarButton from "@/components/VoltarButton";
 import BotaoInstalarApp from "@/components/BotaoInstalarApp";
+import SigaNosRedes from "@/components/SigaNosRedes";
 import { Share2, Smartphone, Apple, Copy, Check, Download, FileText, Printer } from "lucide-react";
 
 type SistemaDetectado = "ios" | "android" | "outro";
@@ -262,6 +263,8 @@ export default function InstalarPage() {
           </a>
         )}
       </div>
+
+      <SigaNosRedes />
 
       {/* Rodada 60 — cartaz completo para imprimir e colar nos pontos do caminho. */}
       <div className="card flex flex-col items-center gap-4 text-center">

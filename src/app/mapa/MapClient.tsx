@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Tent, Search, MousePointerClick } from "lucide-react";
+import { Tent, Search, MousePointerClick, Move, Lock } from "lucide-react";
 import { SENTIDO_KM_ABREV } from "@/lib/constants";
 import type { PontoApoio } from "@/types/database";
 import type { PapPreCadastroMapa } from "@/components/MapView";
@@ -77,6 +77,9 @@ export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = fals
   const [busca, setBusca] = useState("");
   const [limite, setLimite] = useState(LIMITE_INICIAL);
   const [foco, setFoco] = useState<{ chave: string; seq: number } | null>(null);
+  // Rodada 62 — o administrador só arrasta os PAPs depois de ligar
+  // "Mover PAPs" (antes um toque sem querer mudava a posição).
+  const [moverPaps, setMoverPaps] = useState(false);
   const mapaRef = useRef<HTMLDivElement>(null);
 
   const pontosApoioVisiveis = useMemo(
@@ -128,16 +131,30 @@ export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = fals
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-4">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={somenteAtivos}
-            onChange={(e) => setSomenteAtivos(e.target.checked)}
+      {/* Rodada 62 — botão em destaque (antes era uma caixinha discreta). */}
+      <button
+        type="button"
+        onClick={() => setSomenteAtivos((v) => !v)}
+        aria-pressed={somenteAtivos}
+        className={`flex w-full items-center justify-center gap-3 rounded-2xl border-2 px-4 py-3 text-base font-bold shadow-sm transition ${
+          somenteAtivos
+            ? "border-green-700 bg-green-600 text-white hover:bg-green-700"
+            : "border-green-600 bg-green-50 text-green-800 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300"
+        }`}
+      >
+        <Tent size={22} />
+        {somenteAtivos ? "Mostrando só os PAP ativos agora" : "Mostrar PAP ativos agora"}
+        <span
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
+            somenteAtivos ? "bg-white/40" : "bg-green-200 dark:bg-green-900"
+          }`}
+          aria-hidden="true"
+        >
+          <span
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${somenteAtivos ? "translate-x-5" : "translate-x-0.5"}`}
           />
-          <Tent size={16} className="text-green-600" /> PAP ativos agora
-        </label>
-      </div>
+        </span>
+      </button>
 
       {(papsPreCadastro.length > 0 || pontosApoio.length > 0) && (
         <div className="flex flex-wrap gap-4 text-xs text-neutral-500">
@@ -152,9 +169,24 @@ export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = fals
         </div>
       )}
       {isAdmin && papsPreCadastro.length > 0 && (
-        <p className="text-xs text-amber-700 dark:text-amber-500">
-          Como administrador, você pode arrastar qualquer marcador cinza tracejado para ajustar a posição exata do PAP.
-        </p>
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/30">
+          <button
+            type="button"
+            onClick={() => setMoverPaps((v) => !v)}
+            aria-pressed={moverPaps}
+            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold ${
+              moverPaps ? "bg-amber-700 text-white" : "border border-amber-400 bg-white text-amber-800 dark:bg-neutral-900"
+            }`}
+          >
+            {moverPaps ? <Move size={16} /> : <Lock size={16} />}
+            {moverPaps ? "Mover PAPs: ligado" : "Mover PAPs: desligado"}
+          </button>
+          <span className="text-xs text-amber-800 dark:text-amber-400">
+            {moverPaps
+              ? "Arraste um marcador cinza tracejado para a posição certa. Desligue ao terminar."
+              : "Os PAPs estão travados no mapa. Ligue para poder arrastar (administração)."}
+          </span>
+        </div>
       )}
 
       {/* Rodada 42 — pedido do usuário: instrução explícita de como ver
@@ -172,7 +204,7 @@ export default function MapClient({ pontosApoio, papsPreCadastro, isAdmin = fals
           pontosApoio={pontosApoioVisiveis}
           papsPreCadastro={papsPreCadastroVisiveis}
           height="65vh"
-          permitirArrastarPapPreCadastro={isAdmin}
+          permitirArrastarPapPreCadastro={isAdmin && moverPaps}
           papDestacado
           focoPap={foco}
           linkEditarPapAdmin={isAdmin}

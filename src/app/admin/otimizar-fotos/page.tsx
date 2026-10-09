@@ -43,7 +43,7 @@ export default async function OtimizarFotosPage() {
       nome: `Hotel/restaurante: ${c.nome as string}`,
       url: c.foto_url as string,
     })),
-  ].filter((f) => f.url.includes("/storage/v1/object/public/"));
+  ].filter((f) => typeof f.url === "string" && f.url.includes("/storage/v1/object/public/"));
 
   return (
     <div>

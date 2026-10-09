@@ -21,6 +21,11 @@ interface Props {
   // conta como organizador de Romaria.
   destinoPrimeiroCadastro?: string;
   marcarOrganizador?: boolean;
+  // Rodada 62 — fora de Minha peregrinação só o nome é obrigatório (é o que
+  // o certificado precisa). Para planejar/iniciar a peregrinação o perfil
+  // completo é exigido (modoPeregrinacao) e, ao salvar, volta para lá.
+  modoPeregrinacao?: boolean;
+  voltarPara?: string;
 }
 
 export default function ProfileForm({
@@ -31,7 +36,10 @@ export default function ProfileForm({
   perfilExistente,
   destinoPrimeiroCadastro = "/painel",
   marcarOrganizador = false,
+  modoPeregrinacao = false,
+  voltarPara,
 }: Props) {
+  const obrigatorio = modoPeregrinacao;
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -117,8 +125,25 @@ export default function ProfileForm({
       setErro(erroNome);
       return;
     }
-    if (!cidade) {
-      setErro("Selecione sua cidade de origem.");
+    if (obrigatorio) {
+      if (!telefone?.trim()) {
+        setErro("Informe um telefone para contato.");
+        return;
+      }
+      if (!dataNascimento) {
+        setErro("Informe sua data de nascimento.");
+        return;
+      }
+      if (!cidade) {
+        setErro("Selecione sua cidade de origem.");
+        return;
+      }
+      if (!sexo) {
+        setErro("Selecione o sexo.");
+        return;
+      }
+    } else if (buscaCidade.trim() && !cidade) {
+      setErro("Escolha a cidade na lista de sugestões (ou apague o campo).");
       return;
     }
 
@@ -128,11 +153,11 @@ export default function ProfileForm({
     const payload = {
       id: userId,
       nome_completo: nomeCompleto,
-      telefone,
+      telefone: telefone?.trim() || null,
       uf,
-      cidade,
-      data_nascimento: dataNascimento,
-      sexo,
+      cidade: cidade || null,
+      data_nascimento: dataNascimento || null,
+      sexo: sexo || null,
       religiao: religiao || null,
       // Rodada 25: "outras" não pede mais especificação — a coluna
       // religiao_outro_desc continua existindo no banco (perfis antigos
@@ -170,7 +195,11 @@ export default function ProfileForm({
     // Rodada 56 — ao completar o perfil pela primeira vez (sem linha antes,
     // ou com a linha mínima do cadastro, ainda sem cidade), vai para o
     // painel inicial (/painel), com recarga completa pelo mesmo motivo acima.
-    if (!perfilExistente?.cidade) {
+    if (voltarPara) {
+      window.location.href = voltarPara;
+      return;
+    }
+    if (!perfilExistente) {
       // Recarga completa de propósito (atualiza o menu, ver acima).
       window.location.href = destinoPrimeiroCadastro;
       return;
@@ -251,19 +280,19 @@ export default function ProfileForm({
             />
           </div>
           <div>
-            <label className="label">Telefone</label>
+            <label className="label">Telefone{!obrigatorio && " (opcional)"}</label>
             <input
-              required
+              required={obrigatorio}
               className="input"
               value={telefone}
               onChange={(e) => setTelefone(e.target.value)}
             />
           </div>
           <div>
-            <label className="label">Data de nascimento</label>
+            <label className="label">Data de nascimento{!obrigatorio && " (opcional)"}</label>
             <input
               type="date"
-              required
+              required={obrigatorio}
               className="input"
               value={dataNascimento ?? ""}
               onChange={(e) => setDataNascimento(e.target.value)}
@@ -288,9 +317,9 @@ export default function ProfileForm({
             </select>
           </div>
           <div className="relative">
-            <label className="label">Cidade de origem</label>
+            <label className="label">Cidade de origem{!obrigatorio && " (opcional)"}</label>
             <input
-              required
+              required={obrigatorio}
               className="input"
               value={buscaCidade}
               onChange={(e) => {
@@ -325,14 +354,14 @@ export default function ProfileForm({
             )}
           </div>
           <div>
-            <label className="label">Sexo</label>
+            <label className="label">Sexo{!obrigatorio && " (opcional)"}</label>
             <select
-              required
+              required={obrigatorio}
               className="input"
               value={sexo ?? ""}
               onChange={(e) => setSexo(e.target.value)}
             >
-              <option value="" disabled>
+              <option value="" disabled={obrigatorio}>
                 Selecione
               </option>
               {SEXO_OPTIONS.map((o) => (
@@ -390,7 +419,7 @@ export default function ProfileForm({
       )}
 
       <button type="submit" disabled={loading} className="btn-primary">
-        {loading ? "Salvando..." : "Salvar perfil"}
+        {loading ? "Salvando..." : modoPeregrinacao ? "Salvar e continuar para a peregrinação" : "Salvar perfil"}
       </button>
     </form>
   );

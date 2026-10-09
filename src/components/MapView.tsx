@@ -17,6 +17,7 @@ import { comDesvioMinimoPap } from "@/lib/geo";
 import { createClient } from "@/lib/supabase/client";
 import type { PontoApoio, PontoRisco, RiscoInformado, PontoComercial } from "@/types/database";
 import { LIMITE_NAO_EXISTE, type ResultadoVotoAviso, type TipoVotoAviso } from "@/lib/avisos-votos";
+import { itensRedesSociais } from "@/lib/redes-sociais";
 
 // Texto vindo de peregrinos (avisos) vai para dentro de HTML do balão —
 // escapado para não virar marcação.
@@ -287,6 +288,7 @@ export default function MapView({
               <strong>${e(p.nome)}</strong><br/>
               ${p.cidade ? `Cidade: ${e(p.cidade)}<br/>` : ""}
               ${kmSentidoLabel(p.km_referencia, p.sentido_pista) ? `${kmSentidoLabel(p.km_referencia, p.sentido_pista)}<br/>` : ""}
+              ${p.ponto_referencia ? `Referência: ${e(p.ponto_referencia)}<br/>` : ""}
               Dias de funcionamento: ${formatarDatasFuncionamento(p.datas_funcionamento)}${
                 ativoHoje(p.datas_funcionamento)
                   ? ` <span style="color:#16a34a;font-weight:600">(ativo hoje)</span>`
@@ -297,6 +299,17 @@ export default function MapView({
               ${
                 p.aceita_doacoes
                   ? `<span style="color:#92400e;font-weight:600">Aceita doações: ${e(p.doacao_necessidade || "não especificado o quê")}</span><br/>`
+                  : ""
+              }
+              ${
+                itensRedesSociais(p.redes_sociais).length
+                  ? `Redes sociais: ${itensRedesSociais(p.redes_sociais)
+                      .map((r) =>
+                        r.href
+                          ? `<a href="${e(r.href)}" target="_blank" rel="noopener noreferrer" style="color:#8f3f19;text-decoration:underline">${e(r.texto)}</a>`
+                          : e(r.texto)
+                      )
+                      .join(", ")}<br/>`
                   : ""
               }
               ${p.responsavel && p.exibir_telefone !== false ? `Responsável: ${e(p.responsavel)}<br/>` : ""}

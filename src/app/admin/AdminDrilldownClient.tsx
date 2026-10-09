@@ -33,6 +33,7 @@ import {
   MailWarning,
   UserPlus,
   Trash2,
+  Footprints,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -214,7 +215,7 @@ type Categoria =
   // "filtro" em vez de uma lista fixa: assim a lista aberta no modal
   // reflete confirmações/edições feitas sem precisar fechar e reabrir.
   | { tipo: "riscoInformado"; titulo: string; filtro: "todos" | "semRevisao" }
-  | { tipo: "romariaGrupo"; titulo: string; filtro: "todas" | "pendentes" | "hoje" };
+  | { tipo: "romariaGrupo"; titulo: string; filtro: "todas" | "pendentes" | "hoje" | "execucao" };
 
 interface Props {
   peregrinosCadastrados: PeregrinoLinha[];
@@ -338,6 +339,17 @@ export default function AdminDrilldownClient({
     () => romariasGrupo.filter((r) => r.status === "pendente"),
     [romariasGrupo]
   );
+  // Rodada 62 — em execução: de data_inicio até o último dia da previsão
+  // (data_inicio + previsao_dias - 1), contando hoje.
+  const romariasGrupoEmExecucao = useMemo(() => {
+    const hoje = hojeISO();
+    return romariasGrupo.filter((r) => {
+      if (!r.dataInicio || r.dataInicio > hoje) return false;
+      const fim = new Date(`${r.dataInicio}T12:00:00Z`);
+      fim.setUTCDate(fim.getUTCDate() + Math.max(1, r.previsaoDias ?? 1) - 1);
+      return fim.toISOString().slice(0, 10) >= hoje;
+    });
+  }, [romariasGrupo]);
   const romariasGrupoPrevistasHoje = useMemo(
     () => romariasGrupo.filter((r) => r.dataInicio === hojeISO()),
     [romariasGrupo]
@@ -367,10 +379,19 @@ export default function AdminDrilldownClient({
     if (categoria.tipo === "romariaGrupo") {
       if (categoria.filtro === "pendentes") return romariasGrupoPendentes;
       if (categoria.filtro === "hoje") return romariasGrupoPrevistasHoje;
+      if (categoria.filtro === "execucao") return romariasGrupoEmExecucao;
       return romariasGrupo;
     }
     return categoria.dados;
-  }, [categoria, riscosInformados, publicadosSemRevisao, romariasGrupo, romariasGrupoPendentes, romariasGrupoPrevistasHoje]);
+  }, [
+    categoria,
+    riscosInformados,
+    publicadosSemRevisao,
+    romariasGrupo,
+    romariasGrupoPendentes,
+    romariasGrupoPrevistasHoje,
+    romariasGrupoEmExecucao,
+  ]);
 
   const dadosFiltrados = useMemo(() => {
     if (!categoria) return [];
@@ -751,6 +772,14 @@ export default function AdminDrilldownClient({
             value={romariasGrupoPrevistasHoje.length}
             onClick={() =>
               abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos com início hoje", filtro: "hoje" })
+            }
+          />
+          <Card
+            icon={Footprints}
+            label="Em execução"
+            value={romariasGrupoEmExecucao.length}
+            onClick={() =>
+              abrir({ tipo: "romariaGrupo", titulo: "Romarias de Peregrinos em execução (na estrada)", filtro: "execucao" })
             }
           />
           <Link

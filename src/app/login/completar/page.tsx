@@ -8,12 +8,14 @@ import { validarNomeCompleto } from "@/lib/validation";
 import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
 import { UserCheck, ArrowLeft } from "lucide-react";
 import EscolhaTipoConta from "@/components/EscolhaTipoConta";
-import { lerTipoConta, NOME_TIPO_CONTA, type TipoConta } from "@/lib/tipo-conta";
+import { lerTipoConta, NOME_TIPO_CONTA, destinoAposCadastro, marcarOrganizadorSeFor, type TipoConta } from "@/lib/tipo-conta";
 
 // Rodada 40 — última etapa de quem entrou pela primeira vez com o Google.
 // O Google já confirmou o e-mail, então aqui não tem senha nem e-mail de
 // confirmação: só o que o cadastro por e-mail também pede — tipo de conta,
-// nome, telefone e o aceite dos Termos (obrigatório, mesmo texto de /login).
+// nome e o aceite dos Termos (obrigatório, mesmo texto de /login).
+// Rodada 62 — sem telefone e sem mais nada obrigatório: só o nome (o que o
+// certificado precisa). O perfil completo é pedido em Minha peregrinação.
 // No fim faz exatamente o que finalizarCadastro() faz em /login.
 function CompletarForm() {
   const router = useRouter();
@@ -24,7 +26,6 @@ function CompletarForm() {
   const [emailConta, setEmailConta] = useState("");
   const [tipoConta, setTipoConta] = useState<TipoConta | null>(tipoPreset);
   const [nome, setNome] = useState("");
-  const [telefone, setTelefone] = useState("");
   const [aceitaTermos, setAceitaTermos] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -79,10 +80,6 @@ function CompletarForm() {
       setErro(erroNome);
       return;
     }
-    if (!telefone.trim()) {
-      setErro("Informe um telefone para contato.");
-      return;
-    }
     if (!aceitaTermos) {
       setErro("É necessário aceitar os Termos de Uso e a Política de Privacidade para continuar.");
       return;
@@ -96,7 +93,6 @@ function CompletarForm() {
     const { data: atualizado, error: erroAtualizar } = await supabase.auth.updateUser({
       data: {
         nome_completo: nome.trim(),
-        telefone: telefone.trim(),
         tipo_conta: tipoConta,
         aceita_termos: true,
         termos_versao: TERMOS_VERSAO_ATUAL,
@@ -112,7 +108,6 @@ function CompletarForm() {
       const { error: erroGerente } = await supabase.from("gerentes_pap").insert({
         id: atualizado.user.id,
         nome_completo: nome.trim(),
-        telefone: telefone.trim(),
       });
       if (erroGerente) {
         setEnviando(false);
@@ -123,7 +118,8 @@ function CompletarForm() {
     // Rodada 59 — todos (inclusive gerente e organizador) ganham o perfil de
     // peregrino: cria a linha mínima com o aceite e segue para completar em /perfil.
     await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome.trim() });
-    router.push(`/perfil?tipo=${tipoConta}`);
+    await marcarOrganizadorSeFor(supabase, tipoConta);
+    router.push(destinoAposCadastro(tipoConta));
     router.refresh();
   }
 
@@ -177,18 +173,6 @@ function CompletarForm() {
               <p className="mt-1 text-xs text-neutral-500">
                 Informe nome e sobrenome, como em seu documento.
               </p>
-            </div>
-            <div>
-              <label className="label">Telefone</label>
-              <input
-                required
-                type="tel"
-                autoFocus
-                className="input"
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
-                placeholder="(00) 00000-0000"
-              />
             </div>
 
             <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">

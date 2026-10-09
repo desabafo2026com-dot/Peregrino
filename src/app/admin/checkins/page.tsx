@@ -27,7 +27,7 @@ export default async function AdminCheckinsPage() {
       <VoltarButton href="/admin" />
       <h2 className="mb-1 text-xl font-bold">Pontos de check-in das cidades</h2>
       <p className="mb-6 text-sm text-neutral-500">
-        Escolha uma cidade e toque no mapa, sobre a Via Dutra, no lugar onde o peregrino passa por ela. É aí que o
+        Escolha uma cidade para mudar o nome, o km, a ordem ou a posição (toque no mapa, sobre a Via Dutra), ou toque em “Nova cidade” para incluir uma. É na posição marcada que o
         check-in automático acontece (até 8 km de distância) e onde o ponto aparece no mapa.
       </p>
       <PontosCheckinAdminClient rotas={(rotas ?? []) as Rota[]} pontosIniciais={(pontos ?? []) as PontoCheckin[]} />

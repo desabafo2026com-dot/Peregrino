@@ -8,7 +8,7 @@ import {
   CIDADES_DUTRA_SP_QUELUZ,
   BR_OPTIONS,
 } from "@/lib/constants";
-import { LocateFixed, Upload } from "lucide-react";
+import { LocateFixed, Upload, Move, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { comprimirImagem, CACHE_UM_ANO } from "@/lib/comprimir-imagem";
 import CalendarioDatas from "@/components/CalendarioDatas";
@@ -43,6 +43,7 @@ export interface PapFormDados {
   observacoes: string | null;
   pre_cadastro_id: string | null;
   ponto_referencia: string | null;
+  redes_sociais: string | null;
   foto_url: string | null;
 }
 
@@ -98,6 +99,11 @@ export default function PapForm({
   const [contatoDoacao, setContatoDoacao] = useState(pontoInicial?.contato_doacao ?? "");
   const [observacoes, setObservacoes] = useState(pontoInicial?.observacoes ?? "");
   const [pontoReferencia, setPontoReferencia] = useState(pontoInicial?.ponto_referencia ?? "");
+  const [redesSociais, setRedesSociais] = useState(pontoInicial?.redes_sociais ?? "");
+  const [moverAtivo, setMoverAtivo] = useState(!pontoInicial);
+  // O mapa guarda a função de toque do primeiro desenho; o ref deixa ela
+  // sempre ver o valor atual.
+  const moverRef = useRef(!pontoInicial);
   const [fotoUrl, setFotoUrl] = useState(pontoInicial?.foto_url ?? "");
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -188,6 +194,7 @@ export default function PapForm({
       observacoes: observacoes || null,
       pre_cadastro_id: pontoInicial?.pre_cadastro_id ?? preCadastro?.id ?? null,
       ponto_referencia: pontoReferencia || null,
+      redes_sociais: redesSociais.trim() || null,
       foto_url: fotoUrl || null,
     });
     setLoading(false);
@@ -205,10 +212,34 @@ export default function PapForm({
         >
           <LocateFixed size={18} /> Usar minha localização atual
         </button>
-        <p className="mb-2 text-xs text-neutral-500">Ou toque no mapa para marcar o ponto exato.</p>
+        {/* Rodada 62 — PAP já cadastrado: o ponto só muda depois de tocar
+            em "Alterar posição no mapa" (antes um toque sem querer movia). */}
+        {pontoInicial ? (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                moverRef.current = !moverAtivo;
+                setMoverAtivo(!moverAtivo);
+              }}
+              aria-pressed={moverAtivo}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold ${
+                moverAtivo ? "bg-amber-700 text-white" : "border border-amber-400 text-amber-800 dark:text-amber-400"
+              }`}
+            >
+              {moverAtivo ? <Move size={16} /> : <Lock size={16} />}
+              {moverAtivo ? "Alterando posição: toque no mapa" : "Alterar posição no mapa"}
+            </button>
+            {!moverAtivo && <span className="text-xs text-neutral-500">A posição está travada.</span>}
+          </div>
+        ) : (
+          <p className="mb-2 text-xs text-neutral-500">Ou toque no mapa para marcar o ponto exato.</p>
+        )}
         <MapView
           pickMode
-          onPick={(lat, lng) => setCoords({ lat, lng })}
+          onPick={(lat, lng) => {
+            if (moverRef.current) setCoords({ lat, lng });
+          }}
           markerPreview={coords ? { lat: coords.lat, lng: coords.lng } : null}
           center={coords ? [coords.lng, coords.lat] : undefined}
           height="350px"
@@ -448,6 +479,21 @@ export default function PapForm({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Rodada 62 — aparecem nas informações públicas do PAP. */}
+      <div className="card">
+        <label className="label">Redes sociais (opcional)</label>
+        <input
+          className="input"
+          placeholder="Ex: instagram.com/meupap, facebook.com/meupap"
+          value={redesSociais}
+          maxLength={300}
+          onChange={(e) => setRedesSociais(e.target.value)}
+        />
+        <p className="mt-1 text-xs text-neutral-500">
+          Instagram, Facebook, site... separe por vírgula. Aparecem para os peregrinos nas informações do PAP.
+        </p>
       </div>
 
       <div className="card">

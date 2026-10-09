@@ -29,7 +29,9 @@ export default async function RomariaGrupoCadastroPage() {
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
-  if (!perfil?.cidade) {
+  // Rodada 62 — basta ter o perfil (nome); o completo só é pedido para
+  // planejar a peregrinação.
+  if (!perfil) {
     redirect("/perfil?tipo=organizador");
   }
   if (!perfil.is_organizador) {

@@ -94,8 +94,8 @@ export default async function PainelPage() {
 
   // Sem perfil de peregrino completo: conta só de gerente vai para a área
   // dela; peregrino novo termina o cadastro primeiro.
-  if (!perfil?.cidade) {
-    if (ehGerente && !perfil) redirect("/gerente-pap");
+  if (!perfil) {
+    if (ehGerente) redirect("/gerente-pap");
     redirect("/perfil");
   }
 

@@ -9,7 +9,10 @@ import {
   MapPin,
   HeartHandshake,
   Info,
+  Signpost,
+  Globe,
 } from "lucide-react";
+import { itensRedesSociais } from "@/lib/redes-sociais";
 import { SENTIDO_PISTA_LABELS, SERVICOS_PONTO_APOIO, formatarDatasFuncionamento, papAtivoHoje } from "@/lib/constants";
 import type { PontoApoio } from "@/types/database";
 
@@ -74,6 +77,11 @@ export default async function PapPublicoPage({ params }: { params: Promise<{ id:
           {p.km_referencia != null ? ` — km ${p.km_referencia}` : ""}
           {p.sentido_pista ? ` (${SENTIDO_PISTA_LABELS[p.sentido_pista] ?? p.sentido_pista})` : ""}
         </p>
+        {p.ponto_referencia && (
+          <p className="mb-1 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+            <Signpost size={16} className="shrink-0" /> Referência: {p.ponto_referencia}
+          </p>
+        )}
         <p className="mb-1 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
           <CalendarDays size={16} className="shrink-0" />
           {formatarDatasFuncionamento(p.datas_funcionamento)}
@@ -94,6 +102,26 @@ export default async function PapPublicoPage({ params }: { params: Promise<{ id:
         {p.telefone && p.exibir_telefone && (
           <p className="mt-2 flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
             <Phone size={16} className="shrink-0" /> {p.telefone}
+          </p>
+        )}
+        {itensRedesSociais(p.redes_sociais).length > 0 && (
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-600 dark:text-neutral-300">
+            <Globe size={16} className="shrink-0" />
+            {itensRedesSociais(p.redes_sociais).map((r, i) =>
+              r.href ? (
+                <a
+                  key={i}
+                  href={r.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-amber-700 underline dark:text-amber-500"
+                >
+                  {r.texto}
+                </a>
+              ) : (
+                <span key={i}>{r.texto}</span>
+              )
+            )}
           </p>
         )}
         {p.observacoes && (
