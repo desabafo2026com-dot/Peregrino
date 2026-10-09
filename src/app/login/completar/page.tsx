@@ -4,18 +4,18 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { validarNomeCompleto } from "@/lib/validation";
 import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
 import { UserCheck, ArrowLeft } from "lucide-react";
 import EscolhaTipoConta from "@/components/EscolhaTipoConta";
-import { lerTipoConta, NOME_TIPO_CONTA, destinoAposCadastro, marcarOrganizadorSeFor, type TipoConta } from "@/lib/tipo-conta";
+import { lerTipoConta, NOME_TIPO_CONTA, marcarOrganizadorSeFor, type TipoConta } from "@/lib/tipo-conta";
 
 // Rodada 40 — última etapa de quem entrou pela primeira vez com o Google.
 // O Google já confirmou o e-mail, então aqui não tem senha nem e-mail de
 // confirmação: só o que o cadastro por e-mail também pede — tipo de conta,
 // nome e o aceite dos Termos (obrigatório, mesmo texto de /login).
-// Rodada 62 — sem telefone e sem mais nada obrigatório: só o nome (o que o
-// certificado precisa). O perfil completo é pedido em Minha peregrinação.
+// Rodada 62b — aqui só o jeito de usar o app e o aceite dos Termos; em
+// seguida vai direto para o perfil (nome completo, data de nascimento,
+// estado, cidade e sexo obrigatórios).
 // No fim faz exatamente o que finalizarCadastro() faz em /login.
 function CompletarForm() {
   const router = useRouter();
@@ -55,7 +55,9 @@ function CompletarForm() {
       }
       const meta = user.user_metadata ?? {};
       setEmailConta(user.email ?? "");
-      setNome(((meta.full_name ?? meta.name ?? "") as string).trim());
+      setNome(
+        ((meta.full_name ?? meta.name ?? "") as string).trim() || (user.email ?? "Peregrino").split("@")[0]
+      );
       setCarregandoConta(false);
     })();
     return () => {
@@ -75,11 +77,6 @@ function CompletarForm() {
     setErro(null);
     if (!tipoConta) return;
 
-    const erroNome = validarNomeCompleto(nome);
-    if (erroNome) {
-      setErro(erroNome);
-      return;
-    }
     if (!aceitaTermos) {
       setErro("É necessário aceitar os Termos de Uso e a Política de Privacidade para continuar.");
       return;
@@ -119,7 +116,7 @@ function CompletarForm() {
     // peregrino: cria a linha mínima com o aceite e segue para completar em /perfil.
     await supabase.rpc("registrar_aceite_termos", { p_nome_completo: nome.trim() });
     await marcarOrganizadorSeFor(supabase, tipoConta);
-    router.push(destinoAposCadastro(tipoConta));
+    router.push(`/perfil?primeiro=1&tipo=${tipoConta}`);
     router.refresh();
   }
 
@@ -161,19 +158,6 @@ function CompletarForm() {
                 <ArrowLeft size={14} /> {NOME_TIPO_CONTA[tipoConta]} — trocar
               </button>
             )}
-            <div>
-              <label className="label">Nome completo</label>
-              <input
-                required
-                className="input"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                placeholder="Nome e sobrenome"
-              />
-              <p className="mt-1 text-xs text-neutral-500">
-                Informe nome e sobrenome, como em seu documento.
-              </p>
-            </div>
 
             <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
               <input
@@ -205,7 +189,7 @@ function CompletarForm() {
             )}
 
             <button type="submit" disabled={enviando} className="btn-primary">
-              {enviando ? "Salvando..." : "Concluir cadastro"}
+              {enviando ? "Salvando..." : "Continuar para o perfil"}
             </button>
           </form>
         )}

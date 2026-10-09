@@ -31,9 +31,10 @@ export const metadata = {
 
 interface CompraResumo {
   id: string;
-  certificado_id: string;
+  certificado_id: string | null;
   tipo: string;
   compra_pai_id: string | null;
+  bonus_fotos?: number;
 }
 
 function Modulo({
@@ -96,7 +97,11 @@ export default async function PainelPage() {
   // dela; peregrino novo termina o cadastro primeiro.
   if (!perfil) {
     if (ehGerente) redirect("/gerente-pap");
-    redirect("/perfil");
+    redirect("/perfil?primeiro=1");
+  }
+  // Rodada 62b — dados obrigatórios do perfil ainda faltando.
+  if (!perfil.cidade || !perfil.data_nascimento || !perfil.sexo) {
+    redirect("/perfil?primeiro=1");
   }
 
   const [{ data: certificados }, { data: ativa }, { data: cracha }, { data: comprasData }] = await Promise.all([
@@ -116,7 +121,7 @@ export default async function PainelPage() {
     supabase.from("crachas_peregrino").select("codigo").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("compras_romaria_plus")
-      .select("id, certificado_id, tipo, compra_pai_id, criado_em")
+      .select("*")
       .eq("user_id", user.id)
       .eq("status", "pago")
       .order("criado_em", { ascending: false }),
@@ -125,7 +130,9 @@ export default async function PainelPage() {
   const compras = (comprasData ?? []) as CompraResumo[];
   const compraPlus = compras.find((c) => c.tipo === "inicial") ?? null;
   const pacotesExtra = compraPlus ? compras.filter((c) => c.tipo === "extra" && c.compra_pai_id === compraPlus.id).length : 0;
-  const maxFotos = 5 + 5 * pacotesExtra;
+  const maxFotos = 5 + (compraPlus?.bonus_fotos ?? 0) + 5 * pacotesExtra;
+  // Rodada 62b — galeria da compra: com certificado ou avulsa (sem peregrinação).
+  const linkGaleria = (c: CompraResumo) => (c.certificado_id ? `/certificado/plus/${c.certificado_id}` : `/fotos/${c.id}`);
 
   let artesSalvas: RomariaPlusFoto[] = [];
   let pacoteExtraPendente: CompraRomariaPlus | null = null;
@@ -320,7 +327,7 @@ export default async function PainelPage() {
             <div className="grid grid-cols-5 gap-2">
               {Array.from({ length: Math.max(5, artesSalvas.length) }, (_, i) => artesSalvas[i] ?? null).map((f, i) =>
                 f ? (
-                  <Link key={f.id || i} href={`/certificado/plus/${compraPlus.certificado_id}`} className="block">
+                  <Link key={f.id || i} href={linkGaleria(compraPlus)} className="block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={f.arte_url as string}
@@ -332,7 +339,7 @@ export default async function PainelPage() {
                 ) : (
                   <Link
                     key={`vazio-${i}`}
-                    href={`/certificado/plus/${compraPlus.certificado_id}`}
+                    href={linkGaleria(compraPlus)}
                     className="flex aspect-[9/16] w-full items-center justify-center rounded-lg border-2 border-dashed border-amber-300 text-amber-600 dark:border-amber-800"
                     aria-label="Criar nova arte"
                   >
@@ -342,7 +349,7 @@ export default async function PainelPage() {
               )}
             </div>
             <Link
-              href={`/certificado/plus/${compraPlus.certificado_id}`}
+              href={linkGaleria(compraPlus)}
               className="btn-primary flex items-center justify-center gap-2"
             >
               <Sparkles size={16} />{" "}
@@ -369,9 +376,18 @@ export default async function PainelPage() {
             {!cortesia && ultimoCertificadoId && (
               <BotaoArteGratis certificadoId={ultimoCertificadoId}>Experimente grátis: crie sua primeira arte</BotaoArteGratis>
             )}
+            {/* Rodada 62b — sem peregrinação registrada: arte grátis avulsa, de qualquer ano. */}
+            {!cortesia && !ultimoCertificadoId && (
+              <Link
+                href="/fotos"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-amber-500 bg-amber-50 px-4 py-3 font-bold text-amber-900 transition hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+              >
+                <Sparkles size={18} /> Criar minha primeira arte grátis
+              </Link>
+            )}
             {cortesia && (
               <Link
-                href={`/certificado/plus/${cortesia.certificado_id}`}
+                href={linkGaleria(cortesia)}
                 className="flex items-center gap-3 rounded-xl border border-amber-200 p-2 transition hover:border-amber-400 dark:border-amber-900"
               >
                 {arteGratisUrl ? (
@@ -393,7 +409,17 @@ export default async function PainelPage() {
                 </span>
               </Link>
             )}
-            {ultimoCertificadoId ? (
+            {cortesia && !cortesia.certificado_id ? (
+              <Link
+                href={`/fotos/${cortesia.id}#adquirir`}
+                className="flex w-full flex-col items-center gap-0.5 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 text-white shadow-md transition hover:from-amber-700 hover:to-amber-900"
+              >
+                <span className="flex items-center gap-2 text-lg font-black">
+                  <Sparkles size={18} /> Adquirir por {VALOR_PLUS}
+                </span>
+                <span className="text-sm font-semibold text-amber-50">+5 artes com suas fotos</span>
+              </Link>
+            ) : ultimoCertificadoId ? (
               <Link
                 href={`/certificado/${cortesia?.certificado_id ?? ultimoCertificadoId}#romaria-plus`}
                 className="flex w-full flex-col items-center gap-0.5 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 text-white shadow-md transition hover:from-amber-700 hover:to-amber-900"
@@ -406,12 +432,22 @@ export default async function PainelPage() {
                 </span>
               </Link>
             ) : (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-300" style={{ textAlign: "left" }}>
-                Fica disponível assim que você concluir sua peregrinação e receber o certificado.
-              </p>
+              <Link
+                href="/fotos"
+                className="flex w-full flex-col items-center gap-0.5 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-6 py-3 text-white shadow-md transition hover:from-amber-700 hover:to-amber-900"
+              >
+                <span className="flex items-center gap-2 text-lg font-black">
+                  <Sparkles size={18} /> Adquirir por {VALOR_PLUS}
+                </span>
+                <span className="text-sm font-semibold text-amber-50">5 artes com suas fotos</span>
+              </Link>
             )}
           </>
         )}
+        {/* Rodada 62b — artes de peregrinações não registradas no app. */}
+        <Link href="/fotos" className="text-center text-xs font-semibold text-amber-700 hover:underline dark:text-amber-500">
+          Fotos de peregrinações que não foram registradas no app →
+        </Link>
       </section>
     </div>
   );

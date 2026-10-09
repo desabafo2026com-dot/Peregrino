@@ -199,3 +199,10 @@ p {
     max-width: 100%;
   }
 }
+
+/* Rodada 62b — o balão de informações de qualquer marcador (inclusive dos
+   PAPs aguardando vínculo) fica sempre por cima dos ícones do mapa; os PAPs
+   vinculados (z-index 2) continuam por cima dos outros ícones. */
+.maplibregl-popup {
+  z-index: 10;
+}

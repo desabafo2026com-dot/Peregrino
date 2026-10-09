@@ -9,10 +9,12 @@ import { createClient } from "@/lib/supabase/client";
 export default function BotaoArteGratis({
   certificadoId,
   className,
+  wrapperClassName,
   children,
 }: {
   certificadoId: string;
   className?: string;
+  wrapperClassName?: string;
   children?: ReactNode;
 }) {
   const router = useRouter();
@@ -40,7 +42,7 @@ export default function BotaoArteGratis({
   }
 
   return (
-    <div className="flex w-full flex-col items-center gap-1">
+    <div className={wrapperClassName ?? "flex w-full flex-col items-center gap-1"}>
       <button
         type="button"
         onClick={liberar}

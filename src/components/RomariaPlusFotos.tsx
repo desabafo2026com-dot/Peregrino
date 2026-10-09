@@ -24,6 +24,10 @@ interface Props {
   // Rodada 61 — arte grátis (compra de cortesia): só 1 foto, sem pacote
   // extra; ao salvar, convida a adquirir a Romaria Plus.
   cortesia?: boolean;
+  // Rodada 62b — arte avulsa (sem peregrinação registrada) e fotos a mais
+  // liberadas (a arte grátis que passou para a compra avulsa).
+  semPeregrinacao?: boolean;
+  bonusFotos?: number;
 }
 
 const MAX_FOTOS_INICIAL = 5;
@@ -47,8 +51,12 @@ export default function RomariaPlusFotos({
   cidadesCheckin = [],
   ehAdmin = false,
   cortesia = false,
+  semPeregrinacao = false,
+  bonusFotos = 0,
 }: Props) {
-  const MAX_FOTOS = cortesia ? 1 : MAX_FOTOS_INICIAL + ROMARIA_PLUS_FOTOS_POR_PACOTE * pacotesExtraPagos;
+  const MAX_FOTOS = cortesia
+    ? 1
+    : MAX_FOTOS_INICIAL + bonusFotos + ROMARIA_PLUS_FOTOS_POR_PACOTE * pacotesExtraPagos;
   const [fotos, setFotos] = useState<Record<number, RomariaPlusFoto>>(() => {
     const mapa: Record<number, RomariaPlusFoto> = {};
     fotosIniciais.forEach((f) => {
@@ -129,7 +137,9 @@ export default function RomariaPlusFotos({
       setSlotAtivo(proxima);
     } else if (cortesia) {
       setAviso(
-        "Sua arte grátis está salva! Para criar mais 4 artes e ganhar o Certificado Plus, adquira a Romaria Plus."
+        semPeregrinacao
+          ? "Sua arte grátis está salva! Para criar mais 5 artes, adquira a Romaria Plus."
+          : "Sua arte grátis está salva! Para criar mais 4 artes e ganhar o Certificado Plus, adquira a Romaria Plus."
       );
     } else {
       setAviso(`Foto ${dados.indice} salva na sua galeria! Você usou todas as ${MAX_FOTOS} fotos.`);
@@ -202,6 +212,7 @@ export default function RomariaPlusFotos({
           contadorCompartilhamentosInicial={fotoDoSlotAtivo?.contador_compartilhamentos ?? 0}
           cidadesCheckin={cidadesCheckin}
           ehAdmin={ehAdmin}
+          semPeregrinacao={semPeregrinacao}
           onSalvo={aoSalvar}
           onArteSalva={aoSalvarArte}
         />

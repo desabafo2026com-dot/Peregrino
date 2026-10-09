@@ -9,7 +9,7 @@ import { TERMOS_VERSAO_ATUAL } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
 import EntrarComGoogle from "@/components/EntrarComGoogle";
 import EscolhaTipoConta from "@/components/EscolhaTipoConta";
-import { lerTipoConta, NOME_TIPO_CONTA, destinoAposCadastro, marcarOrganizadorSeFor, type TipoConta } from "@/lib/tipo-conta";
+import { lerTipoConta, NOME_TIPO_CONTA, marcarOrganizadorSeFor, type TipoConta } from "@/lib/tipo-conta";
 import { caminhoInterno } from "@/lib/caminho-interno";
 import { LogIn, Mail, ArrowLeft } from "lucide-react";
 
@@ -210,7 +210,8 @@ function LoginForm() {
     // (o que o certificado precisa). O restante é pedido ao planejar a
     // peregrinação, em Minha peregrinação.
     await marcarOrganizadorSeFor(supabase, tipoConta);
-    router.push(destinoAposCadastro(tipoConta));
+    // Rodada 62b — segue para o perfil (dados obrigatórios do peregrino).
+    router.push(`/perfil?primeiro=1&tipo=${tipoConta ?? "peregrino"}`);
     router.refresh();
   }
 

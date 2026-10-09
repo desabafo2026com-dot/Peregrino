@@ -58,8 +58,8 @@ export default async function PeregrinacaoPage() {
         <div className="card flex flex-col items-center gap-3">
           <p className="font-bold text-amber-800 dark:text-amber-500">Falta pouco para planejar sua peregrinação</p>
           <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "center" }}>
-            Para registrar a caminhada, os check-ins e emitir o certificado, complete seu perfil com telefone,
-            data de nascimento, cidade e sexo. É rapidinho.
+            Para registrar a caminhada, os check-ins e emitir o certificado, complete seu perfil (falta o
+            telefone de contato ou outro dado). É rapidinho.
           </p>
           <Link href="/perfil?completar=peregrinacao" className="btn-primary inline-block">
             Completar perfil

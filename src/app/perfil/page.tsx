@@ -13,9 +13,9 @@ import { lerTipoConta, destinoAposPrimeiroPerfil, type TipoConta } from "@/lib/t
 export default async function PerfilPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tipo?: string; completar?: string }>;
+  searchParams: Promise<{ tipo?: string; completar?: string; primeiro?: string }>;
 }) {
-  const { tipo: tipoParam, completar } = await searchParams;
+  const { tipo: tipoParam, completar, primeiro: primeiroParam } = await searchParams;
   // Rodada 62 — vindo de Minha peregrinação: pede o perfil completo e volta.
   const modoPeregrinacao = completar === "peregrinacao";
   const supabase = await createClient();
@@ -27,11 +27,7 @@ export default async function PerfilPage({
     redirect("/login?redirect=/perfil");
   }
 
-  const { data: perfil } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { data: perfil } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
 
   // Até a Rodada 22, uma conta de gerente de PAP sem perfil próprio de
   // peregrino era mandada direto de volta para "/gerente-pap" ao tentar
@@ -56,7 +52,10 @@ export default async function PerfilPage({
   // formulário de perfil de peregrino) — não só a linha existir, já que
   // ela pode existir ainda vazia, com só o aceite dos termos gravado no
   // cadastro (ver registrar_aceite_termos, Rodada 19).
-  const perfilCompleto = !!(perfil as Profile | null)?.cidade;
+  const pf = perfil as Profile | null;
+  const perfilCompleto = !!(pf?.cidade && pf?.data_nascimento && pf?.sexo);
+  // Rodada 62b — logo depois de criar a conta (ou perfil ainda incompleto).
+  const primeiro = !modoPeregrinacao && (primeiroParam === "1" || !perfilCompleto);
 
   // Rodada 59 — para onde ir depois de completar o perfil pela primeira vez,
   // conforme o jeito de usar o app escolhido no cadastro.
@@ -68,14 +67,20 @@ export default async function PerfilPage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <VoltarButton href={modoPeregrinacao ? "/peregrinacao" : "/painel"} />
+      {!primeiro && <VoltarButton href={modoPeregrinacao ? "/peregrinacao" : "/painel"} />}
       <h1 className="mb-1 text-2xl font-bold">
-        {modoPeregrinacao ? "Complete seu perfil para a peregrinação" : "Meu perfil"}
+        {modoPeregrinacao
+          ? "Complete seu perfil para a peregrinação"
+          : primeiro
+            ? "Complete seu cadastro"
+            : "Meu perfil"}
       </h1>
       <p className="mb-6 text-sm text-neutral-500">
         {modoPeregrinacao
-          ? "Para planejar e registrar sua peregrinação precisamos de mais alguns dados (telefone, data de nascimento, cidade e sexo). Depois de salvar, você volta para Minha peregrinação."
-          : "Atualize suas informações quando precisar. Só o nome é obrigatório aqui; o restante é pedido quando você for planejar sua peregrinação."}
+          ? "Para planejar e registrar sua peregrinação falta só o telefone de contato (e conferir os outros dados). Depois de salvar, você volta para Minha peregrinação."
+          : primeiro
+            ? "Preencha seu nome completo, data de nascimento, estado, cidade e sexo. O telefone é opcional por enquanto."
+            : "Atualize suas informações quando precisar."}
       </p>
       <ProfileForm
         userId={user.id}
@@ -86,7 +91,7 @@ export default async function PerfilPage({
         destinoPrimeiroCadastro={destinoAposPrimeiroPerfil(tipoConta)}
         marcarOrganizador={tipoConta === "organizador"}
         modoPeregrinacao={modoPeregrinacao}
-        voltarPara={modoPeregrinacao ? "/peregrinacao" : undefined}
+        voltarPara={modoPeregrinacao ? "/peregrinacao" : primeiro ? destinoAposPrimeiroPerfil(tipoConta) : undefined}
       />
       {perfilCompleto && (
         // Rodada 54 — credencial (crachá) para imprimir e levar na mochila.
@@ -105,18 +110,20 @@ export default async function PerfilPage({
           </span>
         </Link>
       )}
-      <div className="mt-6">
-        <AlterarSenhaForm />
-      </div>
-      <div className="mt-6">
-        <ContatoDesenvolvedorForm
-          userId={user.id}
-          mensagensIniciais={(mensagens ?? []) as MensagemContato[]}
-        />
-      </div>
-      <div className="mt-6">
-        <ExcluirContaForm />
-      </div>
+      {/* Rodada 62b — no primeiro preenchimento, só o essencial. */}
+      {!primeiro && (
+        <>
+          <div className="mt-6">
+            <AlterarSenhaForm />
+          </div>
+          <div className="mt-6">
+            <ContatoDesenvolvedorForm userId={user.id} mensagensIniciais={(mensagens ?? []) as MensagemContato[]} />
+          </div>
+          <div className="mt-6">
+            <ExcluirContaForm />
+          </div>
+        </>
+      )}
       <p className="mt-8 text-center text-xs text-neutral-400">
         <Link href="/termos" className="underline">
           Termos de Uso

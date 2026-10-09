@@ -106,6 +106,9 @@ function formatarTempoCompacto(inicio: string | null, fim: string | null) {
 // Rodada 54: `soAdmin` — o modelo "Basílica de Aparecida" fica visível só
 // para administradores até o usuário confirmar os direitos de uso da foto
 // da Basílica (quem já salvou uma arte nele continua vendo a arte salva).
+// Rodada 62b — modelos que só fazem sentido com a peregrinação registrada.
+const MODELOS_COM_TRAJETO: Modelo[] = ["itinerario", "credencial"];
+
 const MODELOS: { id: Modelo; nome: string; temAjuste: boolean; soAdmin?: boolean }[] = [
   { id: "classico", nome: "Clássico", temAjuste: true },
   { id: "destaque", nome: "Foto em destaque", temAjuste: false },
@@ -729,6 +732,9 @@ interface Props {
   cidadesCheckin?: string[];
   // Rodada 54 — libera os modelos marcados como soAdmin.
   ehAdmin?: boolean;
+  // Rodada 62b — arte avulsa (sem peregrinação registrada no app): sem
+  // origem, datas, tempo e distância; sem os modelos de trajeto/credencial.
+  semPeregrinacao?: boolean;
   onSalvo?: (dados: { indice: number; foto_url: string; modelo: Modelo; ajuste_overlay: AjusteOverlayRomariaPlus | null }) => void;
   // Rodada 56 — avisa a galeria que a arte desta foto foi salva (primeiro
   // download/compartilhamento), para ela passar para a próxima foto.
@@ -747,6 +753,7 @@ export default function RomariaPlusView({
   contadorCompartilhamentosInicial = 0,
   cidadesCheckin = [],
   ehAdmin = false,
+  semPeregrinacao = false,
   onSalvo,
   onArteSalva,
 }: Props) {
@@ -761,7 +768,9 @@ export default function RomariaPlusView({
   const ajusteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [fotoUrl, setFotoUrl] = useState<string | null>(fotoUrlInicial);
-  const [modelo, setModelo] = useState<Modelo>(modeloInicial ?? "classico");
+  const [modelo, setModelo] = useState<Modelo>(
+    modeloInicial && !(semPeregrinacao && MODELOS_COM_TRAJETO.includes(modeloInicial)) ? modeloInicial : "classico"
+  );
   const [ajuste, setAjuste] = useState<AjusteOverlayRomariaPlus>(() => {
     const base = ajusteInicial ?? AJUSTE_PADRAO[modeloInicial ?? "classico"] ?? { x: 50, y: 80, escala: 100 };
     return {
@@ -1333,7 +1342,11 @@ export default function RomariaPlusView({
                   onChange={(e) => escolherModelo(e.target.value as Modelo)}
                   className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
                 >
-                  {MODELOS.filter((m) => !m.soAdmin || ehAdmin || m.id === modelo).map((m) => (
+                  {MODELOS.filter(
+                    (m) =>
+                      (!m.soAdmin || ehAdmin || m.id === modelo) &&
+                      !(semPeregrinacao && MODELOS_COM_TRAJETO.includes(m.id))
+                  ).map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.nome}
                       {m.soAdmin ? " (só admin)" : ""}
@@ -1464,9 +1477,11 @@ export default function RomariaPlusView({
                     ("o itinerário pode colocar também no modelo foto em
                     destaque, logo abaixo"). Mesma curva esquemática, só que
                     reduzida pra caber no espaço já ocupado pela foto/dados. */}
-                <div className="mt-[2%] w-[85%]">
-                  <TrajetoOrigemAparecida origem={nomeOrigem} tamanhoFonte="2.9cqw" />
-                </div>
+                {!semPeregrinacao && (
+                  <div className="mt-[2%] w-[85%]">
+                    <TrajetoOrigemAparecida origem={nomeOrigem} tamanhoFonte="2.9cqw" />
+                  </div>
+                )}
                 <div
                   className="mt-[3%] flex w-full flex-col gap-[3%] rounded-xl bg-white/10 py-[4%] backdrop-blur-sm"
                   style={{ fontSize: "3.4cqw" }}
@@ -1866,7 +1881,7 @@ export default function RomariaPlusView({
                       {ano}
                     </p>
                     <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
-                      De {nomeOrigem} à Basílica de Aparecida
+                      {semPeregrinacao ? "Basílica de Aparecida" : `De ${nomeOrigem} à Basílica de Aparecida`}
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1" style={{ fontSize: "3.1cqw" }}>
                       {dadosLinha(15)}
@@ -1926,7 +1941,7 @@ export default function RomariaPlusView({
                       {ano}
                     </p>
                     <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
-                      De {nomeOrigem} a Aparecida-SP
+                      {semPeregrinacao ? "Aparecida-SP" : `De ${nomeOrigem} a Aparecida-SP`}
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1" style={{ fontSize: "3.1cqw" }}>
                       {dadosLinha(15)}
@@ -1985,7 +2000,7 @@ export default function RomariaPlusView({
                   />
                 </div>
                 <p className="mt-[3%] font-semibold text-white/95" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
-                  De {nomeOrigem} a Aparecida-SP
+                  {semPeregrinacao ? "Aparecida-SP" : `De ${nomeOrigem} a Aparecida-SP`}
                 </p>
                 <div
                   className="mt-[1.5%] flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1 text-stripe-200"
@@ -2048,9 +2063,11 @@ export default function RomariaPlusView({
                       <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.2), lineHeight: 1.1, textAlign: "left" }}>
                         {tituloTexto}
                       </p>
-                      <p className="border-b border-amber-900/30 pb-[2%]" style={{ fontSize: "3.6cqw", textAlign: "left" }}>
-                        <span className="font-bold">De:</span> {nomeOrigem}
-                      </p>
+                      {!semPeregrinacao && (
+                        <p className="border-b border-amber-900/30 pb-[2%]" style={{ fontSize: "3.6cqw", textAlign: "left" }}>
+                          <span className="font-bold">De:</span> {nomeOrigem}
+                        </p>
+                      )}
                       <p className="border-b border-amber-900/30 pb-[2%]" style={{ fontSize: "3.6cqw", textAlign: "left" }}>
                         <span className="font-bold">Para:</span> Aparecida-SP
                       </p>

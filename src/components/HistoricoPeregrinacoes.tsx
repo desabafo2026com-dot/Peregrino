@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Award, Bike, Footprints, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import { Award, Bike, Camera, Footprints, RotateCcw, ScrollText, Trash2 } from "lucide-react";
+import BotaoArteGratis from "@/components/BotaoArteGratis";
 import { createClient } from "@/lib/supabase/client";
 import { MEIO_TRANSPORTE_LABELS } from "@/lib/constants";
 import type { MeioTransporte } from "@/types/database";
@@ -21,6 +22,9 @@ export interface PeregrinacaoHistorico {
   temCertificado: boolean;
   certificadoId: string | null;
   plusPago: boolean;
+  // Rodada 62b — arte grátis já criada neste certificado / ainda disponível na conta.
+  cortesiaAqui?: boolean;
+  arteGratisDisponivel?: boolean;
 }
 
 function labelMeio(meio: MeioTransporte | null, outroDesc: string | null) {
@@ -98,15 +102,6 @@ export default function HistoricoPeregrinacoes({
             {p.meioTransporte === "bicicleta" ? <Bike size={16} /> : <Footprints size={16} />}
             {p.origem ? `${p.origem} → Aparecida` : labelMeio(p.meioTransporte, p.meioTransporteOutroDesc)}
           </p>
-          {p.certificadoId && (
-            <a
-              href={p.plusPago ? `/certificado/plus/${p.certificadoId}` : `/certificado/${p.certificadoId}#romaria-plus`}
-              className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-700 hover:underline dark:text-amber-500"
-            >
-              <Sparkles size={12} />
-              {p.plusPago ? "Minhas fotos da Romaria Plus →" : "Adquirir Certificado Plus + arte de 5 fotos →"}
-            </a>
-          )}
         </div>
         <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
           {p.dataInicio ? new Date(p.dataInicio).toLocaleDateString("pt-BR") : "-"}
@@ -123,14 +118,51 @@ export default function HistoricoPeregrinacoes({
               Ver certificado
             </a>
           )}
-          <button
-            disabled={ocupadoId === p.id || temPeregrinacaoAtiva}
-            onClick={() => reabrir(p.id)}
-            title={temPeregrinacaoAtiva ? "Finalize ou exclua a peregrinação atual antes de reabrir esta" : undefined}
-            className="btn-secondary flex items-center gap-2 text-xs"
-          >
-            <RotateCcw size={14} /> Reabrir
-          </button>
+          {/* Rodada 62b — com certificado emitido não dá mais para reabrir; ao
+              lado ficam as Fotos (1ª arte grátis) e, com o Plus, o
+              Certificado Plus. */}
+          {p.certificadoId &&
+            (p.plusPago || p.cortesiaAqui ? (
+              <a
+                href={`/certificado/plus/${p.certificadoId}`}
+                className="btn-secondary flex items-center gap-1.5 text-xs"
+              >
+                <Camera size={14} /> Fotos
+              </a>
+            ) : p.arteGratisDisponivel ? (
+              <BotaoArteGratis
+                  wrapperClassName="flex flex-col gap-1"
+                  certificadoId={p.certificadoId}
+                  className="flex items-center gap-1.5 rounded-lg border-2 border-amber-500 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                >
+                  Fotos — 1ª arte grátis
+                </BotaoArteGratis>
+            ) : (
+              <a
+                href={`/certificado/${p.certificadoId}#romaria-plus`}
+                className="btn-secondary flex items-center gap-1.5 text-xs"
+              >
+                <Camera size={14} /> Fotos
+              </a>
+            ))}
+          {p.certificadoId && p.plusPago && (
+            <a
+              href={`/certificado/${p.certificadoId}#romaria-plus`}
+              className="btn-secondary flex items-center gap-1.5 text-xs"
+            >
+              <ScrollText size={14} /> Certificado Plus
+            </a>
+          )}
+          {!p.certificadoId && (
+            <button
+              disabled={ocupadoId === p.id || temPeregrinacaoAtiva}
+              onClick={() => reabrir(p.id)}
+              title={temPeregrinacaoAtiva ? "Finalize ou exclua a peregrinação atual antes de reabrir esta" : undefined}
+              className="btn-secondary flex items-center gap-2 text-xs"
+            >
+              <RotateCcw size={14} /> Reabrir
+            </button>
+          )}
           <button
             disabled={ocupadoId === p.id}
             onClick={() => excluir(p.id)}

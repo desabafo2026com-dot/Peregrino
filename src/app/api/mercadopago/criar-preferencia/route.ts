@@ -8,12 +8,17 @@ import type { Certificado } from "@/types/database";
 // compra da "Romaria Plus" referente a um certificado já emitido, e devolve
 // a URL de checkout para o navegador redirecionar o usuário. O preço vem
 // sempre desta constante do servidor — nunca de nada enviado pelo cliente.
+// Rodada 62b — sem certificadoId e com `ano`: Romaria Plus "avulsa" (quem
+// não registrou a peregrinação no app): 5 artes, sem Certificado Plus.
 export async function POST(request: NextRequest) {
-  const { certificadoId } = (await request.json().catch(() => ({}))) as {
+  const { certificadoId, ano: anoAvulso } = (await request.json().catch(() => ({}))) as {
     certificadoId?: string;
+    ano?: number;
   };
-  if (!certificadoId) {
-    return NextResponse.json({ erro: "certificadoId é obrigatório." }, { status: 400 });
+  const anoAtual = new Date().getFullYear();
+  const avulsa = !certificadoId;
+  if (avulsa && !(Number.isInteger(anoAvulso) && (anoAvulso as number) >= 1950 && (anoAvulso as number) <= anoAtual)) {
+    return NextResponse.json({ erro: "Informe o certificado ou um ano válido." }, { status: 400 });
   }
 
   const supabase = await createClient();
@@ -25,13 +30,10 @@ export async function POST(request: NextRequest) {
   }
 
   // RLS garante que só vem de volta se o certificado for do próprio usuário.
-  const { data: certificado } = await supabase
-    .from("certificados")
-    .select("*")
-    .eq("id", certificadoId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!certificado) {
+  const { data: certificado } = avulsa
+    ? { data: null }
+    : await supabase.from("certificados").select("*").eq("id", certificadoId).eq("user_id", user.id).maybeSingle();
+  if (!avulsa && !certificado) {
     return NextResponse.json({ erro: "Certificado não encontrado." }, { status: 404 });
   }
 
@@ -56,17 +58,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const cert = certificado as Certificado;
+  const cert = certificado as Certificado | null;
   // Ano de conclusão da peregrinação deste certificado — grava desde já
   // (mesmo antes de pago) para travar a futura edição de foto a este ano
   // específico, caso o mesmo peregrino compre a Romaria Plus em anos
-  // diferentes com contas/certificados distintos.
-  const ano = new Date(cert.data_fim ?? cert.emitido_em).getFullYear();
+  // diferentes com contas/certificados distintos. Na avulsa, o ano escolhido.
+  const ano = cert ? new Date(cert.data_fim ?? cert.emitido_em).getFullYear() : (anoAvulso as number);
 
   const { data: compra, error: erroInsert } = await admin
     .from("compras_romaria_plus")
     .insert({
-      certificado_id: certificadoId,
+      certificado_id: avulsa ? null : certificadoId,
       user_id: user.id,
       valor_centavos: ROMARIA_PLUS_VALOR_CENTAVOS,
       status: "pendente",
@@ -91,8 +93,10 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         items: [
           {
-            title: "Romaria Plus — arte personalizada da peregrinação",
-            description: `Certificado ${cert.codigo} — ${cert.nome_peregrino}`,
+            title: cert
+              ? "Romaria Plus — arte personalizada da peregrinação"
+              : "Romaria Plus — 5 artes com suas fotos",
+            description: cert ? `Certificado ${cert.codigo} — ${cert.nome_peregrino}` : `Artes ${ano}`,
             quantity: 1,
             currency_id: "BRL",
             unit_price: ROMARIA_PLUS_VALOR_CENTAVOS / 100,
@@ -101,9 +105,9 @@ export async function POST(request: NextRequest) {
         external_reference: compra.id,
         notification_url: `${origin}/api/mercadopago/webhook`,
         back_urls: {
-          success: `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
-          pending: `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
-          failure: `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
+          success: avulsa ? `${origin}/fotos?compra=${compra.id}` : `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
+          pending: avulsa ? `${origin}/fotos?compra=${compra.id}` : `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
+          failure: avulsa ? `${origin}/fotos?compra=${compra.id}` : `${origin}/certificado/${certificadoId}?romaria_plus=retorno`,
         },
         auto_return: "approved",
       }),

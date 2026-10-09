@@ -63,6 +63,13 @@ export default async function CertificadoPage({
     certificadoPorPeregrinacao.set(c.peregrinacao_id, c.id)
   );
   const certificadosComPlus = new Set((comprasPagasData ?? []).map((c) => c.certificado_id as string));
+  // Rodada 62b — arte grátis (uma por conta): onde foi usada, ou se ainda está disponível.
+  const { data: cortesia } = await supabase
+    .from("compras_romaria_plus")
+    .select("certificado_id")
+    .eq("user_id", user.id)
+    .eq("tipo", "cortesia")
+    .maybeSingle();
   const rotaPorId = new Map((rotasData ?? []).map((r) => [r.id as string, r as { slug: string; nome: string }]));
   const historico: PeregrinacaoHistorico[] = ((concluidasData ?? []) as Peregrinacao[]).map((p) => {
     const certificadoId = certificadoPorPeregrinacao.get(p.id) ?? null;
@@ -77,6 +84,8 @@ export default async function CertificadoPage({
       temCertificado: !!certificadoId,
       certificadoId,
       plusPago: certificadoId ? certificadosComPlus.has(certificadoId) : false,
+      cortesiaAqui: !!certificadoId && cortesia?.certificado_id === certificadoId,
+      arteGratisDisponivel: !cortesia,
     };
   });
 
@@ -86,8 +95,8 @@ export default async function CertificadoPage({
       <div>
         <h1 className="text-2xl font-bold">Meus certificados</h1>
         <p className="text-sm text-neutral-500">
-          Suas peregrinações concluídas. Toque em <strong>Ver certificado</strong> para abrir o certificado e o
-          Certificado Plus.
+          Suas peregrinações concluídas. Em cada uma: <strong>Ver certificado</strong>, <strong>Fotos</strong> (a
+          primeira arte é grátis) e, com a Romaria Plus, o <strong>Certificado Plus</strong>.
         </p>
       </div>
       {historico.length === 0 ? (

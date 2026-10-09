@@ -28,6 +28,28 @@ interface Props {
   voltarPara?: string;
 }
 
+function isoParaTexto(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+function mascaraData(valor: string) {
+  const d = valor.replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
+function textoParaIso(texto: string) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}
+function dataNascimentoValida(iso: string) {
+  const [a, m, d] = iso.split("-").map(Number);
+  const data = new Date(Date.UTC(a, m - 1, d));
+  if (data.getUTCFullYear() !== a || data.getUTCMonth() !== m - 1 || data.getUTCDate() !== d) return false;
+  const anoAtual = new Date().getFullYear();
+  return a >= anoAtual - 110 && a <= anoAtual - 5;
+}
+
 export default function ProfileForm({
   userId,
   nomeInicial,
@@ -39,7 +61,10 @@ export default function ProfileForm({
   modoPeregrinacao = false,
   voltarPara,
 }: Props) {
-  const obrigatorio = modoPeregrinacao;
+  // Rodada 62b — nome, data de nascimento, estado, cidade e sexo são sempre
+  // obrigatórios; o telefone só em Minha peregrinação.
+  const obrigatorio = true;
+  const telefoneObrigatorio = modoPeregrinacao;
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -56,6 +81,9 @@ export default function ProfileForm({
   const [uf, setUf] = useState(perfilExistente?.uf ?? "SP");
   const [cidade, setCidade] = useState(perfilExistente?.cidade ?? "");
   const [buscaCidade, setBuscaCidade] = useState(perfilExistente?.cidade ?? "");
+  // Data digitada (DD/MM/AAAA) — mais fácil que o calendário do celular
+  // para escolher o ano de nascimento.
+  const [dataTexto, setDataTexto] = useState(() => isoParaTexto(perfilExistente?.data_nascimento ?? ""));
   const [dataNascimento, setDataNascimento] = useState(
     perfilExistente?.data_nascimento ?? ""
   );
@@ -126,12 +154,12 @@ export default function ProfileForm({
       return;
     }
     if (obrigatorio) {
-      if (!telefone?.trim()) {
+      if (telefoneObrigatorio && !telefone?.trim()) {
         setErro("Informe um telefone para contato.");
         return;
       }
-      if (!dataNascimento) {
-        setErro("Informe sua data de nascimento.");
+      if (!dataNascimento || !dataNascimentoValida(dataNascimento)) {
+        setErro("Informe sua data de nascimento no formato DD/MM/AAAA.");
         return;
       }
       if (!cidade) {
@@ -280,22 +308,30 @@ export default function ProfileForm({
             />
           </div>
           <div>
-            <label className="label">Telefone{!obrigatorio && " (opcional)"}</label>
+            <label className="label">Telefone{!telefoneObrigatorio && " (opcional)"}</label>
             <input
-              required={obrigatorio}
+              required={telefoneObrigatorio}
               className="input"
               value={telefone}
               onChange={(e) => setTelefone(e.target.value)}
             />
           </div>
           <div>
-            <label className="label">Data de nascimento{!obrigatorio && " (opcional)"}</label>
+            <label className="label">Data de nascimento</label>
             <input
-              type="date"
+              type="text"
+              inputMode="numeric"
+              autoComplete="bday"
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
               required={obrigatorio}
               className="input"
-              value={dataNascimento ?? ""}
-              onChange={(e) => setDataNascimento(e.target.value)}
+              value={dataTexto}
+              onChange={(e) => {
+                const texto = mascaraData(e.target.value);
+                setDataTexto(texto);
+                setDataNascimento(textoParaIso(texto));
+              }}
             />
           </div>
           <div>
@@ -317,7 +353,7 @@ export default function ProfileForm({
             </select>
           </div>
           <div className="relative">
-            <label className="label">Cidade de origem{!obrigatorio && " (opcional)"}</label>
+            <label className="label">Cidade de origem</label>
             <input
               required={obrigatorio}
               className="input"
@@ -354,7 +390,7 @@ export default function ProfileForm({
             )}
           </div>
           <div>
-            <label className="label">Sexo{!obrigatorio && " (opcional)"}</label>
+            <label className="label">Sexo</label>
             <select
               required={obrigatorio}
               className="input"

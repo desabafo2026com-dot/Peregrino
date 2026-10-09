@@ -77,7 +77,11 @@ export async function POST(request: NextRequest) {
     .eq("tipo", "extra")
     .eq("status", "pago");
 
-  const maxAtual = ROMARIA_PLUS_FOTOS_POR_PACOTE + ROMARIA_PLUS_FOTOS_POR_PACOTE * (pacotesExtraPagos ?? 0);
+  // Rodada 62b — inclui as fotos a mais (arte grátis avulsa que veio junto).
+  const maxAtual =
+    ROMARIA_PLUS_FOTOS_POR_PACOTE +
+    ((cert as CompraRomariaPlus & { bonus_fotos?: number }).bonus_fotos ?? 0) +
+    ROMARIA_PLUS_FOTOS_POR_PACOTE * (pacotesExtraPagos ?? 0);
 
   const { count: fotosExistentes } = await admin
     .from("romaria_plus_fotos")
@@ -130,11 +134,12 @@ export async function POST(request: NextRequest) {
         ],
         external_reference: compraExtra.id,
         notification_url: `${origin}/api/mercadopago/webhook`,
-        back_urls: {
-          success: `${origin}/certificado/plus/${cert.certificado_id}?romaria_plus_extra=retorno&compra=${compraExtra.id}`,
-          pending: `${origin}/certificado/plus/${cert.certificado_id}?romaria_plus_extra=retorno&compra=${compraExtra.id}`,
-          failure: `${origin}/certificado/plus/${cert.certificado_id}?romaria_plus_extra=retorno&compra=${compraExtra.id}`,
-        },
+        back_urls: (() => {
+          const volta = cert.certificado_id
+            ? `${origin}/certificado/plus/${cert.certificado_id}?romaria_plus_extra=retorno&compra=${compraExtra.id}`
+            : `${origin}/fotos/${compraId}?romaria_plus_extra=retorno&compra=${compraExtra.id}`;
+          return { success: volta, pending: volta, failure: volta };
+        })(),
         auto_return: "approved",
       }),
     });

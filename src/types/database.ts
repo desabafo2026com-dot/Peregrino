@@ -383,7 +383,9 @@ export interface AjusteOverlayRomariaPlus {
 // "pago", com valor_centavos = 0.
 export interface CompraRomariaPlus {
   id: string;
-  certificado_id: string;
+  // Rodada 62b — nulo na compra "avulsa" (sem peregrinação registrada).
+  certificado_id: string | null;
+  bonus_fotos?: number;
   user_id: string;
   valor_centavos: number;
   status: StatusCompraRomariaPlus;
@@ -413,7 +415,7 @@ export interface CompraRomariaPlus {
   // sempre vinculado a uma compra "inicial" já paga (compra_pai_id). O
   // limite de fotos de uma compra "inicial" é 5 + 5 × (pacotes extra pagos
   // vinculados a ela) — ver salvar_foto_romaria_plus_slot no banco.
-  tipo: "inicial" | "extra";
+  tipo: "inicial" | "extra" | "cortesia";
   compra_pai_id: string | null;
 }
 

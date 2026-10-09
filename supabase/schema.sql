@@ -5408,3 +5408,225 @@ create policy "avisos_gerais_select_vigentes" on public.avisos_gerais for select
 alter table public.gerentes_pap alter column telefone drop not null;
 
 -- FIM DA MIGRATION 52
+
+-- =====================================================================
+-- MIGRATION 53 — Rodada 62b: artes sem peregrinação registrada
+-- ---------------------------------------------------------------------
+-- 1) Romaria Plus "avulsa": quem não registrou a peregrinação no app pode
+--    criar a 1ª arte grátis (de qualquer ano) e depois comprar mais 5 artes
+--    (sem Certificado Plus), e ampliar de 5 em 5 como já existe. A compra
+--    avulsa não tem certificado: guarda só o ano escolhido.
+--    A arte grátis continua sendo UMA por conta (avulsa OU numa peregrinação).
+-- 2) Peregrinação concluída com certificado emitido não pode mais ser
+--    reaberta (só a administração).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 52 (ou do arquivo 48_a_52).
+-- =====================================================================
+
+-- 1) Compra sem certificado ----------------------------------------------
+alter table public.compras_romaria_plus alter column certificado_id drop not null;
+alter table public.compras_romaria_plus add column if not exists bonus_fotos int not null default 0;
+comment on column public.compras_romaria_plus.bonus_fotos is 'Rodada 62b — fotos a mais liberadas nesta compra (a arte grátis avulsa que passou para a compra avulsa paga).';
+
+alter table public.compras_romaria_plus drop constraint if exists compras_romaria_plus_certificado_ou_ano;
+alter table public.compras_romaria_plus
+  add constraint compras_romaria_plus_certificado_ou_ano check (certificado_id is not null or ano is not null);
+
+-- Arte grátis avulsa (de qualquer ano).
+create or replace function public.liberar_arte_gratis_avulsa(p_ano int)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cortesia record;
+  v_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'é preciso estar logado';
+  end if;
+  if p_ano is null or p_ano < 1950 or p_ano > extract(year from now())::int then
+    raise exception 'ano inválido';
+  end if;
+
+  select id, certificado_id into v_cortesia
+  from public.compras_romaria_plus
+  where user_id = auth.uid() and tipo = 'cortesia';
+  if found then
+    if v_cortesia.certificado_id is null then
+      return v_cortesia.id;
+    end if;
+    raise exception 'arte_gratis_ja_usada: a arte grátis já foi usada numa peregrinação';
+  end if;
+
+  insert into public.compras_romaria_plus (certificado_id, user_id, valor_centavos, status, pago_em, ano, tipo)
+  values (null, auth.uid(), 0, 'pago', now(), p_ano, 'cortesia')
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+revoke all on function public.liberar_arte_gratis_avulsa(int) from public;
+grant execute on function public.liberar_arte_gratis_avulsa(int) to authenticated;
+
+-- Limite de fotos: 5 + fotos a mais (bonus) + 5 por pacote extra pago.
+create or replace function public.salvar_foto_romaria_plus_slot(
+  p_compra_id uuid,
+  p_indice int,
+  p_foto_url text,
+  p_modelo text,
+  p_ajuste_overlay jsonb default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_tipo text;
+  v_bonus int;
+  v_pacotes_extra int;
+  v_max_permitido int;
+begin
+  select user_id, tipo, bonus_fotos into v_user_id, v_tipo, v_bonus
+  from public.compras_romaria_plus
+  where id = p_compra_id and user_id = auth.uid() and status = 'pago' and tipo in ('inicial', 'cortesia');
+
+  if v_user_id is null then
+    raise exception 'compra não encontrada, não paga, ou não pertence a este usuário';
+  end if;
+
+  if v_tipo = 'cortesia' then
+    v_max_permitido := 1;
+  else
+    select count(*) into v_pacotes_extra
+    from public.compras_romaria_plus
+    where compra_pai_id = p_compra_id and status = 'pago' and tipo = 'extra';
+    v_max_permitido := 5 + coalesce(v_bonus, 0) + 5 * v_pacotes_extra;
+  end if;
+
+  if p_indice < 1 or p_indice > v_max_permitido then
+    raise exception 'índice % fora do limite permitido para esta compra (máximo %)', p_indice, v_max_permitido;
+  end if;
+
+  if exists (
+    select 1 from public.romaria_plus_fotos
+    where compra_id = p_compra_id and indice = p_indice and arte_url is not null
+  ) then
+    raise exception 'a arte da foto % já foi salva e não pode mais ser alterada', p_indice;
+  end if;
+
+  insert into public.romaria_plus_fotos (compra_id, user_id, indice, foto_url, modelo, ajuste_overlay)
+  values (p_compra_id, v_user_id, p_indice, p_foto_url, p_modelo, p_ajuste_overlay)
+  on conflict (compra_id, indice) do update
+    set foto_url = excluded.foto_url,
+        modelo = excluded.modelo,
+        ajuste_overlay = excluded.ajuste_overlay,
+        atualizado_em = now();
+end;
+$$;
+
+grant execute on function public.salvar_foto_romaria_plus_slot(uuid, int, text, text, jsonb) to authenticated;
+
+-- Comprou o Plus: a arte grátis vai junto.
+--  - com certificado: a do mesmo certificado vira a 1ª das 5 (como antes);
+--  - avulsa: a arte grátis avulsa do mesmo ano entra como foto a mais
+--    (a compra avulsa libera 5 artes NOVAS).
+create or replace function public.romaria_plus_levar_arte_gratis()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_movidas int;
+begin
+  if new.tipo <> 'inicial' or new.status <> 'pago' then
+    return null;
+  end if;
+  if tg_op = 'UPDATE' and old.status = 'pago' then
+    return null;
+  end if;
+
+  if new.certificado_id is not null then
+    update public.romaria_plus_fotos f
+    set compra_id = new.id, atualizado_em = now()
+    from public.compras_romaria_plus c
+    where f.compra_id = c.id
+      and c.tipo = 'cortesia'
+      and c.user_id = new.user_id
+      and c.certificado_id = new.certificado_id
+      and not exists (
+        select 1 from public.romaria_plus_fotos x where x.compra_id = new.id and x.indice = f.indice
+      );
+  else
+    with movidas as (
+      update public.romaria_plus_fotos f
+      set compra_id = new.id, atualizado_em = now()
+      from public.compras_romaria_plus c
+      where f.compra_id = c.id
+        and c.tipo = 'cortesia'
+        and c.user_id = new.user_id
+        and c.certificado_id is null
+        and c.ano is not distinct from new.ano
+        and not exists (
+          select 1 from public.romaria_plus_fotos x where x.compra_id = new.id and x.indice = f.indice
+        )
+      returning f.id
+    )
+    select count(*) into v_movidas from movidas;
+    if v_movidas > 0 then
+      update public.compras_romaria_plus set bonus_fotos = bonus_fotos + v_movidas where id = new.id;
+    end if;
+  end if;
+
+  -- A arte grátis já passou para a compra paga: a cortesia (agora vazia)
+  -- deixa de valer, para não abrir de novo uma "arte grátis" vazia. Continua
+  -- contando como usada (uma por conta).
+  update public.compras_romaria_plus c
+  set status = 'cancelado'
+  where c.tipo = 'cortesia'
+    and c.user_id = new.user_id
+    and c.status = 'pago'
+    and (
+      (new.certificado_id is not null and c.certificado_id = new.certificado_id)
+      or (new.certificado_id is null and c.certificado_id is null and c.ano is not distinct from new.ano)
+    )
+    and not exists (select 1 from public.romaria_plus_fotos f where f.compra_id = c.id);
+  return null;
+end;
+$$;
+
+revoke all on function public.romaria_plus_levar_arte_gratis() from public;
+
+drop trigger if exists trg_romaria_plus_levar_arte_gratis on public.compras_romaria_plus;
+create trigger trg_romaria_plus_levar_arte_gratis
+  after insert or update of status on public.compras_romaria_plus
+  for each row execute function public.romaria_plus_levar_arte_gratis();
+
+-- 2) Não reabrir peregrinação que já tem certificado ----------------------
+create or replace function public.peregrinacoes_nao_reabrir_com_certificado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.status = 'concluida'
+     and new.status is distinct from 'concluida'
+     and not public.is_admin()
+     and exists (select 1 from public.certificados c where c.peregrinacao_id = old.id) then
+    raise exception 'peregrinacao_com_certificado: esta peregrinação já tem certificado e não pode ser reaberta';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists peregrinacoes_nao_reabrir_com_certificado on public.peregrinacoes;
+create trigger peregrinacoes_nao_reabrir_com_certificado
+  before update of status on public.peregrinacoes
+  for each row execute function public.peregrinacoes_nao_reabrir_com_certificado();
+
+-- FIM DA MIGRATION 53
