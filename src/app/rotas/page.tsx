@@ -6,7 +6,11 @@ import QuadroResumoRiscos from "@/components/QuadroResumoRiscos";
 import FotoAmpliavel from "@/components/FotoAmpliavel";
 import DicasSegurancaCards from "@/components/DicasSegurancaCards";
 import VoltarButton from "@/components/VoltarButton";
-import { ShieldAlert, TriangleAlert } from "lucide-react";
+import { CloudSun, Mountain, ShieldAlert, TriangleAlert } from "lucide-react";
+import AltimetriaGrafico from "@/components/AltimetriaGrafico";
+import TempoNoCaminho from "@/components/TempoNoCaminho";
+import { perfilAltimetria } from "@/lib/altimetria";
+import { previsaoCaminho } from "@/lib/tempo-caminho";
 import type { PontoRisco, Rota, PontoCheckin } from "@/types/database";
 
 // Cores claras (pastel), consistentes com o mapa geral (/mapa).
@@ -66,6 +70,15 @@ export default async function RotasPage({
       .map((p) => ({ lat: p.latitude, lng: p.longitude, ordem: p.ordem })),
   }));
 
+  // Rodada 64 — altimetria e tempo nas cidades da rota escolhida.
+  const pontosDaRota = ((pontosCheckin ?? []) as PontoCheckin[])
+    .filter((p) => p.rota_id === rotaAtual?.id)
+    .sort((a, b) => a.ordem - b.ordem);
+  const [perfil, previsoes] = await Promise.all([
+    perfilAltimetria(pontosDaRota),
+    previsaoCaminho(pontosDaRota.map((p) => ({ cidade: p.cidade, lat: p.latitude, lng: p.longitude }))),
+  ]);
+
   // Ordem de leitura ao longo do trajeto: no Sentido Norte (São Paulo →
   // Aparecida) o km da rodovia diminui conforme se avança; no Sentido Sul
   // (Queluz/Rio → Aparecida) o km aumenta. Sem km cadastrado, fica por
@@ -108,6 +121,28 @@ export default async function RotasPage({
             </Link>
           ))}
         </div>
+      )}
+
+      {perfil && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+            <Mountain size={20} /> Altimetria — {nomeRota(rotaAtual)}
+          </h2>
+          <div className="card">
+            <AltimetriaGrafico perfil={perfil} />
+          </div>
+        </section>
+      )}
+
+      {previsoes && previsoes.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+            <CloudSun size={20} /> Tempo no caminho
+          </h2>
+          <div className="card">
+            <TempoNoCaminho previsoes={previsoes} />
+          </div>
+        </section>
       )}
 
       <section>

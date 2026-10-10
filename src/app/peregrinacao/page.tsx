@@ -3,6 +3,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
+import AltimetriaGrafico from "@/components/AltimetriaGrafico";
+import TempoNoCaminho from "@/components/TempoNoCaminho";
+import { perfilAltimetria, subidaEntre } from "@/lib/altimetria";
+import { previsaoCaminho } from "@/lib/tempo-caminho";
+import { CloudSun, Mountain } from "lucide-react";
 import { kmPertenceARota, avisoVisivelPublicamente, hojeISO } from "@/lib/constants";
 import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
 import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota, PapPreCadastro } from "@/types/database";
@@ -218,6 +223,33 @@ export default async function PeregrinacaoPage() {
       .filter((v): v is string => !!v);
   }
 
+  // Rodada 64 — altimetria da rota (com a posição pelo último check-in) e
+  // tempo nas próximas cidades do caminho.
+  let perfilAlt: Awaited<ReturnType<typeof perfilAltimetria>> = null;
+  let previsoes: Awaited<ReturnType<typeof previsaoCaminho>> = null;
+  let kmAtual: number | null = null;
+  let proximos: { km: number; subida: number; descida: number } | null = null;
+  if (peregrinacao?.rota_id) {
+    const pontosRotaOrdenados = todosPontosCheckin
+      .filter((p) => p.rota_id === peregrinacao.rota_id)
+      .sort((a, b) => a.ordem - b.ordem);
+    const feitos = new Set(checkinsFeitosIds);
+    const ultimoFeito = [...pontosRotaOrdenados].reverse().find((p) => feitos.has(p.id)) ?? null;
+    const ordemBase = ultimoFeito?.ordem ?? pontosCheckin[0]?.ordem ?? 1;
+    const aFrente = pontosRotaOrdenados.filter((p) => p.ordem >= ordemBase).slice(0, 6);
+    [perfilAlt, previsoes] = await Promise.all([
+      perfilAltimetria(pontosRotaOrdenados),
+      previsaoCaminho(aFrente.map((p) => ({ cidade: p.cidade, lat: p.latitude, lng: p.longitude }))),
+    ]);
+    if (perfilAlt && peregrinacao.status === "em_andamento" && ultimoFeito) {
+      const idx = pontosRotaOrdenados.findIndex((p) => p.id === ultimoFeito.id);
+      kmAtual = perfilAlt.cidades[idx]?.km ?? null;
+      if (kmAtual != null && kmAtual < perfilAlt.kmTotal) {
+        proximos = { km: 10, ...subidaEntre(perfilAlt, kmAtual, kmAtual + 10) };
+      }
+    }
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href="/" />
@@ -242,6 +274,26 @@ export default async function PeregrinacaoPage() {
         todosPontosCheckin={todosPontosCheckin}
         checkinsFeitosIds={checkinsFeitosIds}
       />
+      {previsoes && previsoes.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+            <CloudSun size={20} /> Tempo nas próximas cidades
+          </h2>
+          <div className="card">
+            <TempoNoCaminho previsoes={previsoes} />
+          </div>
+        </section>
+      )}
+      {perfilAlt && (
+        <section className="mt-6">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
+            <Mountain size={20} /> Altimetria do trajeto
+          </h2>
+          <div className="card">
+            <AltimetriaGrafico perfil={perfilAlt} kmAtual={kmAtual} proximos={proximos} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }
