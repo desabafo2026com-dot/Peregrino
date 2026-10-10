@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Users, Footprints, CheckCircle2, Award, Hotel, Smartphone, ShieldCheck } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Footprints, Hotel, Smartphone, ShieldCheck, Eye, Tent } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import SigaNosRedes from "@/components/SigaNosRedes";
 import BotaoInstalarApp from "@/components/BotaoInstalarApp";
@@ -49,17 +49,19 @@ export default async function Home() {
     }
   }
 
+  // Rodada 63 — contadores da página inicial: acessos ao app (hoje e no
+  // total, Migration 44) e PAPs (ativos hoje e cadastrados no mapa).
   const { data: stats } = (await supabase
-    .rpc("estatisticas_publicas")
+    .rpc("estatisticas_publicas_v2")
     .maybeSingle()) as {
     data: {
-      peregrinos_ativos: number;
-      checkins_hoje: number;
-      checkins_total: number;
-      pontos_apoio_ativos: number;
-      peregrinacoes_concluidas: number;
+      acessos_hoje: number;
+      acessos_total: number;
+      paps_ativos: number;
+      paps_total: number;
     } | null;
   };
+  const numero = (n: number) => Number(n ?? 0).toLocaleString("pt-BR");
 
   // Romarias em grupo já aprovadas pela administração, ordenadas da data de
   // início mais próxima para a mais distante — RLS já garante que só vêm
@@ -192,7 +194,7 @@ export default async function Home() {
         <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-5">
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <Users size={20} /> {stats.peregrinos_ativos}
+              <Eye size={20} /> {numero(stats.acessos_hoje)}
             </p>
             {/* Rodada 24: texto centralizado com style inline, não só a
                 classe text-center herdada da section — a regra global
@@ -204,15 +206,15 @@ export default async function Home() {
                 comprido, é o mais propenso a quebrar em telas estreitas de
                 iPhone — por isso o bug só aparecia nesse card. */}
             <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
-              peregrinos ativos
+              acessos ao app hoje
             </p>
           </div>
           <div className="card flex flex-col items-center justify-center gap-1">
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <CheckCircle2 size={20} /> {stats.checkins_total}
+              <Smartphone size={20} /> {numero(stats.acessos_total)}
             </p>
             <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
-              check-ins realizados
+              acessos ao app no total
             </p>
           </div>
           {/* Rodada 50 — instala direto (Android) ou abre o passo a passo na
@@ -229,20 +231,23 @@ export default async function Home() {
             className="card flex flex-col items-center justify-center gap-1 transition hover:border-amber-300"
           >
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <MapPin size={20} /> {stats.pontos_apoio_ativos}
+              <MapPin size={20} /> {numero(stats.paps_ativos)}
             </p>
             <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
               PAP ativos
             </p>
           </Link>
-          <div className="card flex flex-col items-center justify-center gap-1">
+          <Link
+            href="/mapa"
+            className="card flex flex-col items-center justify-center gap-1 transition hover:border-amber-300"
+          >
             <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <Award size={20} /> {stats.peregrinacoes_concluidas}
+              <Tent size={20} /> {numero(stats.paps_total)}
             </p>
             <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
-              peregrinações concluídas
+              PAPs no mapa
             </p>
-          </div>
+          </Link>
         </section>
       )}
 

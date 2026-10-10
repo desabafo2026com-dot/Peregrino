@@ -5630,3 +5630,48 @@ create trigger peregrinacoes_nao_reabrir_com_certificado
   for each row execute function public.peregrinacoes_nao_reabrir_com_certificado();
 
 -- FIM DA MIGRATION 53
+
+-- =====================================================================
+-- MIGRATION 54 — Rodada 63: contadores da página inicial
+-- ---------------------------------------------------------------------
+-- A página inicial passa a mostrar: acessos ao app hoje, acessos ao app no
+-- total (aberturas do site/app, contadas pela Migration 44 — mesmo aparelho
+-- em menos de 30 minutos conta uma vez só), PAPs ativos hoje e PAPs
+-- cadastrados no mapa.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 53.
+-- =====================================================================
+
+create or replace function public.estatisticas_publicas_v2()
+returns table (
+  acessos_hoje bigint,
+  acessos_total bigint,
+  paps_ativos bigint,
+  paps_total bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*) from public.acessos_site
+       where dia = (now() at time zone 'America/Sao_Paulo')::date),
+    (select count(*) from public.acessos_site),
+    (select count(*) from public.pontos_apoio
+       where status_aprovacao = 'aprovado'
+         and ativo = true
+         and (now() at time zone 'America/Sao_Paulo')::date = any(datas_funcionamento))
+    +
+    (select count(*) from public.paps_pre_cadastro_visiveis
+       where (now() at time zone 'America/Sao_Paulo')::date = any(datas_funcionamento)),
+    (select count(*) from public.pontos_apoio
+       where status_aprovacao = 'aprovado' and ativo = true)
+    +
+    (select count(*) from public.paps_pre_cadastro_visiveis);
+$$;
+
+revoke all on function public.estatisticas_publicas_v2() from public;
+grant execute on function public.estatisticas_publicas_v2() to anon, authenticated;
+
+-- FIM DA MIGRATION 54
