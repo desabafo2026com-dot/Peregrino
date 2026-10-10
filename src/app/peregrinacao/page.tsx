@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
 import AltimetriaGrafico from "@/components/AltimetriaGrafico";
+import IntencaoForm, { type IntencaoAtual } from "@/components/IntencaoForm";
 import TempoNoCaminho from "@/components/TempoNoCaminho";
 import { perfilAltimetria, subidaEntre } from "@/lib/altimetria";
 import { previsaoCaminho } from "@/lib/tempo-caminho";
@@ -223,6 +224,15 @@ export default async function PeregrinacaoPage() {
       .filter((v): v is string => !!v);
   }
 
+  // Rodada 65 — pedido ou agradecimento da peregrinação (opcional).
+  const { data: intencaoData } = peregrinacao
+    ? await supabase
+        .from("intencoes_peregrinacao")
+        .select("id, tipo, texto, publico, ativo")
+        .eq("peregrinacao_id", peregrinacao.id)
+        .maybeSingle()
+    : { data: null };
+
   // Rodada 64 — altimetria da rota (com a posição pelo último check-in) e
   // tempo nas próximas cidades do caminho.
   let perfilAlt: Awaited<ReturnType<typeof perfilAltimetria>> = null;
@@ -274,6 +284,15 @@ export default async function PeregrinacaoPage() {
         todosPontosCheckin={todosPontosCheckin}
         checkinsFeitosIds={checkinsFeitosIds}
       />
+      {peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") && (
+        <div className="mt-6">
+          <IntencaoForm
+            peregrinacaoId={peregrinacao.id}
+            userId={user.id}
+            inicial={(intencaoData as IntencaoAtual | null) ?? null}
+          />
+        </div>
+      )}
       {previsoes && previsoes.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">

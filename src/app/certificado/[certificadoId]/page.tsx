@@ -6,6 +6,7 @@ import CertificadoGratuitoView from "@/components/CertificadoGratuitoView";
 import CertificadoView from "@/components/CertificadoView";
 import RomariaPlusCompra from "@/components/RomariaPlusCompra";
 import MensagemConquistaForm from "@/components/MensagemConquistaForm";
+import AgradecimentoPapForm, { type AgradecimentoEnviado, type OpcaoPap } from "@/components/AgradecimentoPapForm";
 import VoltarButton from "@/components/VoltarButton";
 import type { Certificado, CompraRomariaPlus, MensagemConquista } from "@/types/database";
 
@@ -28,8 +29,16 @@ export default async function CertificadoDetalhePage({ params }: { params: Promi
   if (!certificado) redirect("/certificado");
   const c = certificado as Certificado;
 
-  const [{ data: perfil }, { data: compras }, { data: mensagem }, { data: peregrinacao }, { data: cortesia }] =
-    await Promise.all([
+  const [
+    { data: perfil },
+    { data: compras },
+    { data: mensagem },
+    { data: peregrinacao },
+    { data: cortesia },
+    { data: papsAtivos },
+    { data: papsPre },
+    { data: agradecimentos },
+  ] = await Promise.all([
       supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
       supabase
         .from("compras_romaria_plus")
@@ -47,7 +56,21 @@ export default async function CertificadoDetalhePage({ params }: { params: Promi
         .eq("user_id", user.id)
         .eq("tipo", "cortesia")
         .maybeSingle(),
+      // Rodada 65 — opções para agradecer a um PAP e os agradecimentos já enviados.
+      supabase.from("pontos_apoio_publico").select("id, nome, cidade").eq("status_aprovacao", "aprovado").limit(1000),
+      supabase.from("paps_pre_cadastro_visiveis").select("id, nome, cidade").limit(1000),
+      supabase
+        .from("agradecimentos_pap")
+        .select("id, pap_nome, mensagem, ativo")
+        .eq("certificado_id", c.id)
+        .order("criado_em", { ascending: false }),
     ]);
+  type PapResumo = { id: string; nome: string | null; cidade: string | null };
+  const rotuloPap = (p: PapResumo) => (p.cidade ? `${p.nome} (${p.cidade})` : (p.nome ?? "PAP")).slice(0, 120);
+  const opcoesPap: OpcaoPap[] = [
+    ...((papsAtivos ?? []) as PapResumo[]).filter((p) => p.nome).map((p) => ({ chave: `pap:${p.id}`, papId: p.id, nome: rotuloPap(p) })),
+    ...((papsPre ?? []) as PapResumo[]).filter((p) => p.nome).map((p) => ({ chave: `pre:${p.id}`, papId: null, nome: rotuloPap(p) })),
+  ].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   const arteGratis: "disponivel" | "usada_aqui" | "indisponivel" = !cortesia
     ? "disponivel"
     : cortesia.certificado_id === c.id
@@ -111,6 +134,13 @@ export default async function CertificadoDetalhePage({ params }: { params: Promi
         nome={c.nome_peregrino.trim().split(/\s+/)[0]}
         cidade={comOrigem.origem}
         mensagemInicial={(mensagem as MensagemConquista | null) ?? null}
+      />
+
+      <AgradecimentoPapForm
+        certificadoId={c.id}
+        userId={user.id}
+        opcoes={opcoesPap}
+        enviadosIniciais={(agradecimentos ?? []) as AgradecimentoEnviado[]}
       />
     </div>
   );

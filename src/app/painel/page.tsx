@@ -11,6 +11,7 @@ import {
   Sparkles,
   Plus,
   Users,
+  Medal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
@@ -18,6 +19,7 @@ import RomariaPlusComprarExtra from "@/components/RomariaPlusComprarExtra";
 import BotaoArteGratis from "@/components/BotaoArteGratis";
 import OtimizarMinhasFotos from "@/components/OtimizarMinhasFotos";
 import { ROMARIA_PLUS_VALOR_CENTAVOS } from "@/lib/constants";
+import { nivelPeregrino } from "@/lib/conquistas";
 import type { CompraRomariaPlus, Profile, RomariaPlusFoto } from "@/types/database";
 
 export const metadata = {
@@ -278,6 +280,14 @@ export default async function PainelPage() {
           }
           Icone={Award}
           cor={CREME}
+        />
+        {/* Rodada 65 — nível e medalhas. */}
+        <Modulo
+          href="/conquistas"
+          titulo="Minhas conquistas"
+          descricao={`${nivelPeregrino(qtdCertificados).nome} · medalhas`}
+          Icone={Medal}
+          cor={AZUL}
         />
         {ehGerente && (
           <Modulo href="/gerente-pap" titulo="Meu PAP" descricao="Seu Ponto de Apoio ao Peregrino" Icone={Tent} cor={AZUL} />

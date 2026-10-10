@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
+import MuralCarrossel from "@/components/MuralCarrossel";
+import { itensAgradecimentosPap, type AgradecimentoPapPublico } from "@/lib/mural";
 import {
   Tent,
   Phone,
@@ -52,6 +54,18 @@ export default async function PapPublicoPage({ params }: { params: Promise<{ id:
   }
 
   const p = ponto as PontoApoio;
+
+  // Rodada 65 — agradecimentos deixados por quem concluiu a peregrinação.
+  const { data: agradecimentos } = await supabase
+    .from("agradecimentos_pap_publico")
+    .select("*")
+    .eq("pap_id", p.id)
+    .order("criado_em", { ascending: false })
+    .limit(30);
+  const itensAgradecimento = itensAgradecimentosPap((agradecimentos ?? []) as AgradecimentoPapPublico[]).map((i) => ({
+    ...i,
+    rotulo: "Agradecimento de peregrino",
+  }));
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
@@ -146,6 +160,13 @@ export default async function PapPublicoPage({ params }: { params: Promise<{ id:
           )}
         </div>
       )}
+
+      <MuralCarrossel
+        titulo={`Peregrinos agradecem (${itensAgradecimento.length})`}
+        itens={itensAgradecimento}
+        verTodosHref="/mural#paps"
+        variante="pap"
+      />
 
       <Link href="/mapa" className="btn-secondary text-center">
         Ver todos os pontos de apoio no mapa

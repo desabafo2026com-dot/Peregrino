@@ -8,6 +8,8 @@ import BotaoInstalarApp from "@/components/BotaoInstalarApp";
 import DoacaoCard from "@/components/DoacaoCard";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
 import MensagensConquistaCarrossel from "@/components/MensagensConquistaCarrossel";
+import MuralCarrossel from "@/components/MuralCarrossel";
+import { itensAgradecimentosPap, itensIntencoes, type AgradecimentoPapPublico, type IntencaoMural } from "@/lib/mural";
 import type { RomariaGrupo, MensagemConquista } from "@/types/database";
 
 // Uma romaria em grupo aparece na home enquanto ainda não tiver passado do
@@ -62,6 +64,15 @@ export default async function Home() {
     } | null;
   };
   const numero = (n: number) => Number(n ?? 0).toLocaleString("pt-BR");
+
+  // Rodada 65 — mural de pedidos/agradecimentos e agradecimentos aos PAPs
+  // (sem as Migrations 55, as consultas falham e os carrosséis só não aparecem).
+  const [{ data: muralData }, { data: agradecimentosData }] = await Promise.all([
+    supabase.from("mural_intencoes").select("*").order("desde", { ascending: false }).limit(40),
+    supabase.from("agradecimentos_pap_publico").select("*").order("criado_em", { ascending: false }).limit(40),
+  ]);
+  const itensMural = itensIntencoes((muralData ?? []) as IntencaoMural[]);
+  const itensPap = itensAgradecimentosPap((agradecimentosData ?? []) as AgradecimentoPapPublico[]);
 
   // Romarias em grupo já aprovadas pela administração, ordenadas da data de
   // início mais próxima para a mais distante — RLS já garante que só vêm
@@ -251,7 +262,12 @@ export default async function Home() {
         </section>
       )}
 
+      {/* Rodada 65 — agradecimentos aos PAPs, logo abaixo dos números de PAP. */}
+      <MuralCarrossel titulo="Agradecimentos aos PAPs" itens={itensPap} verTodosHref="/mural#paps" variante="pap" />
+
       {mensagensConquista.length > 0 && <MensagensConquistaCarrossel mensagens={mensagensConquista} />}
+
+      <MuralCarrossel titulo="Mural de pedidos e agradecimentos" itens={itensMural} verTodosHref="/mural" />
 
       <Link
         href={!user ? "/cadastro" : isGerente ? "/gerente-pap" : "/peregrinacao"}

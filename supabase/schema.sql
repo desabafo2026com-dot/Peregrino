@@ -5675,3 +5675,237 @@ revoke all on function public.estatisticas_publicas_v2() from public;
 grant execute on function public.estatisticas_publicas_v2() to anon, authenticated;
 
 -- FIM DA MIGRATION 54
+
+
+-- =====================================================================
+-- Migration 55 (Rodada 65)
+-- =====================================================================
+-- =====================================================================
+-- MIGRATION 55 — Rodada 65: mural de pedidos e agradecimentos,
+-- agradecimentos aos PAPs e nível do peregrino na credencial
+-- ---------------------------------------------------------------------
+-- 1) intencoes_peregrinacao: pedido ou agradecimento (opcional) escrito no
+--    planejamento. Só aparece no mural público se a pessoa autorizar e
+--    depois que a peregrinação começa. View pública mural_intencoes.
+-- 2) agradecimentos_pap: mensagem de agradecimento a um PAP (ou a todos),
+--    só para quem concluiu (tem certificado). View pública
+--    agradecimentos_pap_publico.
+-- 3) cracha_publico passa a informar quantas peregrinações a pessoa
+--    concluiu no app (para o nível: Iniciante, Intermediário, Expert…).
+-- Nome (primeiro nome) e cidade vêm do perfil, gravados pelo banco.
+-- A administração pode ocultar qualquer mensagem (ativo = false).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 54.
+-- =====================================================================
+
+-- Primeiro nome e cidade do perfil (usado pelos dois murais).
+create or replace function public.mural_preencher_autor()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_nome text;
+  v_cidade text;
+begin
+  select split_part(trim(coalesce(nome_completo, '')), ' ', 1), cidade
+    into v_nome, v_cidade
+  from public.profiles where id = new.user_id;
+  new.nome := coalesce(nullif(v_nome, ''), 'Peregrino');
+  new.cidade := v_cidade;
+  return new;
+end;
+$$;
+
+-- 1) Pedidos e agradecimentos ------------------------------------------
+create table if not exists public.intencoes_peregrinacao (
+  id uuid primary key default gen_random_uuid(),
+  peregrinacao_id uuid not null unique references public.peregrinacoes(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  tipo text not null default 'pedido' check (tipo in ('pedido', 'agradecimento')),
+  texto text not null check (char_length(trim(texto)) between 1 and 280),
+  publico boolean not null default false,
+  nome text not null default 'Peregrino',
+  cidade text,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+comment on table public.intencoes_peregrinacao is 'Rodada 65 — pedido ou agradecimento (intenção) da peregrinação, opcional. Vai para o mural público só com autorização (publico) e a partir do início da caminhada.';
+
+alter table public.intencoes_peregrinacao enable row level security;
+
+drop policy if exists intencoes_select_own_ou_admin on public.intencoes_peregrinacao;
+create policy intencoes_select_own_ou_admin on public.intencoes_peregrinacao for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists intencoes_insert_own on public.intencoes_peregrinacao;
+create policy intencoes_insert_own on public.intencoes_peregrinacao for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (select 1 from public.peregrinacoes p where p.id = peregrinacao_id and p.user_id = auth.uid())
+  );
+
+drop policy if exists intencoes_update_own_ou_admin on public.intencoes_peregrinacao;
+create policy intencoes_update_own_ou_admin on public.intencoes_peregrinacao for update to authenticated
+  using (user_id = auth.uid() or public.is_admin())
+  with check (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists intencoes_delete_own on public.intencoes_peregrinacao;
+create policy intencoes_delete_own on public.intencoes_peregrinacao for delete to authenticated
+  using (user_id = auth.uid());
+
+drop trigger if exists intencoes_preencher_autor on public.intencoes_peregrinacao;
+create trigger intencoes_preencher_autor
+  before insert on public.intencoes_peregrinacao
+  for each row execute function public.mural_preencher_autor();
+
+-- O dono não reativa o que a administração ocultou.
+create or replace function public.mural_proteger_ativo()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    new.ativo := old.ativo;
+    new.nome := old.nome;
+    new.cidade := old.cidade;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists intencoes_proteger_ativo on public.intencoes_peregrinacao;
+create trigger intencoes_proteger_ativo
+  before update on public.intencoes_peregrinacao
+  for each row execute function public.mural_proteger_ativo();
+
+create or replace view public.mural_intencoes as
+select
+  i.id,
+  i.tipo,
+  i.texto,
+  i.nome,
+  i.cidade,
+  coalesce(p.data_inicio, i.criado_em) as desde
+from public.intencoes_peregrinacao i
+join public.peregrinacoes p on p.id = i.peregrinacao_id
+where i.publico and i.ativo and p.status in ('em_andamento', 'concluida');
+
+comment on view public.mural_intencoes is 'Rodada 65 — mural público de pedidos e agradecimentos (autorizados, de peregrinações já iniciadas).';
+grant select on public.mural_intencoes to anon, authenticated;
+
+-- 2) Agradecimentos aos PAPs -------------------------------------------
+create table if not exists public.agradecimentos_pap (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  certificado_id uuid not null references public.certificados(id) on delete cascade,
+  pap_id uuid references public.pontos_apoio(id) on delete set null,
+  pap_nome text not null check (char_length(trim(pap_nome)) between 1 and 120),
+  mensagem text not null check (char_length(trim(mensagem)) between 1 and 220),
+  nome text not null default 'Peregrino',
+  cidade text,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.agradecimentos_pap is 'Rodada 65 — agradecimento de quem concluiu a peregrinação a um PAP (pap_id) ou a todos os PAPs do caminho (pap_id nulo). pap_nome guarda o nome mostrado.';
+
+create unique index if not exists uq_agradecimentos_pap_cert_pap
+  on public.agradecimentos_pap (certificado_id, coalesce(pap_id, '00000000-0000-0000-0000-000000000000'::uuid), pap_nome);
+create index if not exists idx_agradecimentos_pap_pap on public.agradecimentos_pap(pap_id);
+
+alter table public.agradecimentos_pap enable row level security;
+
+drop policy if exists agradecimentos_select_own_ou_admin on public.agradecimentos_pap;
+create policy agradecimentos_select_own_ou_admin on public.agradecimentos_pap for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists agradecimentos_insert_own on public.agradecimentos_pap;
+create policy agradecimentos_insert_own on public.agradecimentos_pap for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (select 1 from public.certificados c where c.id = certificado_id and c.user_id = auth.uid())
+  );
+
+drop policy if exists agradecimentos_update_admin on public.agradecimentos_pap;
+create policy agradecimentos_update_admin on public.agradecimentos_pap for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists agradecimentos_delete_own on public.agradecimentos_pap;
+create policy agradecimentos_delete_own on public.agradecimentos_pap for delete to authenticated
+  using (user_id = auth.uid());
+
+drop trigger if exists agradecimentos_preencher_autor on public.agradecimentos_pap;
+create trigger agradecimentos_preencher_autor
+  before insert on public.agradecimentos_pap
+  for each row execute function public.mural_preencher_autor();
+
+create or replace view public.agradecimentos_pap_publico as
+select id, pap_id, pap_nome, mensagem, nome, cidade, criado_em
+from public.agradecimentos_pap
+where ativo;
+
+comment on view public.agradecimentos_pap_publico is 'Rodada 65 — agradecimentos aos PAPs visíveis ao público.';
+grant select on public.agradecimentos_pap_publico to anon, authenticated;
+
+-- 3) Nível na credencial ------------------------------------------------
+create or replace function public.cracha_publico(p_codigo text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_c public.crachas_peregrino;
+  v_p public.profiles;
+  v_m jsonb;
+  v_nome text;
+  v_em_caminhada boolean;
+  v_peregrinacoes int;
+begin
+  select * into v_c from public.crachas_peregrino where codigo = upper(trim(p_codigo));
+  if not found then
+    return null;
+  end if;
+  select * into v_p from public.profiles where id = v_c.user_id;
+  v_m := coalesce(v_c.dados -> 'mostrar', '{}'::jsonb);
+
+  v_nome := coalesce(v_p.nome_completo, '');
+  if coalesce(v_c.dados ->> 'nome_exibicao', 'completo') = 'primeiro' then
+    v_nome := split_part(trim(v_nome), ' ', 1);
+  end if;
+
+  select exists (
+    select 1 from public.peregrinacoes pe
+    where pe.user_id = v_c.user_id and pe.status = 'em_andamento'
+  ) into v_em_caminhada;
+
+  select count(*) into v_peregrinacoes from public.certificados where user_id = v_c.user_id;
+
+  return jsonb_strip_nulls(jsonb_build_object(
+    'codigo', v_c.codigo,
+    'nome', v_nome,
+    'em_caminhada', v_em_caminhada,
+    'peregrinacoes', case when coalesce((v_m ->> 'nivel')::boolean, true) then v_peregrinacoes end,
+    'foto', case when (v_m ->> 'foto')::boolean then v_p.avatar_url end,
+    'cidade', case when (v_m ->> 'cidade')::boolean then concat_ws(' - ', v_p.cidade, v_p.uf) end,
+    'telefone', case when (v_m ->> 'telefone')::boolean then v_p.telefone end,
+    'grupo', case when (v_m ->> 'grupo')::boolean then nullif(v_c.dados ->> 'grupo', '') end,
+    'sangue', case when (v_m ->> 'sangue')::boolean then nullif(v_c.dados ->> 'sangue', '') end,
+    'saude', case when (v_m ->> 'saude')::boolean then nullif(v_c.dados ->> 'saude', '') end,
+    'emergencia_nome', case when (v_m ->> 'emergencia')::boolean then nullif(v_c.dados ->> 'emergencia_nome', '') end,
+    'emergencia_telefone', case when (v_m ->> 'emergencia')::boolean then nullif(v_c.dados ->> 'emergencia_telefone', '') end
+  ));
+end;
+$$;
+
+grant execute on function public.cracha_publico(text) to anon, authenticated;
+
+-- FIM DA MIGRATION 55

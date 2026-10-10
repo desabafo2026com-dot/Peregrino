@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ShieldCheck, ShieldX, Phone, HeartPulse, MapPin, Users, Footprints } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { nivelPeregrino } from "@/lib/conquistas";
 import type { CrachaPublico } from "@/types/database";
 
 export const metadata = {
@@ -46,6 +47,14 @@ export default async function CredencialPublicaPage({ params }: { params: Promis
           <img src={c.foto} alt="" className="mt-2 h-28 w-28 rounded-full object-cover ring-2 ring-amber-600" />
         )}
         <h1 className="text-2xl font-extrabold">{c.nome}</h1>
+        {c.peregrinacoes != null && (
+          <span
+            className="rounded-full px-3 py-1 text-xs font-extrabold tracking-wide text-white uppercase"
+            style={{ background: nivelPeregrino(c.peregrinacoes).cor }}
+          >
+            {nivelPeregrino(c.peregrinacoes).nome} · {c.peregrinacoes} peregrinaç{c.peregrinacoes === 1 ? "ão" : "ões"}
+          </span>
+        )}
         {c.cidade && (
           <p className="flex items-center gap-1 text-sm text-neutral-600 dark:text-neutral-300">
             <MapPin size={14} /> {c.cidade}

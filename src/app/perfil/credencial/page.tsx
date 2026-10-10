@@ -34,7 +34,10 @@ export default async function CredencialPage() {
     );
   }
 
-  const { data: cracha, error } = await supabase.rpc("meu_cracha");
+  const [{ data: cracha, error }, { count: peregrinacoes }] = await Promise.all([
+    supabase.rpc("meu_cracha"),
+    supabase.from("certificados").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -49,7 +52,11 @@ export default async function CredencialPage() {
           A credencial ainda não está disponível. Tente de novo mais tarde.
         </p>
       ) : (
-        <CredencialEditor cracha={cracha as CrachaPeregrino} perfil={perfil as Profile} />
+        <CredencialEditor
+          cracha={cracha as CrachaPeregrino}
+          perfil={perfil as Profile}
+          peregrinacoes={peregrinacoes ?? 0}
+        />
       )}
     </div>
   );

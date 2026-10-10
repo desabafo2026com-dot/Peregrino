@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { Printer, Download, Check, ShieldCheck, Phone, HeartPulse, Users, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CrachaPeregrino, DadosCracha, Profile } from "@/types/database";
+import { nivelPeregrino } from "@/lib/conquistas";
 
 const TIPOS_SANGUINEOS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -18,7 +19,16 @@ function juntar(dados: DadosCracha | null | undefined): DadosCracha {
   return { ...PADRAO, ...(dados ?? {}), mostrar: { ...PADRAO.mostrar, ...(dados?.mostrar ?? {}) } };
 }
 
-export default function CredencialEditor({ cracha, perfil }: { cracha: CrachaPeregrino; perfil: Profile }) {
+export default function CredencialEditor({
+  cracha,
+  perfil,
+  peregrinacoes = 0,
+}: {
+  cracha: CrachaPeregrino;
+  perfil: Profile;
+  peregrinacoes?: number;
+}) {
+  const nivel = nivelPeregrino(peregrinacoes);
   const [dados, setDados] = useState<DadosCracha>(() => juntar(cracha.dados));
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<"salvo" | "salvando" | "erro" | null>(null);
@@ -139,6 +149,17 @@ export default function CredencialEditor({ cracha, perfil }: { cracha: CrachaPer
               >
                 {nome}
               </p>
+              {m.nivel !== false && (
+                <p className="mt-[1cqw]" style={{ textAlign: m.foto && temFoto ? "left" : "center" }}>
+                  <span
+                    className="inline-block rounded-full px-[2.4cqw] py-[0.6cqw] font-extrabold tracking-wide whitespace-nowrap text-white uppercase"
+                    style={{ background: nivel.cor, fontSize: "2.9cqw" }}
+                  >
+                    {nivel.nome}
+                    {peregrinacoes > 0 ? ` · ${peregrinacoes}` : ""}
+                  </span>
+                </p>
+              )}
               {m.cidade && cidade && (
                 <p className="mt-[1cqw] font-medium" style={{ fontSize: "3.6cqw", textAlign: m.foto && temFoto ? "left" : "center" }}>
                   <MapPin size={12} className="mr-1 inline" style={{ width: "3.6cqw", height: "3.6cqw" }} />
@@ -268,6 +289,10 @@ export default function CredencialEditor({ cracha, perfil }: { cracha: CrachaPer
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={!!m.foto} disabled={!temFoto} onChange={(e) => marcar("foto", e.target.checked)} />
             Minha foto {!temFoto && <span className="text-xs text-neutral-400">(adicione uma foto em Meu perfil)</span>}
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={m.nivel !== false} onChange={(e) => marcar("nivel", e.target.checked)} />
+            Meu nível de peregrino <span className="text-xs text-neutral-400">({nivel.nome})</span>
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={!!m.cidade} onChange={(e) => marcar("cidade", e.target.checked)} />

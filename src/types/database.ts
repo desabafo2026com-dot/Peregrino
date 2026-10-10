@@ -548,6 +548,8 @@ export interface DadosCracha {
     sangue?: boolean;
     saude?: boolean;
     emergencia?: boolean;
+    // Rodada 65 — nível do peregrino (padrão: mostra).
+    nivel?: boolean;
   };
   grupo?: string;
   sangue?: string;
@@ -570,6 +572,8 @@ export interface CrachaPublico {
   codigo: string;
   nome: string;
   em_caminhada: boolean;
+  // Rodada 65 — peregrinações concluídas (nível), se a pessoa deixou mostrar.
+  peregrinacoes?: number;
   foto?: string;
   cidade?: string;
   telefone?: string;
