@@ -7,6 +7,7 @@ import { Printer, Download, Check, ShieldCheck, Phone, HeartPulse, Users, MapPin
 import { createClient } from "@/lib/supabase/client";
 import type { CrachaPeregrino, DadosCracha, Profile } from "@/types/database";
 import { nivelPeregrino } from "@/lib/conquistas";
+import PeregrinacoesForaAppForm from "@/components/PeregrinacoesForaAppForm";
 
 const TIPOS_SANGUINEOS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -28,7 +29,10 @@ export default function CredencialEditor({
   perfil: Profile;
   peregrinacoes?: number;
 }) {
-  const nivel = nivelPeregrino(peregrinacoes);
+  // Rodada 66 — nível = peregrinações no app + as informadas fora do app.
+  const [foraApp, setForaApp] = useState<number | null>(perfil.peregrinacoes_fora_app ?? null);
+  const total = peregrinacoes + (foraApp ?? 0);
+  const nivel = nivelPeregrino(total);
   const [dados, setDados] = useState<DadosCracha>(() => juntar(cracha.dados));
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<"salvo" | "salvando" | "erro" | null>(null);
@@ -156,7 +160,7 @@ export default function CredencialEditor({
                     style={{ background: nivel.cor, fontSize: "2.9cqw" }}
                   >
                     {nivel.nome}
-                    {peregrinacoes > 0 ? ` · ${peregrinacoes}` : ""}
+                    {total > 0 ? ` · ${total}` : ""}
                   </span>
                 </p>
               )}
@@ -294,6 +298,7 @@ export default function CredencialEditor({
             <input type="checkbox" checked={m.nivel !== false} onChange={(e) => marcar("nivel", e.target.checked)} />
             Meu nível de peregrino <span className="text-xs text-neutral-400">({nivel.nome})</span>
           </label>
+          {m.nivel !== false && <PeregrinacoesForaAppForm valorInicial={foraApp} onDeclarado={setForaApp} />}
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={!!m.cidade} onChange={(e) => marcar("cidade", e.target.checked)} />
             Minha cidade {cidade && <span className="text-xs text-neutral-400">({cidade})</span>}

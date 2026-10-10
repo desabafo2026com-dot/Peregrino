@@ -38,7 +38,8 @@ export function nivelPeregrino(qtd: number): NivelPeregrino {
 export const TODOS_NIVEIS = NIVEIS;
 
 export interface DadosConquistas {
-  peregrinacoes: number; // concluídas com certificado
+  peregrinacoes: number; // concluídas com certificado (no app)
+  foraApp: number | null; // Rodada 66 — informadas pelo peregrino (somam no nível e nas medalhas de quantidade)
   kmTotal: number;
   madrugador: boolean; // começou alguma antes das 6h
   bicicleta: boolean;
@@ -66,11 +67,12 @@ export function calcularMedalhas(d: DadosConquistas): Medalha[] {
     descricao,
     conquistada,
   });
+  const total = d.peregrinacoes + (d.foraApp ?? 0);
   return [
-    m("primeiro-passo", "👣", "Primeiro passo", "Concluir a primeira peregrinação no app.", d.peregrinacoes >= 1),
-    m("romeiro-fiel", "🙏", "Romeiro fiel", "Concluir 3 peregrinações.", d.peregrinacoes >= 3),
-    m("devoto", "🌹", "Devoto de Aparecida", "Concluir 5 peregrinações.", d.peregrinacoes >= 5),
-    m("mestre", "👑", "Mestre do caminho", "Concluir 10 peregrinações.", d.peregrinacoes >= 10),
+    m("primeiro-passo", "👣", "Primeiro passo", "Concluir a primeira peregrinação.", total >= 1),
+    m("romeiro-fiel", "🙏", "Romeiro fiel", "Concluir 3 peregrinações.", total >= 3),
+    m("devoto", "🌹", "Devoto de Aparecida", "Concluir 5 peregrinações.", total >= 5),
+    m("mestre", "👑", "Mestre do caminho", "Concluir 10 peregrinações.", total >= 10),
     m("km50", "🥾", "50 km de fé", "Somar 50 km nas peregrinações.", d.kmTotal >= 50),
     m("km100", "💯", "Centenário", "Somar 100 km nas peregrinações.", d.kmTotal >= 100),
     m("km500", "🦶", "Pés de ferro", "Somar 500 km nas peregrinações.", d.kmTotal >= 500),

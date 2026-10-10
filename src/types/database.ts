@@ -55,6 +55,9 @@ export interface Profile {
   termos_aceitos_em: string | null;
   criado_em: string;
   atualizado_em: string;
+  // Rodada 66 — peregrinações fora do app (informadas uma vez, Migration 56).
+  peregrinacoes_fora_app?: number | null;
+  peregrinacoes_fora_app_em?: string | null;
 }
 
 export interface GerentePap {

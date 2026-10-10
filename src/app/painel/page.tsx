@@ -285,7 +285,7 @@ export default async function PainelPage() {
         <Modulo
           href="/conquistas"
           titulo="Minhas conquistas"
-          descricao={`${nivelPeregrino(qtdCertificados).nome} · medalhas`}
+          descricao={`${nivelPeregrino(qtdCertificados + (perfil.peregrinacoes_fora_app ?? 0)).nome} · medalhas`}
           Icone={Medal}
           cor={AZUL}
         />

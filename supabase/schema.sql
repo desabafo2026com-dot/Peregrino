@@ -5909,3 +5909,151 @@ $$;
 grant execute on function public.cracha_publico(text) to anon, authenticated;
 
 -- FIM DA MIGRATION 55
+
+
+-- =====================================================================
+-- Migration 56 (Rodada 66)
+-- =====================================================================
+-- =====================================================================
+-- Migration 56 (Rodada 66) — peregrinações feitas FORA do app
+-- 1) profiles.peregrinacoes_fora_app: quantas vezes a pessoa já fez a
+--    peregrinação sem registrar no app (informado por ela, uma única vez).
+--    Depois de informado, o próprio usuário NÃO consegue mais alterar
+--    (só a administração, para corrigir erro de digitação).
+-- 2) declarar_peregrinacoes_fora_app(p_qtd): grava o número (0 a 99).
+-- 3) cracha_publico passa a devolver o total (app + informadas).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 55.
+-- =====================================================================
+
+alter table public.profiles add column if not exists peregrinacoes_fora_app smallint;
+alter table public.profiles add column if not exists peregrinacoes_fora_app_em timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'profiles_peregrinacoes_fora_app_faixa'
+  ) then
+    alter table public.profiles
+      add constraint profiles_peregrinacoes_fora_app_faixa
+      check (peregrinacoes_fora_app is null or peregrinacoes_fora_app between 0 and 99);
+  end if;
+end $$;
+
+comment on column public.profiles.peregrinacoes_fora_app is 'Rodada 66 — peregrinações feitas fora do app, informadas pelo próprio peregrino uma única vez (não pode alterar depois; só admin corrige).';
+
+-- Trava: depois de informado, só a administração muda.
+create or replace function public.proteger_peregrinacoes_fora_app()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    if tg_op = 'UPDATE' and old.peregrinacoes_fora_app is not null then
+      new.peregrinacoes_fora_app := old.peregrinacoes_fora_app;
+      new.peregrinacoes_fora_app_em := old.peregrinacoes_fora_app_em;
+    elsif new.peregrinacoes_fora_app is not null
+      and (tg_op = 'INSERT' or old.peregrinacoes_fora_app is null) then
+      new.peregrinacoes_fora_app_em := now();
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_proteger_peregrinacoes_fora_app on public.profiles;
+create trigger profiles_proteger_peregrinacoes_fora_app
+  before insert or update on public.profiles
+  for each row execute function public.proteger_peregrinacoes_fora_app();
+
+create or replace function public.declarar_peregrinacoes_fora_app(p_qtd int)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_atual smallint;
+begin
+  if auth.uid() is null then
+    raise exception 'Entre na sua conta.';
+  end if;
+  if p_qtd is null or p_qtd < 0 or p_qtd > 99 then
+    raise exception 'Informe um número de 0 a 99.';
+  end if;
+  select peregrinacoes_fora_app into v_atual from public.profiles where id = auth.uid();
+  if not found then
+    raise exception 'Complete seu perfil primeiro.';
+  end if;
+  if v_atual is not null then
+    raise exception 'Você já informou suas peregrinações fora do app (%). Esse número não pode ser alterado.', v_atual;
+  end if;
+  update public.profiles
+     set peregrinacoes_fora_app = p_qtd, peregrinacoes_fora_app_em = now()
+   where id = auth.uid();
+  return p_qtd;
+end;
+$$;
+
+revoke all on function public.declarar_peregrinacoes_fora_app(int) from public;
+grant execute on function public.declarar_peregrinacoes_fora_app(int) to authenticated;
+
+-- Crachá público: total (app + informadas).
+create or replace function public.cracha_publico(p_codigo text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_c public.crachas_peregrino;
+  v_p public.profiles;
+  v_m jsonb;
+  v_nome text;
+  v_em_caminhada boolean;
+  v_peregrinacoes int;
+  v_mostra_nivel boolean;
+begin
+  select * into v_c from public.crachas_peregrino where codigo = upper(trim(p_codigo));
+  if not found then
+    return null;
+  end if;
+  select * into v_p from public.profiles where id = v_c.user_id;
+  v_m := coalesce(v_c.dados -> 'mostrar', '{}'::jsonb);
+  v_mostra_nivel := coalesce((v_m ->> 'nivel')::boolean, true);
+
+  v_nome := coalesce(v_p.nome_completo, '');
+  if coalesce(v_c.dados ->> 'nome_exibicao', 'completo') = 'primeiro' then
+    v_nome := split_part(trim(v_nome), ' ', 1);
+  end if;
+
+  select exists (
+    select 1 from public.peregrinacoes pe
+    where pe.user_id = v_c.user_id and pe.status = 'em_andamento'
+  ) into v_em_caminhada;
+
+  select count(*) into v_peregrinacoes from public.certificados where user_id = v_c.user_id;
+
+  return jsonb_strip_nulls(jsonb_build_object(
+    'codigo', v_c.codigo,
+    'nome', v_nome,
+    'em_caminhada', v_em_caminhada,
+    'peregrinacoes', case when v_mostra_nivel then v_peregrinacoes + coalesce(v_p.peregrinacoes_fora_app, 0) end,
+    'foto', case when (v_m ->> 'foto')::boolean then v_p.avatar_url end,
+    'cidade', case when (v_m ->> 'cidade')::boolean then concat_ws(' - ', v_p.cidade, v_p.uf) end,
+    'telefone', case when (v_m ->> 'telefone')::boolean then v_p.telefone end,
+    'grupo', case when (v_m ->> 'grupo')::boolean then nullif(v_c.dados ->> 'grupo', '') end,
+    'sangue', case when (v_m ->> 'sangue')::boolean then nullif(v_c.dados ->> 'sangue', '') end,
+    'saude', case when (v_m ->> 'saude')::boolean then nullif(v_c.dados ->> 'saude', '') end,
+    'emergencia_nome', case when (v_m ->> 'emergencia')::boolean then nullif(v_c.dados ->> 'emergencia_nome', '') end,
+    'emergencia_telefone', case when (v_m ->> 'emergencia')::boolean then nullif(v_c.dados ->> 'emergencia_telefone', '') end
+  ));
+end;
+$$;
+
+grant execute on function public.cracha_publico(text) to anon, authenticated;
+
+-- FIM DA MIGRATION 56

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Award, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -18,7 +19,9 @@ export default async function ConquistasPage() {
   if (!user) redirect("/login?redirect=/conquistas");
 
   const dados = await carregarDadosConquistas(supabase, user.id);
-  const nivel = nivelPeregrino(dados.peregrinacoes);
+  // Rodada 66 — nível e medalhas de quantidade somam as feitas fora do app.
+  const total = dados.peregrinacoes + (dados.foraApp ?? 0);
+  const nivel = nivelPeregrino(total);
   const medalhas = calcularMedalhas(dados);
   const ganhas = medalhas.filter((m) => m.conquistada).length;
 
@@ -37,9 +40,18 @@ export default async function ConquistasPage() {
           {nivel.nome}
         </span>
         <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "center" }}>
-          {dados.peregrinacoes} peregrinaç{dados.peregrinacoes === 1 ? "ão concluída" : "ões concluídas"} no app
+          {total} peregrinaç{total === 1 ? "ão concluída" : "ões concluídas"}
           {dados.kmTotal > 0 ? ` · ≈ ${Math.round(dados.kmTotal)} km` : ""}
         </p>
+        {dados.foraApp == null && (
+          <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+            Já fez peregrinações sem o app? Informe em{" "}
+            <Link href="/perfil/credencial" className="font-semibold text-amber-700 underline dark:text-amber-500">
+              Minha credencial
+            </Link>
+            .
+          </p>
+        )}
         {nivel.proximo && (
           <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
             Falta{nivel.proximo.faltam > 1 ? "m" : ""} {nivel.proximo.faltam} peregrinaç

@@ -4,7 +4,7 @@ import type { DadosConquistas } from "@/lib/conquistas";
 // Rodada 65 — junta, do próprio usuário, os dados usados pelo nível e pelas
 // medalhas (ver lib/conquistas.ts). Consultas leves e em paralelo.
 export async function carregarDadosConquistas(supabase: SupabaseClient, userId: string): Promise<DadosConquistas> {
-  const [certs, peregs, avisos, compras, mensagem, intencao, agradecimento] = await Promise.all([
+  const [certs, peregs, avisos, compras, mensagem, intencao, agradecimento, perfil] = await Promise.all([
     supabase.from("certificados").select("distancia_km, total_checkins, meio_transporte").eq("user_id", userId),
     supabase.from("peregrinacoes").select("data_inicio").eq("user_id", userId).not("data_inicio", "is", null),
     supabase.from("riscos_informados").select("id", { count: "exact", head: true }).eq("user_id", userId),
@@ -12,6 +12,7 @@ export async function carregarDadosConquistas(supabase: SupabaseClient, userId: 
     supabase.from("mensagens_conquista").select("id", { count: "exact", head: true }).eq("user_id", userId),
     supabase.from("intencoes_peregrinacao").select("id", { count: "exact", head: true }).eq("user_id", userId),
     supabase.from("agradecimentos_pap").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("profiles").select("peregrinacoes_fora_app").eq("id", userId).maybeSingle(),
   ]);
 
   const lista = (certs.data ?? []) as { distancia_km: number | null; total_checkins: number | null; meio_transporte: string | null }[];
@@ -31,6 +32,7 @@ export async function carregarDadosConquistas(supabase: SupabaseClient, userId: 
 
   return {
     peregrinacoes: lista.length,
+    foraApp: (perfil.data?.peregrinacoes_fora_app as number | null | undefined) ?? null,
     kmTotal: lista.reduce((s, c) => s + Number(c.distancia_km ?? 0), 0),
     madrugador: ((peregs.data ?? []) as { data_inicio: string }[]).some((p) => horaBrasilia(p.data_inicio) < 6),
     bicicleta: lista.some((c) => c.meio_transporte === "bicicleta"),
