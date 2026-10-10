@@ -9,8 +9,9 @@ import DoacaoCard from "@/components/DoacaoCard";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
 import MensagensConquistaCarrossel from "@/components/MensagensConquistaCarrossel";
 import MuralCarrossel from "@/components/MuralCarrossel";
-import { itensAgradecimentosPap, itensIntencoes, type AgradecimentoPapPublico, type IntencaoMural } from "@/lib/mural";
-import type { RomariaGrupo, MensagemConquista } from "@/types/database";
+import { itensAgradecimentosPap, itensIntencoes } from "@/lib/mural";
+import { carregarHomePublica } from "@/lib/home-publico";
+import type { RomariaGrupo } from "@/types/database";
 
 // Uma romaria em grupo aparece na home enquanto ainda não tiver passado do
 // último dia previsto (data_inicio + previsao_dias - 1) — inclui tanto as
@@ -51,53 +52,26 @@ export default async function Home() {
     }
   }
 
-  // Rodada 63 — contadores da página inicial: acessos ao app (hoje e no
-  // total, Migration 44) e PAPs (ativos hoje e cadastrados no mapa).
-  const { data: stats } = (await supabase
-    .rpc("estatisticas_publicas_v2")
-    .maybeSingle()) as {
-    data: {
-      acessos_hoje: number;
-      acessos_total: number;
-      paps_ativos: number;
-      paps_total: number;
-    } | null;
-  };
+  // Rodada 65b — dados públicos da home em cache de 60 s (ver lib/home-publico.ts).
+  const homePublica = await carregarHomePublica();
+  const stats = homePublica.stats;
   const numero = (n: number) => Number(n ?? 0).toLocaleString("pt-BR");
 
-  // Rodada 65 — mural de pedidos/agradecimentos e agradecimentos aos PAPs
-  // (sem as Migrations 55, as consultas falham e os carrosséis só não aparecem).
-  const [{ data: muralData }, { data: agradecimentosData }] = await Promise.all([
-    supabase.from("mural_intencoes").select("*").order("desde", { ascending: false }).limit(40),
-    supabase.from("agradecimentos_pap_publico").select("*").order("criado_em", { ascending: false }).limit(40),
-  ]);
-  const itensMural = itensIntencoes((muralData ?? []) as IntencaoMural[]);
-  const itensPap = itensAgradecimentosPap((agradecimentosData ?? []) as AgradecimentoPapPublico[]);
+  const itensMural = itensIntencoes(homePublica.mural);
+  const itensPap = itensAgradecimentosPap(homePublica.agradecimentos);
 
   // Romarias em grupo já aprovadas pela administração, ordenadas da data de
   // início mais próxima para a mais distante — RLS já garante que só vêm
   // as aprovadas (romarias_grupo_select_publico), o filtro por data abaixo
   // decide quais ainda valem a pena mostrar (ver romariaAindaAtivaOuFutura).
-  const { data: romariasGrupoData } = await supabase
-    // Rodada 59 — view pública (organizador/telefone só se autorizados).
-    .from("romarias_grupo_publico")
-    .select("*")
-    .eq("status", "aprovado")
-    .order("data_inicio", { ascending: true });
-  const romariasGrupo = ((romariasGrupoData ?? []) as RomariaGrupo[]).filter(romariaAindaAtivaOuFutura);
+  const romariasGrupo = homePublica.romarias.filter(romariaAindaAtivaOuFutura);
 
   // Mensagens públicas de conquista (Rodada 27) — as 30 mais recentes ainda
   // ativas (a administração pode desativar uma mensagem inadequada sem
   // apagar o registro). Sem expirar por tempo: o próprio limite de 30 já
   // garante que a lista se renova sozinha conforme peregrinos vão
   // concluindo e publicando mensagens novas — pedido explícito do usuário.
-  const { data: mensagensConquistaData } = await supabase
-    .from("mensagens_conquista")
-    .select("*")
-    .eq("ativo", true)
-    .order("criado_em", { ascending: false })
-    .limit(30);
-  const mensagensConquista = (mensagensConquistaData ?? []) as MensagemConquista[];
+  const mensagensConquista = homePublica.mensagensConquista;
 
   const cardsAntesCompartilhar = [
     {
