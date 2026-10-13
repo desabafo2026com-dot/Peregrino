@@ -1,11 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Footprints, Hotel, Smartphone, ShieldCheck, Eye, Tent } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Footprints, Hotel, Smartphone, ShieldCheck, Tent, Sparkles } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import SigaNosRedes from "@/components/SigaNosRedes";
 import BotaoInstalarApp from "@/components/BotaoInstalarApp";
 import DoacaoCard from "@/components/DoacaoCard";
+import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
 import IconePeregrinosFila from "@/components/IconePeregrinosFila";
 import MensagensConquistaCarrossel from "@/components/MensagensConquistaCarrossel";
 import MuralCarrossel from "@/components/MuralCarrossel";
@@ -102,12 +103,6 @@ export default async function Home() {
       desc: "São Paulo - Aparecida ou Rio de Janeiro - Aparecida: dicas de segurança e pontos de maior risco em cada rota.",
     },
     {
-      href: "/hospedagem",
-      icon: Hotel,
-      title: "Hotéis e Restaurantes",
-      desc: "Opções de hospedagem e alimentação ao longo da rodovia, com mapa e filtro por tipo.",
-    },
-    {
       // Rodada 27: "Romaria em Grupo" renomeada para "Romaria de
       // Peregrinos" em todo o app, a pedido do usuário — o card da home
       // virou a chamada "Sou organizador de Romaria a pé"; o cadastro em si
@@ -117,6 +112,12 @@ export default async function Home() {
       icon: IconePeregrinosFila,
       title: "Sou organizador de Romaria",
       desc: "Cadastre sua Romaria para que autoridades, Pontos de Apoio e outros peregrinos saibam que seu grupo estará na estrada.",
+    },
+    {
+      href: "/hospedagem",
+      icon: Hotel,
+      title: "Hotéis e Restaurantes",
+      desc: "Opções de hospedagem e alimentação ao longo da rodovia, com mapa e filtro por tipo.",
     },
   ];
 
@@ -164,111 +165,46 @@ export default async function Home() {
         </section>
       )}
 
-      {stats && (
-        // Grid de 2 colunas (5 no celular maior/tablet+, os 4 módulos de
-        // estatística mais o botão de instalar) em vez do flex-wrap
-        // anterior — com um número par de cards, o flex-wrap deixava o
-        // último sozinho numa segunda linha e esticado (flex-1) em várias
-        // larguras de tela intermediárias, ficando desalinhado com os de
-        // cima. Um grid de colunas fixas sempre fecha as linhas por igual.
-        // Rodada 31: o botão "Instalar no telefone" entra bem no meio dos 4
-        // módulos (a pedido do usuário) — no celular (2 colunas) ele ocupa
-        // a linha inteira sozinho, ficando visualmente entre o par de cima
-        // e o par de baixo; a partir do tablet (5 colunas) ele cai
-        // exatamente na coluna central.
-        <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-5">
-          <div className="card flex flex-col items-center justify-center gap-1">
-            <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <Eye size={20} /> {numero(stats.acessos_hoje)}
-            </p>
-            {/* Rodada 24: texto centralizado com style inline, não só a
-                classe text-center herdada da section — a regra global
-                `p { text-align: justify }` (Rodada 13) vence qualquer
-                text-align herdado por cascata assim que o texto quebra em
-                duas linhas (só não vencia uma classe .text-center direto no
-                próprio <p>, como já corrigido em outros lugares desde a
-                Rodada 17). "peregrinações concluídas", o rótulo mais
-                comprido, é o mais propenso a quebrar em telas estreitas de
-                iPhone — por isso o bug só aparecia nesse card. */}
-            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
-              acessos ao app hoje
-            </p>
-          </div>
-          <div className="card flex flex-col items-center justify-center gap-1">
-            <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <Smartphone size={20} /> {numero(stats.acessos_total)}
-            </p>
-            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
-              acessos ao app no total
-            </p>
-          </div>
-          {/* Rodada 50 — instala direto (Android) ou abre o passo a passo na
-              própria tela (iPhone), em vez de levar para /instalar. */}
-          <BotaoInstalarApp className="col-span-2 flex flex-col items-center justify-center gap-1 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-2 py-3 text-white shadow-sm transition hover:from-amber-700 hover:to-amber-900 sm:col-span-1 dark:from-amber-700 dark:to-amber-900">
-            <Smartphone size={22} />
-            <span className="text-sm leading-tight font-bold" style={{ textAlign: "center" }}>
-              Instalar no telefone
-            </span>
-          </BotaoInstalarApp>
-          {/* Rodada 60 — toque abre o mapa de PAP já com o filtro "ativos agora". */}
-          <Link
-            href="/mapa?ativos=1"
-            className="card flex flex-col items-center justify-center gap-1 transition hover:border-amber-300"
-          >
-            <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <MapPin size={20} /> {numero(stats.paps_ativos)}
-            </p>
-            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
-              PAP ativos
-            </p>
-          </Link>
-          <Link
-            href="/mapa"
-            className="card flex flex-col items-center justify-center gap-1 transition hover:border-amber-300"
-          >
-            <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
-              <Tent size={20} /> {numero(stats.paps_total)}
-            </p>
-            <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
-              PAPs no mapa
-            </p>
-          </Link>
-        </section>
-      )}
-
-      {/* Rodada 65 — agradecimentos aos PAPs, logo abaixo dos números de PAP. */}
-      <MuralCarrossel titulo="Agradecimentos aos PAPs" itens={itensPap} verTodosHref="/mural#paps" variante="pap" />
-
-      {mensagensConquista.length > 0 && <MensagensConquistaCarrossel mensagens={mensagensConquista} />}
-
-      <MuralCarrossel titulo="Mural de pedidos e agradecimentos" itens={itensMural} verTodosHref="/mural" />
-
-      <Link
-        href={!user ? "/cadastro" : isGerente ? "/gerente-pap" : "/peregrinacao"}
-        className="flex items-center justify-center gap-2 rounded-2xl bg-amber-700 py-4 text-lg font-bold text-white shadow-sm hover:bg-amber-800"
-      >
-        <Footprints size={22} />
-        {!user
-          ? "SOU PEREGRINO"
-          : isGerente
-            ? "MEU PAP — GERENCIAR"
-            : temPeregrinacao
-              ? "MINHA PEREGRINAÇÃO"
-              : "PLANEJAR PEREGRINAÇÃO"}
-      </Link>
-
-      <section className="grid gap-4 sm:grid-cols-2">
-        {cardsAntesCompartilhar.map((c) => (
-          <Link key={c.href} href={c.href} className="card transition hover:border-amber-300">
-            <c.icon className="mb-3 text-amber-700" size={26} />
-            <h2 className="mb-1 font-bold">{c.title}</h2>
-            <p className="text-sm text-neutral-500">{c.desc}</p>
-          </Link>
-        ))}
-        <CompartilharInstalarCard />
-        <SigaNosRedes className="sm:col-span-2" />
+      {/* Rodada 67 — contadores de acessos ao app saíram da página inicial
+          (continuam no painel do administrador). O primeiro botão é o de
+          instalar no telefone; abaixo, os números de PAP. */}
+      <section className="grid grid-cols-2 gap-3 text-center sm:grid-cols-3">
+        <BotaoInstalarApp className="col-span-2 flex flex-col items-center justify-center gap-1 rounded-2xl bg-gradient-to-b from-amber-600 to-amber-800 px-2 py-3 text-white shadow-sm transition hover:from-amber-700 hover:to-amber-900 sm:col-span-1 dark:from-amber-700 dark:to-amber-900">
+          <Smartphone size={22} />
+          <span className="text-sm leading-tight font-bold" style={{ textAlign: "center" }}>
+            Instalar no telefone
+          </span>
+        </BotaoInstalarApp>
+        {stats && (
+          <>
+            {/* Rodada 60 — toque abre o mapa de PAP já com o filtro "ativos agora". */}
+            <Link
+              href="/mapa?ativos=1"
+              className="card flex flex-col items-center justify-center gap-1 transition hover:border-amber-300"
+            >
+              <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
+                <MapPin size={20} /> {numero(stats.paps_ativos)}
+              </p>
+              <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+                PAP ativos
+              </p>
+            </Link>
+            <Link
+              href="/mapa"
+              className="card flex flex-col items-center justify-center gap-1 transition hover:border-amber-300"
+            >
+              <p className="flex items-center justify-center gap-1 text-2xl font-bold text-amber-800 dark:text-amber-500">
+                <Tent size={20} /> {numero(stats.paps_total)}
+              </p>
+              <p className="text-xs text-neutral-500" style={{ textAlign: "center" }}>
+                PAPs no mapa
+              </p>
+            </Link>
+          </>
+        )}
       </section>
 
+      {/* Rodada 67 — romarias logo abaixo dos contadores, em cima das mensagens de conquista. */}
       {romariasGrupo.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
@@ -295,6 +231,63 @@ export default async function Home() {
           </div>
         </section>
       )}
+
+      {mensagensConquista.length > 0 && <MensagensConquistaCarrossel mensagens={mensagensConquista} />}
+
+      {/* Rodada 65 — agradecimentos aos PAPs. */}
+      <MuralCarrossel titulo="Agradecimentos aos PAPs" itens={itensPap} verTodosHref="/mural#paps" variante="pap" />
+
+      <MuralCarrossel titulo="Mural de pedidos e agradecimentos" itens={itensMural} verTodosHref="/mural" />
+
+      <Link
+        href={!user ? "/cadastro" : isGerente ? "/gerente-pap" : "/peregrinacao"}
+        className="flex items-center justify-center gap-2 rounded-2xl bg-amber-700 py-4 text-lg font-bold text-white shadow-sm hover:bg-amber-800"
+      >
+        <Footprints size={22} />
+        {!user
+          ? "SOU PEREGRINO"
+          : isGerente
+            ? "MEU PAP — GERENCIAR"
+            : temPeregrinacao
+              ? "MINHA PEREGRINAÇÃO"
+              : "PLANEJAR PEREGRINAÇÃO"}
+      </Link>
+
+      {/* Rodada 67 — chamada para a arte grátis (1ª arte por conta, de qualquer
+          ano, mesmo sem ter registrado a peregrinação no app). Sem conta, passa
+          pelo cadastro de peregrino antes e volta para Minhas fotos. */}
+      {!isGerente && (
+        <section className="card flex flex-col gap-3 border-amber-200 dark:border-amber-900">
+          <div>
+            <h2 className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-500">
+              <Sparkles size={20} /> Crie grátis uma arte da sua peregrinação
+            </h2>
+            <p className="text-sm text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
+              Já fez a peregrinação? Transforme uma foto sua numa arte como estas, para guardar e compartilhar. A
+              primeira é grátis, de qualquer ano.
+            </p>
+          </div>
+          <ModelosPlusVitrine mini />
+          <Link
+            href={user ? "/fotos" : "/login?tipo=peregrino&redirect=/fotos"}
+            className="btn-primary flex items-center justify-center gap-2"
+          >
+            <Sparkles size={18} /> Criar minha arte grátis
+          </Link>
+        </section>
+      )}
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        {cardsAntesCompartilhar.map((c) => (
+          <Link key={c.title} href={c.href} className="card transition hover:border-amber-300">
+            <c.icon className="mb-3 text-amber-700" size={26} />
+            <h2 className="mb-1 font-bold">{c.title}</h2>
+            <p className="text-sm text-neutral-500">{c.desc}</p>
+          </Link>
+        ))}
+        <CompartilharInstalarCard />
+        <SigaNosRedes className="sm:col-span-2" />
+      </section>
 
       <p className="text-center text-xs text-neutral-400">
         Em caso de emergência, use o botão vermelho no canto da tela para

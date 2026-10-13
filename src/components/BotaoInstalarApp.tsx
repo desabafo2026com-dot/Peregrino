@@ -82,7 +82,7 @@ export default function BotaoInstalarApp({
   );
 }
 
-function Janela({ onFechar, children }: { onFechar: () => void; children: React.ReactNode }) {
+export function Janela({ onFechar, children }: { onFechar: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 sm:items-center sm:p-4" onClick={onFechar}>
       <div
@@ -119,7 +119,7 @@ function Destaque({ children }: { children: React.ReactNode }) {
   );
 }
 
-function GuiaInstalacao({ sistema, navegador }: { sistema: SistemaAparelho; navegador: NavegadorAparelho }) {
+export function GuiaInstalacao({ sistema, navegador }: { sistema: SistemaAparelho; navegador: NavegadorAparelho }) {
   const [copiado, setCopiado] = useState(false);
 
   async function copiarLink() {

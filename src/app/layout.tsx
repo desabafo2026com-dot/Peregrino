@@ -8,6 +8,7 @@ import { AuthRoleProvider } from "@/components/AuthRoleProvider";
 import TermosGate from "@/components/TermosGate";
 import CompletarCadastroGate from "@/components/CompletarCadastroGate";
 import RegistrarAcesso from "@/components/RegistrarAcesso";
+import SugestaoInstalarApp from "@/components/SugestaoInstalarApp";
 import { SCRIPT_CAPTURA_INSTALACAO } from "@/lib/instalar-app";
 
 // Rodada 40 — prévia do link ao ser colado no WhatsApp/Facebook/Telegram.
@@ -112,6 +113,7 @@ export default function RootLayout({
         </AuthRoleProvider>
         <LocationSharingManager />
         <RegistrarAcesso />
+        <SugestaoInstalarApp />
       </body>
     </html>
   );

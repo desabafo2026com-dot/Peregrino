@@ -8,3 +8,8 @@ Como trocar ou acrescentar:
 - Pode ser .jpg, .jpeg, .png ou .webp (ex.: modelo-6.jpg).
 - Tamanho sugerido: em pé (retrato), 540 x 960, até ~150 KB cada.
 - Os números que não existirem são simplesmente ignorados.
+
+Página inicial (Rodada 67): usa miniaturas leves modelo-1-mini.webp ...
+modelo-5-mini.webp (270 x 480, ~15 KB). Se trocar as imagens acima, peça
+para gerar as miniaturas de novo — senão a página inicial continua com as
+antigas.
