@@ -23,7 +23,6 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { KM_DUTRA_APARECIDA } from "@/lib/km-dutra";
-import CenaRodoviaAmanhecer from "@/components/CenaRodoviaAmanhecer";
 import { comprimirImagem, CACHE_UM_ANO } from "@/lib/comprimir-imagem";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
 
@@ -2373,16 +2372,17 @@ export default function RomariaPlusView({
             )}
 
             {/* Rodada 68 — "Amanhecer no caminho": a foto como o sol nascendo
-                no horizonte da estrada. Rodada 69: embaixo, a cena da Dutra
-                com romeiros caminhando no acostamento. */}
+                no horizonte da estrada. Rodada 70b: embaixo, foto da Dutra com
+                romeiros no acostamento (imagem enviada pelo usuário, com
+                direito de uso), fundida ao céu do amanhecer. */}
             {modelo === "amanhecer" && (
               <div
                 className="absolute inset-0"
-                style={{ background: "linear-gradient(180deg, #16234a 0%, #3b2f6b 18%, #a84a6a 32%, #f08a3c 45%, #ffd27a 55%)" }}
+                style={{ background: "linear-gradient(180deg, #16234a 0%, #33296a 13%, #8f3f63 26%, #cf5f4c 34%, #f08a3c 41%, #f39a3d 46%)" }}
               >
                 {cabecalho(false)}
                 <div
-                  className="absolute top-[31%] left-1/2 w-[54%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full"
+                  className="absolute top-[24%] left-1/2 w-[46%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full"
                   style={{ aspectRatio: "1 / 1", boxShadow: "0 0 0 1.2cqw #ffe3a3, 0 0 9cqw 3cqw rgba(255,196,92,.75)" }}
                 >
                   <FotoComPanZoom
@@ -2394,8 +2394,14 @@ export default function RomariaPlusView({
                     onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   />
                 </div>
-                <CenaRodoviaAmanhecer className="absolute inset-x-0 bottom-0 h-[45%] w-full" />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[24%]" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 40%, rgba(0,0,0,.8) 100%)" }} />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/arte/amanhecer-dutra.webp"
+                  alt=""
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-[62%] w-full object-cover object-top"
+                  draggable={false}
+                />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[30%]" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 40%, rgba(0,0,0,.78) 100%)" }} />
                 <div className="absolute inset-x-[7%] bottom-[4%] flex flex-col items-center gap-[1cqw] text-center text-white">
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.08, textAlign: "center", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>
                     {tituloTexto}
