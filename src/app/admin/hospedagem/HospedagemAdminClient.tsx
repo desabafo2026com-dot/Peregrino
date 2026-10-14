@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { TIPO_COMERCIO_LABELS, SENTIDO_KM_ABREV } from "@/lib/constants";
-import { Hotel, Utensils, Pencil, Trash2, Eye, EyeOff } from "lucide-react";
+import { Hotel, Utensils, Pencil, Trash2, Eye, EyeOff, QrCode } from "lucide-react";
 import type { PontoComercial } from "@/types/database";
 
 function kmSentidoLabel(km: number | null, sentido: string | null) {
@@ -88,6 +88,12 @@ export default function HospedagemAdminClient({ comerciosIniciais }: { comercios
               >
                 {c.ativo ? <EyeOff size={14} /> : <Eye size={14} />} {c.ativo ? "Desativar" : "Ativar"}
               </button>
+              <Link
+                href={`/admin/hospedagem/${c.id}/qrcode`}
+                className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              >
+                <QrCode size={14} /> QR code
+              </Link>
               <Link
                 href={`/admin/hospedagem/${c.id}/editar`}
                 className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"

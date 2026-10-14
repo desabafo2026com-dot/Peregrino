@@ -298,7 +298,20 @@ export default async function PeregrinacaoPage() {
       />
       {peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") && (
         <div id="caderno" className="mt-6 scroll-mt-6">
-          <CadernoDeBordo carimbos={(carimbosData ?? []) as DadosCarimbo[]} />
+          <CadernoDeBordo
+            carimbos={(carimbosData ?? []) as DadosCarimbo[]}
+            capa={{
+              nome: p0.nome_completo,
+              ano: (peregrinacao.data_inicio ? new Date(peregrinacao.data_inicio) : new Date()).toLocaleDateString("pt-BR", {
+                timeZone: "America/Sao_Paulo",
+                year: "numeric",
+              }),
+              origem: peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio ?? null,
+              periodo: peregrinacao.data_inicio
+                ? `Início em ${new Date(peregrinacao.data_inicio).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
+                : null,
+            }}
+          />
         </div>
       )}
       {peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") && (

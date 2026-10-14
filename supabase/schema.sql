@@ -6549,3 +6549,116 @@ drop view if exists public.ocorrencias_dutra_publicas;
 comment on table public.ocorrencias_dutra is 'Rodada 68/69 — ocorrências na Dutra (qualquer ano), só para análise da administração (não são publicadas). Não é boletim de ocorrência policial.';
 
 -- FIM DA MIGRATION 58
+
+
+-- =====================================================================
+-- Migration 59 (Rodada 71)
+-- =====================================================================
+-- =====================================================================
+-- Migration 59 (Rodada 71)
+-- 1) Ocorrências na Dutra: novos tipos "ameaca" e "local_perigoso" (os
+--    antigos continuam aceitos só para não invalidar registros já feitos).
+-- 2) token_qr_do_pap(): o gerente (ou o admin) pega o QR fixo do seu PAP
+--    para imprimir.
+-- 3) PAPs pré-cadastrados: correção do SENTIDO e das DATAS conforme o PDF
+--    "PAPs 2026 Final - Para Divulgação" (Rio X SP = pista Norte; SP X Rio
+--    = pista Sul; sem data no PDF = sem data). Nada mais é alterado.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 58.
+-- =====================================================================
+
+alter table public.ocorrencias_dutra drop constraint if exists ocorrencias_dutra_tipo_check;
+alter table public.ocorrencias_dutra
+  add constraint ocorrencias_dutra_tipo_check
+  check (tipo in ('assalto', 'furto', 'agressao', 'atropelamento', 'ameaca', 'local_perigoso', 'outro',
+                  'acidente', 'assedio', 'animal_pista', 'problema_via', 'mal_subito'));
+
+create or replace function public.token_qr_do_pap(p_pap_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_pa public.pontos_apoio;
+  v_token text;
+begin
+  select * into v_pa from public.pontos_apoio where id = p_pap_id;
+  if not found then
+    return null;
+  end if;
+  if not (public.is_admin() or v_pa.gerente_id = auth.uid()) then
+    return null;
+  end if;
+  select q.token into v_token from public.paps_qr q where q.pap_id = v_pa.id limit 1;
+  if v_token is null and v_pa.pre_cadastro_id is not null then
+    select q.token into v_token from public.paps_qr q where q.pre_cadastro_id = v_pa.pre_cadastro_id limit 1;
+  end if;
+  return v_token;
+end;
+$$;
+
+revoke all on function public.token_qr_do_pap(uuid) from public;
+grant execute on function public.token_qr_do_pap(uuid) to authenticated;
+
+-- 3) Correção dos PAPs pré-cadastrados (19 PAPs) --------------------
+-- PDF nº 5
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Centro Industrial Arujá' and cidade = 'Arujá' and br = '116' and km = 203.5;
+-- PDF nº 25
+update public.paps_pre_cadastro set sentido_pista = 'rj', datas_funcionamento = ARRAY['2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date], data_funcionamento_texto = '06 a 10 de outubro'
+  where nome = 'Anjos e Acolhidos' and cidade = 'Jacareí' and br = '116' and km = 165.0;
+-- PDF nº 27
+update public.paps_pre_cadastro set sentido_pista = 'rj', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Romaria Com Fé Chegaremos' and cidade = 'Jacareí' and br = '116' and km = 160.0;
+-- PDF nº 60
+update public.paps_pre_cadastro set sentido_pista = 'rj', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Família Romeiros' and cidade = 'Caçapava' and br = '116' and km = 125.0;
+-- PDF nº 64
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'IBG (Igreja Batista)' and cidade = 'Taubaté' and br = '116' and km = 117.0;
+-- PDF nº 80
+update public.paps_pre_cadastro set sentido_pista = 'rj', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Anjo Pietra' and cidade = 'Taubaté' and br = '116' and km = 107.0;
+-- PDF nº 85
+update public.paps_pre_cadastro set sentido_pista = null, datas_funcionamento = ARRAY['2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date], data_funcionamento_texto = '08 a 12 de outubro'
+  where nome = 'Vó Jandira' and cidade = 'Taubaté' and br = '116' and km = 107.0;
+-- PDF nº 86
+update public.paps_pre_cadastro set sentido_pista = 'rj', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Estação São Miguel' and cidade = 'Pindamonhangaba' and br = '116' and km = 104.0;
+-- PDF nº 93
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Gueri Gueri, Enrolados nas Trilhas' and cidade = 'Pindamonhangaba' and br = '116' and km = 100.0;
+-- PDF nº 111
+update public.paps_pre_cadastro set sentido_pista = 'rj', datas_funcionamento = ARRAY['2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date], data_funcionamento_texto = '09 a 12 de outubro'
+  where nome = 'Unifatea' and cidade = 'Roseira' and br = '116' and km = 82.0;
+-- PDF nº 116
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Igreja Nova Vida' and cidade = 'Roseira' and br = '116' and km = 80.0;
+-- PDF nº 117
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = ARRAY['2026-10-10'::date], data_funcionamento_texto = '10 de outubro'
+  where nome = 'Tenda de Apoio Mãe Aparecida' and cidade = 'Roseira' and br = '116' and km = 79.0;
+-- PDF nº 118
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Amigos na Vida e Unidos Pela Fé' and cidade = 'Roseira' and br = '116' and km = 79.0;
+-- PDF nº 119
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'União' and cidade = 'Roseira' and br = '116' and km = 79.0;
+-- PDF nº 133
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Rosa Azul' and cidade = 'Guaratinguetá' and br = '116' and km = 59.0;
+-- PDF nº 134
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = ARRAY['2026-10-11'::date,'2026-10-12'::date], data_funcionamento_texto = '11 e 12 de outubro'
+  where nome = 'Ubuntu' and cidade = 'Lorena' and br = '116' and km = 52.0;
+-- PDF nº 136
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Pousada São João Batista' and cidade = 'Cachoeira Paulista' and br = '116' and km = 38.0;
+-- PDF nº 139
+update public.paps_pre_cadastro set sentido_pista = null, datas_funcionamento = ARRAY['2026-08-15'::date,'2026-08-16'::date,'2026-08-17'::date,'2026-08-18'::date,'2026-08-19'::date,'2026-08-20'::date,'2026-08-21'::date,'2026-08-22'::date,'2026-08-23'::date,'2026-08-24'::date,'2026-08-25'::date,'2026-08-26'::date,'2026-08-27'::date,'2026-08-28'::date,'2026-08-29'::date,'2026-08-30'::date,'2026-08-31'::date,'2026-09-01'::date,'2026-09-02'::date,'2026-09-03'::date,'2026-09-04'::date,'2026-09-05'::date,'2026-09-06'::date,'2026-09-07'::date,'2026-09-08'::date,'2026-09-09'::date,'2026-09-10'::date,'2026-09-11'::date,'2026-09-12'::date,'2026-09-13'::date,'2026-09-14'::date,'2026-09-15'::date,'2026-09-16'::date,'2026-09-17'::date,'2026-09-18'::date,'2026-09-19'::date,'2026-09-20'::date,'2026-09-21'::date,'2026-09-22'::date,'2026-09-23'::date,'2026-09-24'::date,'2026-09-25'::date,'2026-09-26'::date,'2026-09-27'::date,'2026-09-28'::date,'2026-09-29'::date,'2026-09-30'::date,'2026-10-01'::date,'2026-10-02'::date,'2026-10-03'::date,'2026-10-04'::date,'2026-10-05'::date,'2026-10-06'::date,'2026-10-07'::date,'2026-10-08'::date,'2026-10-09'::date,'2026-10-10'::date,'2026-10-11'::date,'2026-10-12'::date,'2026-10-13'::date,'2026-10-14'::date,'2026-10-15'::date], data_funcionamento_texto = '15 de agosto a 15 de outubro'
+  where nome = 'COMTUR' and cidade = 'Jacareí' and br = '116' and km = 158.0;
+-- PDF nº 120
+update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = '{}'::date[], data_funcionamento_texto = 'Sem informação de data'
+  where nome = 'Pássaro Marrom' and cidade = 'Roseira' and br = '116' and km = 79.0;
+
+-- FIM DA MIGRATION 59

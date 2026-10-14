@@ -10,9 +10,10 @@ export default function NovoComercioPage() {
 
   async function salvar(dados: ComercioFormDados) {
     const supabase = createClient();
-    const { error } = await supabase.from("pontos_comerciais").insert(dados);
-    if (error) return { error: error.message };
-    router.push("/admin/hospedagem");
+    const { data, error } = await supabase.from("pontos_comerciais").insert(dados).select("id").single();
+    if (error || !data) return { error: error?.message ?? "Não foi possível salvar." };
+    // Rodada 71 — já abre o QR code do estabelecimento para imprimir.
+    router.push(`/admin/hospedagem/${data.id}/qrcode?novo=1`);
     router.refresh();
     return {};
   }

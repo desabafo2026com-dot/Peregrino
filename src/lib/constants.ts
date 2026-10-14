@@ -480,21 +480,25 @@ export function formatarDatasFuncionamento(datas: string[] | null | undefined): 
 // Rodada 68 — ocorrências na Dutra (qualquer ano), para alerta e
 // conhecimento. Não é boletim de ocorrência policial.
 export const TIPOS_OCORRENCIA_DUTRA: { value: string; label: string }[] = [
-  { value: "acidente", label: "Acidente" },
-  { value: "atropelamento", label: "Atropelamento" },
+  // Rodada 71 — lista reduzida a pedido do usuário.
   { value: "assalto", label: "Assalto / roubo" },
   { value: "furto", label: "Furto" },
   { value: "agressao", label: "Agressão" },
-  { value: "assedio", label: "Assédio / importunação" },
-  { value: "animal_pista", label: "Animal na pista" },
-  { value: "problema_via", label: "Problema na via (buraco, sem acostamento, iluminação)" },
-  { value: "mal_subito", label: "Mal súbito / problema de saúde" },
+  { value: "atropelamento", label: "Atropelamento" },
+  { value: "ameaca", label: "Ameaça" },
+  { value: "local_perigoso", label: "Local perigoso" },
   { value: "outro", label: "Outro" },
 ];
 
-export const TIPO_OCORRENCIA_LABELS: Record<string, string> = Object.fromEntries(
-  TIPOS_OCORRENCIA_DUTRA.map((t) => [t.value, t.label])
-);
+// Inclui os tipos antigos (Rodada 68) para exibir registros já feitos.
+export const TIPO_OCORRENCIA_LABELS: Record<string, string> = {
+  acidente: "Acidente",
+  assedio: "Assédio / importunação",
+  animal_pista: "Animal na pista",
+  problema_via: "Problema na via",
+  mal_subito: "Mal súbito",
+  ...Object.fromEntries(TIPOS_OCORRENCIA_DUTRA.map((t) => [t.value, t.label])),
+};
 
 export const PERIODOS_DIA: { value: string; label: string }[] = [
   { value: "madrugada", label: "Madrugada" },

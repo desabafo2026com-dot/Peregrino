@@ -1,5 +1,7 @@
 import { BookOpen, QrCode } from "lucide-react";
 import CarimboPap, { type DadosCarimbo } from "@/components/CarimboPap";
+import ExportarCadernoPdf from "@/components/ExportarCadernoPdf";
+import type { CapaCaderno } from "@/lib/caderno-pdf";
 
 // Rodada 68 — caderno de bordo: os carimbos dos PAPs por onde o peregrino
 // passou (lidos pelo QR code fixado em cada PAP), em ordem de passagem.
@@ -7,10 +9,13 @@ export default function CadernoDeBordo({
   carimbos,
   titulo = "Meu caderno de bordo",
   mostrarDica = true,
+  capa,
 }: {
   carimbos: DadosCarimbo[];
   titulo?: string;
   mostrarDica?: boolean;
+  // Rodada 71 — dados da capa do PDF; sem eles, não mostra o botão.
+  capa?: CapaCaderno;
 }) {
   return (
     <section
@@ -43,6 +48,7 @@ export default function CadernoDeBordo({
           ))}
         </ul>
       )}
+      {capa && carimbos.length > 0 && <ExportarCadernoPdf carimbos={carimbos} capa={capa} />}
     </section>
   );
 }

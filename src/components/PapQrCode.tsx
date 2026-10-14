@@ -5,6 +5,7 @@ import Image from "next/image";
 import QRCode from "qrcode";
 import { Download, FileText, Tent, MapPin } from "lucide-react";
 import { BR_LABELS, SENTIDO_PISTA_LABELS } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
 import type { PontoApoio } from "@/types/database";
 
 // Cartaz A5-friendly (proporção 3:4), pensado para imprimir e fixar no
@@ -13,8 +14,19 @@ import type { PontoApoio } from "@/types/database";
 const CARTAZ_LARGURA = 900;
 const CARTAZ_ALTURA = 1200;
 
-export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: string }) {
+export default function PapQrCode({ ponto, url: urlInicial }: { ponto: PontoApoio; url: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Rodada 71 — o QR leva à página de carimbo do PAP (informações + caderno
+  // de bordo), quando o token fixo existe (Migration 57/59).
+  const [token, setToken] = useState<string | null>(null);
+  const url = token ? `${new URL(urlInicial).origin}/carimbo/${token}` : urlInicial;
+  useEffect(() => {
+    createClient()
+      .rpc("token_qr_do_pap", { p_pap_id: ponto.id })
+      .then(({ data }) => {
+        if (typeof data === "string" && data) setToken(data);
+      });
+  }, [ponto.id]);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [gerando, setGerando] = useState<"pdf" | "imagem" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -43,18 +55,22 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
     }
   }
 
+  // Rodada 71 — PDF em meia folha A4: 2 cartazes iguais por folha, com
+  // linha de corte (mesmo modelo dos cartazes do administrador).
   async function baixarPdf() {
-    if (!ref.current) return;
     setErro(null);
     setGerando("pdf");
     try {
-      const [{ gerarPngDoElemento }, { jsPDF }] = await Promise.all([import("@/lib/gerar-imagem"), import("jspdf")]);
-      const dataUrl = await gerarPngDoElemento(ref.current, { larguraFinal: Math.round(ref.current.getBoundingClientRect().width * 2) });
-      const larguraMm = 148; // A5
-      const alturaMm = (larguraMm * CARTAZ_ALTURA) / CARTAZ_LARGURA;
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [larguraMm, alturaMm] });
-      pdf.addImage(dataUrl, "PNG", 0, 0, larguraMm, alturaMm);
-      pdf.save(`pap-qrcode-${ponto.nome.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+      const { gerarPdfCartazesQr, TEXTO_CARTAZ_PAP } = await import("@/lib/pdf-cartaz-qr");
+      const local = [
+        ponto.cidade,
+        [BR_LABELS[ponto.br] ?? ponto.br, ponto.km_referencia != null ? `km ${ponto.km_referencia}` : null].filter(Boolean).join(" "),
+        ponto.sentido_pista ? SENTIDO_PISTA_LABELS[ponto.sentido_pista] : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const cartaz = { ...TEXTO_CARTAZ_PAP, url, nome: ponto.nome, local, codigo: token ?? undefined };
+      await gerarPdfCartazesQr([cartaz, cartaz], `pap-qrcode-${ponto.nome.toLowerCase().replace(/\s+/g, "-")}.pdf`);
     } catch {
       setErro("Não foi possível gerar o PDF agora. Tente novamente.");
     } finally {
@@ -117,7 +133,7 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
             disabled={gerando !== null || !qrDataUrl}
             className="btn-primary flex items-center gap-2"
           >
-            <FileText size={16} /> {gerando === "pdf" ? "Gerando..." : "Baixar cartaz (PDF)"}
+            <FileText size={16} /> {gerando === "pdf" ? "Gerando..." : "Baixar cartaz (PDF, 2 por folha A4)"}
           </button>
           <button
             onClick={baixarImagem}

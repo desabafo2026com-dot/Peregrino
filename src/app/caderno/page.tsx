@@ -22,7 +22,7 @@ export default async function CadernoPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?redirect=/caderno");
 
-  const [{ data: carimbosData }, { data: peregrinacoesData }] = await Promise.all([
+  const [{ data: carimbosData }, { data: peregrinacoesData }, { data: perfil }] = await Promise.all([
     supabase
       .from("carimbos_caderno")
       .select("id, peregrinacao_id, pap_nome, cidade, km, carimbado_em")
@@ -30,16 +30,20 @@ export default async function CadernoPage() {
       .order("carimbado_em", { ascending: true }),
     supabase
       .from("peregrinacoes")
-      .select("id, status, data_inicio, cidade_origem, cidade_inicio")
+      .select("id, status, data_inicio, data_fim, cidade_origem, cidade_inicio")
       .eq("user_id", user.id)
       .order("data_inicio", { ascending: false }),
+    supabase.from("profiles").select("nome_completo").eq("id", user.id).maybeSingle(),
   ]);
+  const nome = (perfil?.nome_completo as string | undefined) ?? "Peregrino";
+  const dataBr = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
   const carimbos = (carimbosData ?? []) as CarimboComPeregrinacao[];
   const encerradas = ((peregrinacoesData ?? []) as {
     id: string;
     status: string;
     data_inicio: string | null;
+    data_fim: string | null;
     cidade_origem: string | null;
     cidade_inicio: string | null;
   }[]).filter((p) => p.status !== "planejada" && p.status !== "em_andamento");
@@ -70,6 +74,17 @@ export default async function CadernoPage() {
               carimbos={lista}
               titulo={`Peregrinação ${ano}${origem ? ` · de ${origem}` : ""}`}
               mostrarDica={false}
+              capa={{
+                nome,
+                ano,
+                origem: origem ?? null,
+                periodo:
+                  p.data_inicio && p.data_fim
+                    ? `${dataBr(p.data_inicio)} a ${dataBr(p.data_fim)}`
+                    : p.data_inicio
+                      ? `Início em ${dataBr(p.data_inicio)}`
+                      : null,
+              }}
             />
           );
         })

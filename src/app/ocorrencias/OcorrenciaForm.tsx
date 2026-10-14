@@ -25,7 +25,7 @@ const STATUS_LABEL: Record<MinhaOcorrencia["status"], string> = {
 
 export default function OcorrenciaForm({ userId, minhasIniciais }: { userId: string; minhasIniciais: MinhaOcorrencia[] }) {
   const [minhas, setMinhas] = useState(minhasIniciais);
-  const [tipo, setTipo] = useState("acidente");
+  const [tipo, setTipo] = useState("assalto");
   const [data, setData] = useState("");
   const [periodo, setPeriodo] = useState("");
   const [km, setKm] = useState("");
@@ -166,7 +166,7 @@ export default function OcorrenciaForm({ userId, minhasIniciais }: { userId: str
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5" checked={ciente} onChange={(e) => setCiente(e.target.checked)} />
           <span style={{ textAlign: "left" }}>
-            Entendi que isto <strong>não é boletim de ocorrência</strong>. Se houve crime, vou procurar a Polícia Civil.
+            Entendi que isto <strong>não é boletim de ocorrência</strong>.
           </span>
         </label>
         {aviso && (

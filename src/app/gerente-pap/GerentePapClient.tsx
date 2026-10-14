@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon, Pencil } from "lucide-react";
+import { MapPinPlus, Trash2, Clock, CheckCircle2, XCircle, Sun, Moon, Pencil, QrCode } from "lucide-react";
 import { STATUS_PAP_LABELS, papAbertoAgora } from "@/lib/constants";
 import PapForm, { type PapFormDados } from "@/components/PapForm";
 import PapPreCadastroBusca from "@/components/PapPreCadastroBusca";
@@ -245,6 +245,13 @@ export default function GerentePapClient({
                 </p>
               </div>
               <div className="flex gap-1">
+                <Link
+                  href={`/gerente-pap/pap/${p.id}/qrcode`}
+                  className="rounded-lg p-2 text-amber-700 hover:bg-amber-50 dark:text-amber-500 dark:hover:bg-amber-950/40"
+                  aria-label="QR code do PAP para imprimir"
+                >
+                  <QrCode size={18} />
+                </Link>
                 <Link
                   href={`/gerente-pap/pap/${p.id}/editar`}
                   className="rounded-lg p-2 text-amber-700 hover:bg-amber-50 dark:text-amber-500 dark:hover:bg-amber-950/40"
