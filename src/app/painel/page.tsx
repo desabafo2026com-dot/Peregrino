@@ -12,6 +12,7 @@ import {
   Plus,
   Users,
   Medal,
+  BookOpen,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
@@ -106,7 +107,7 @@ export default async function PainelPage() {
     redirect("/perfil?primeiro=1");
   }
 
-  const [{ data: certificados }, { data: ativa }, { data: cracha }, { data: comprasData }] = await Promise.all([
+  const [{ data: certificados }, { data: ativa }, { data: cracha }, { data: comprasData }, { data: carimbosData }] = await Promise.all([
     supabase
       .from("certificados")
       .select("id, emitido_em")
@@ -127,7 +128,14 @@ export default async function PainelPage() {
       .eq("user_id", user.id)
       .eq("status", "pago")
       .order("criado_em", { ascending: false }),
+    // Rodada 68 — carimbos do caderno de bordo.
+    supabase.from("carimbos_caderno").select("peregrinacao_id").eq("user_id", user.id),
   ]);
+  // Depois de encerrada, o caderno de bordo sai de "Minha peregrinação" e vai
+  // para o painel, com módulo próprio.
+  const carimbosEncerradas = ((carimbosData ?? []) as { peregrinacao_id: string }[]).filter(
+    (c) => c.peregrinacao_id !== ativa?.id
+  ).length;
 
   const compras = (comprasData ?? []) as CompraResumo[];
   const compraPlus = compras.find((c) => c.tipo === "inicial") ?? null;
@@ -289,6 +297,15 @@ export default async function PainelPage() {
           Icone={Medal}
           cor={AZUL}
         />
+        {carimbosEncerradas > 0 && (
+          <Modulo
+            href="/caderno"
+            titulo="Caderno de bordo"
+            descricao={`${carimbosEncerradas} carimbo${carimbosEncerradas > 1 ? "s" : ""} dos PAPs por onde passou`}
+            Icone={BookOpen}
+            cor={OURO}
+          />
+        )}
         {ehGerente && (
           <Modulo href="/gerente-pap" titulo="Meu PAP" descricao="Seu Ponto de Apoio ao Peregrino" Icone={Tent} cor={AZUL} />
         )}

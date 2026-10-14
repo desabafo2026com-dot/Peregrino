@@ -105,7 +105,7 @@ export default function PapQrCode({ ponto, url }: { ponto: PontoApoio; url: stri
 
           <p className="text-neutral-500" style={{ fontSize: "2.6cqw" }}>
             Aponte a câmera do celular para ver informações deste ponto de
-            apoio no app O Peregrino
+            apoio e carimbar seu caderno de bordo no app O Peregrino
           </p>
         </div>
       </div>

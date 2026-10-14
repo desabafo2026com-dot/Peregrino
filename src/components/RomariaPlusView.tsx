@@ -22,6 +22,7 @@ import {
   Medal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { KM_DUTRA_APARECIDA } from "@/lib/km-dutra";
 import { comprimirImagem, CACHE_UM_ANO } from "@/lib/comprimir-imagem";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
 
@@ -55,7 +56,13 @@ export type Modelo =
   | "santa"
   | "terco"
   | "postal"
-  | "credencial";
+  | "credencial"
+  // Rodada 68 — cinco modelos novos (Migration 57 libera no banco).
+  | "lata"
+  | "rodovia"
+  | "placa"
+  | "manto"
+  | "amanhecer";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -121,6 +128,36 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean; soAdmin?: boolean
   { id: "terco", nome: "Terço", temAjuste: false },
   { id: "postal", nome: "Cartão-postal", temAjuste: false },
   { id: "credencial", nome: "Credencial do peregrino", temAjuste: false },
+  // Rodada 68
+  { id: "lata", nome: "Santa de Lata", temAjuste: false },
+  { id: "rodovia", nome: "Rodovia BR-116", temAjuste: false },
+  { id: "placa", nome: "Placa de chegada", temAjuste: false },
+  { id: "manto", nome: "Manto de Nossa Senhora", temAjuste: false },
+  { id: "amanhecer", nome: "Amanhecer no caminho", temAjuste: false },
+];
+
+// Rodada 68 — contorno do manto de Nossa Senhora Aparecida (modelo "manto"),
+// em % da caixa da foto: cabeça arredondada em cima, abrindo até a base.
+const MANTO_POLIGONO = [
+  "50% 0%", "57% 1%", "62% 4%", "65% 9%", "66% 16%", "67% 24%", "70% 36%", "74% 50%",
+  "80% 66%", "88% 82%", "96% 96%", "94% 100%", "6% 100%", "4% 96%", "12% 82%", "20% 66%",
+  "26% 50%", "30% 36%", "33% 24%", "34% 16%", "35% 9%", "38% 4%", "43% 1%",
+].join(", ");
+const MANTO_PONTOS_SVG = MANTO_POLIGONO.split("%").join("").split(", ").join(" ");
+
+// Rodada 68 — pegadas na estrada do modelo "amanhecer" (viewBox 1080x730),
+// diminuindo em direção ao horizonte.
+const PEGADAS_AMANHECER = [
+  { x: 600, y: 690, r: 26, giro: 8 },
+  { x: 650, y: 610, r: 23, giro: 10 },
+  { x: 590, y: 530, r: 20, giro: 6 },
+  { x: 628, y: 460, r: 17, giro: 9 },
+  { x: 578, y: 395, r: 15, giro: 5 },
+  { x: 606, y: 335, r: 13, giro: 8 },
+  { x: 570, y: 280, r: 11, giro: 4 },
+  { x: 590, y: 230, r: 9, giro: 7 },
+  { x: 565, y: 186, r: 8, giro: 4 },
+  { x: 578, y: 148, r: 6, giro: 6 },
 ];
 
 // Transparência do fundo escurecido do "Selo de conquista" (Rodada 30, a
@@ -211,6 +248,11 @@ const AJUSTE_PADRAO: Record<Modelo, AjusteOverlayRomariaPlus | null> = {
   terco: null,
   postal: null,
   credencial: null,
+  lata: null,
+  rodovia: null,
+  placa: null,
+  manto: null,
+  amanhecer: null,
 };
 
 // Posição/zoom padrão da FOTO em si dentro do recorte de cada modelo (Rodada
@@ -2078,6 +2120,268 @@ export default function RomariaPlusView({
                     <div className="w-[30%] shrink-0" style={{ transform: "rotate(3deg)" }}>
                       <SeloPostal ano={ano} />
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Rodada 68 — "Santa de Lata": a foto em cima e, embaixo, a
+                Santa de Lata de Aparecida (imagem enviada pelo usuário, com
+                o fundo removido) ao lado do título. */}
+            {modelo === "lata" && (
+              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #efe9dc 0%, #e3dac6 100%)" }}>
+                <div className="absolute inset-x-0 top-0 h-[60%] overflow-hidden">
+                  <FotoComPanZoom
+                    src={fotoUrl}
+                    fotoPos={fotoPos}
+                    fotoEscala={fotoEscala}
+                    editando={editandoFoto}
+                    onArrastar={moverFoto}
+                    onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  />
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{ background: "linear-gradient(to bottom, rgba(0,0,0,.4) 0%, rgba(0,0,0,0) 20%, rgba(236,229,214,0) 72%, #ebe4d4 100%)" }}
+                  />
+                </div>
+                {cabecalho(false)}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/arte/santa-de-lata.webp"
+                  alt="Santa de Lata de Aparecida"
+                  className="pointer-events-none absolute right-[-6%] bottom-[2%] w-[62%]"
+                  style={{ filter: "drop-shadow(0 1cqw 1.6cqw rgba(0,0,0,.35))" }}
+                  draggable={false}
+                />
+                <div className="absolute bottom-[5%] left-[6%] flex w-[44%] flex-col items-start gap-[1.4cqw] text-[#3a3226]">
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.08, textAlign: "left" }}>
+                    {tituloTexto}
+                  </p>
+                  <p className="font-bold text-[#8a6d3b]" style={{ fontSize: "8.5cqw", lineHeight: 1, textAlign: "left" }}>
+                    {ano}
+                  </p>
+                  <p className="font-semibold" style={{ fontSize: "3.1cqw", textAlign: "left" }}>
+                    {semPeregrinacao ? "Aparecida-SP" : `De ${nomeOrigem} a Aparecida-SP`}
+                  </p>
+                  <div className="flex flex-col items-start gap-[0.8cqw] text-[#5b4a33]" style={{ fontSize: "2.9cqw" }}>
+                    {dadosLinha(13)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Rodada 68 — "Rodovia BR-116": a foto como um painel sobre a
+                estrada, o escudo da BR-116 e a pista se perdendo no
+                horizonte. */}
+            {modelo === "rodovia" && (
+              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #1c2533 0%, #2a2a2a 55%, #151515 100%)" }}>
+                <svg viewBox="0 0 1080 900" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-[47%] w-full" aria-hidden="true">
+                  <polygon points="470,0 610,0 1080,900 0,900" fill="#3b3b3b" />
+                  <polygon points="470,0 478,0 30,900 0,900" fill="#f4f4f4" opacity="0.85" />
+                  <polygon points="602,0 610,0 1080,900 1050,900" fill="#f4f4f4" opacity="0.85" />
+                  <polygon points="535,0 539,0 528,900 500,900" fill="#f6b531" />
+                  <polygon points="541,0 545,0 580,900 552,900" fill="#f6b531" />
+                </svg>
+                <div className="absolute inset-x-[6%] top-[10%] h-[45%] overflow-hidden rounded-[3cqw] shadow-2xl" style={{ border: "1cqw solid #f4f4f4" }}>
+                  <FotoComPanZoom
+                    src={fotoUrl}
+                    fotoPos={fotoPos}
+                    fotoEscala={fotoEscala}
+                    editando={editandoFoto}
+                    onArrastar={moverFoto}
+                    onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  />
+                </div>
+                {cabecalho(false)}
+                <div className="absolute top-[51%] left-1/2 w-[24%] -translate-x-1/2" style={{ filter: "drop-shadow(0 1cqw 1.5cqw rgba(0,0,0,.5))" }}>
+                  <svg viewBox="0 0 120 130" className="w-full" aria-label="BR-116">
+                    <path d="M8,6 H112 V60 C112,98 86,116 60,126 C34,116 8,98 8,60 Z" fill="#fff" stroke="#111" strokeWidth="5" />
+                    <path d="M16,14 H104 V40 H16 Z" fill="#111" />
+                    <text x="60" y="35" fill="#fff" fontFamily="Arial, sans-serif" fontWeight="800" fontSize="22" textAnchor="middle">BR</text>
+                    <text x="60" y="84" fill="#111" fontFamily="Arial, sans-serif" fontWeight="800" fontSize="36" textAnchor="middle">116</text>
+                  </svg>
+                </div>
+                <div className="absolute inset-x-[7%] bottom-[4%] flex flex-col items-center gap-[1cqw] rounded-[3cqw] px-[4%] py-[3%] text-center text-white" style={{ background: "rgba(0,0,0,.55)" }}>
+                  <p className="font-bold tracking-[0.2em] text-stripe-400" style={{ fontSize: "2.8cqw", textAlign: "center" }}>
+                    VIA DUTRA
+                  </p>
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.2), lineHeight: 1.08, textAlign: "center" }}>
+                    {tituloTexto}
+                  </p>
+                  <p className="font-bold text-stripe-400" style={{ fontSize: "7.5cqw", lineHeight: 1, textAlign: "center" }}>
+                    {ano}
+                  </p>
+                  <p className="font-semibold text-white/90" style={{ fontSize: "3cqw", textAlign: "center" }}>
+                    {semPeregrinacao ? "Aparecida-SP" : `De ${nomeOrigem} a Aparecida-SP`}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1 text-white/85" style={{ fontSize: "2.9cqw" }}>
+                    {dadosLinha(13)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Rodada 68 — "Placa de chegada": a foto em cima e a placa verde
+                de rodovia anunciando a chegada a Aparecida, com o marco do
+                km 71 da Dutra. */}
+            {modelo === "placa" && (
+              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #8fc3e8 0%, #cfe6f3 50%, #7aa35a 72%, #4f7a38 100%)" }}>
+                <div className="absolute inset-x-0 top-0 h-[56%] overflow-hidden">
+                  <FotoComPanZoom
+                    src={fotoUrl}
+                    fotoPos={fotoPos}
+                    fotoEscala={fotoEscala}
+                    editando={editandoFoto}
+                    onArrastar={moverFoto}
+                    onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  />
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{ background: "linear-gradient(to bottom, rgba(0,0,0,.4) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 80%, rgba(0,0,0,.25) 100%)" }}
+                  />
+                </div>
+                {cabecalho(false)}
+                {/* postes da placa */}
+                <div className="absolute bottom-0 left-[20%] h-[30%] w-[2.6%] bg-neutral-500" />
+                <div className="absolute right-[20%] bottom-0 h-[30%] w-[2.6%] bg-neutral-500" />
+                <div
+                  className="absolute inset-x-[5%] top-[50%] flex flex-col items-center gap-[1cqw] rounded-[2.5cqw] px-[5%] py-[4%] text-center text-white shadow-2xl"
+                  style={{ background: "#0b6b3a", boxShadow: "inset 0 0 0 0.9cqw #0b6b3a, inset 0 0 0 1.5cqw #fff, 0 2cqw 4cqw rgba(0,0,0,.35)" }}
+                >
+                  <p className="font-semibold" style={{ fontSize: fonteTitulo(4.6), lineHeight: 1.1, textAlign: "center" }}>
+                    {tituloTexto}
+                  </p>
+                  <p className="flex items-center gap-[2cqw] font-extrabold tracking-wide" style={{ fontSize: "10cqw", lineHeight: 1, textAlign: "center" }}>
+                    <span style={{ fontSize: "8cqw" }}>↑</span> APARECIDA
+                  </p>
+                  <p className="font-bold" style={{ fontSize: "6.5cqw", lineHeight: 1, textAlign: "center" }}>
+                    {ano}
+                  </p>
+                  <div className="mt-[1cqw] h-[0.4cqw] w-[80%] bg-white/70" />
+                  <p className="font-semibold" style={{ fontSize: "3cqw", textAlign: "center" }}>
+                    {semPeregrinacao ? "Peregrinação a pé pela Via Dutra" : `Saída: ${nomeOrigem}`}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1" style={{ fontSize: "2.9cqw" }}>
+                    {dadosLinha(13)}
+                  </div>
+                </div>
+                {/* marco quilométrico */}
+                <div
+                  className="absolute right-[7%] bottom-[2%] flex flex-col items-center rounded-t-[2cqw] bg-white px-[2.5%] py-[1%] text-neutral-900 shadow-lg"
+                  style={{ border: "0.5cqw solid #1f2937" }}
+                >
+                  <span className="font-bold" style={{ fontSize: "2.2cqw" }}>BR-116</span>
+                  <span className="font-extrabold" style={{ fontSize: "4.2cqw", lineHeight: 1 }}>km {KM_DUTRA_APARECIDA}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Rodada 68 — "Manto de Nossa Senhora": a foto recortada no
+                formato do manto de Nossa Senhora Aparecida, com contorno e
+                coroa dourados, sobre o azul do manto com estrelas. */}
+            {modelo === "manto" && (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(circle at 20% 15%, rgba(255,215,120,.35) 0 0.35cqw, transparent 0.5cqw), radial-gradient(circle at 80% 30%, rgba(255,215,120,.3) 0 0.3cqw, transparent 0.45cqw), radial-gradient(circle at 12% 62%, rgba(255,215,120,.3) 0 0.3cqw, transparent 0.45cqw), radial-gradient(circle at 88% 70%, rgba(255,215,120,.35) 0 0.35cqw, transparent 0.5cqw), linear-gradient(180deg, #13306a 0%, #0c2150 60%, #081638 100%)",
+                  boxShadow: "inset 0 0 0 1.6cqw #0c2150, inset 0 0 0 2.1cqw #d4a943",
+                }}
+              >
+                {cabecalho(false)}
+                <div className="absolute top-[15%] left-1/2 w-[70%] -translate-x-1/2" style={{ aspectRatio: "7 / 9.6" }}>
+                  <div className="absolute inset-0 overflow-hidden" style={{ clipPath: `polygon(${MANTO_POLIGONO})` }}>
+                    <FotoComPanZoom
+                      src={fotoUrl}
+                      fotoPos={fotoPos}
+                      fotoEscala={fotoEscala}
+                      editando={editandoFoto}
+                      onArrastar={moverFoto}
+                      onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                    />
+                  </div>
+                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+                    <polygon points={MANTO_PONTOS_SVG} fill="none" stroke="#e5bd5a" strokeWidth="4" vectorEffect="non-scaling-stroke" />
+                  </svg>
+                  {/* coroa */}
+                  <svg viewBox="0 0 100 60" className="pointer-events-none absolute top-[-11%] left-1/2 w-[34%] -translate-x-1/2" aria-hidden="true">
+                    <path d="M8,52 L4,18 L26,34 L50,6 L74,34 L96,18 L92,52 Z" fill="#e5bd5a" stroke="#9c7420" strokeWidth="2.5" />
+                    <rect x="8" y="50" width="84" height="8" rx="2" fill="#d4a943" stroke="#9c7420" strokeWidth="2" />
+                    <circle cx="50" cy="6" r="4" fill="#fff4cf" />
+                    <circle cx="4" cy="18" r="3.4" fill="#fff4cf" />
+                    <circle cx="96" cy="18" r="3.4" fill="#fff4cf" />
+                    <circle cx="50" cy="40" r="4" fill="#1d4ed8" />
+                    <circle cx="30" cy="44" r="3" fill="#b91c1c" />
+                    <circle cx="70" cy="44" r="3" fill="#b91c1c" />
+                  </svg>
+                </div>
+                <div className="absolute inset-x-[8%] bottom-[5%] flex flex-col items-center gap-[1cqw] text-center text-white">
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.08, textAlign: "center", color: "#f5d27a" }}>
+                    {tituloTexto}
+                  </p>
+                  <p className="font-bold" style={{ fontSize: "8cqw", lineHeight: 1, textAlign: "center", color: "#f5d27a" }}>
+                    {ano}
+                  </p>
+                  <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
+                    {semPeregrinacao ? "Aparecida-SP" : `De ${nomeOrigem} a Aparecida-SP`}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1 text-white/85" style={{ fontSize: "2.9cqw" }}>
+                    {dadosLinha(13)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Rodada 68 — "Amanhecer no caminho": a foto como o sol nascendo
+                no horizonte da estrada, com pegadas na pista. */}
+            {modelo === "amanhecer" && (
+              <div
+                className="absolute inset-0"
+                style={{ background: "linear-gradient(180deg, #16234a 0%, #3b2f6b 22%, #a84a6a 40%, #f08a3c 54%, #ffd27a 62%, #1d1a17 62.2%, #0f0d0b 100%)" }}
+              >
+                {cabecalho(false)}
+                <div
+                  className="absolute top-[34%] left-1/2 w-[58%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full"
+                  style={{ aspectRatio: "1 / 1", boxShadow: "0 0 0 1.2cqw #ffe3a3, 0 0 9cqw 3cqw rgba(255,196,92,.75)" }}
+                >
+                  <FotoComPanZoom
+                    src={fotoUrl}
+                    fotoPos={fotoPos}
+                    fotoEscala={fotoEscala}
+                    editando={editandoFoto}
+                    onArrastar={moverFoto}
+                    onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
+                  />
+                </div>
+                <svg viewBox="0 0 1080 730" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-[38%] w-full" aria-hidden="true">
+                  <polygon points="520,0 560,0 900,730 180,730" fill="#2b2622" />
+                  <polygon points="538,0 542,0 548,730 532,730" fill="#f6b531" opacity="0.7" />
+                  {PEGADAS_AMANHECER.map((p, i) => (
+                    <ellipse
+                      key={i}
+                      cx={p.x}
+                      cy={p.y}
+                      rx={p.r * 0.55}
+                      ry={p.r}
+                      fill="#f5e6c8"
+                      opacity="0.55"
+                      transform={`rotate(${p.giro} ${p.x} ${p.y})`}
+                    />
+                  ))}
+                </svg>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[26%]" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.7) 45%, rgba(0,0,0,.8) 100%)" }} />
+                <div className="absolute inset-x-[7%] bottom-[4%] flex flex-col items-center gap-[1cqw] text-center text-white">
+                  <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.08, textAlign: "center", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>
+                    {tituloTexto}
+                  </p>
+                  <p className="font-bold text-stripe-400" style={{ fontSize: "8cqw", lineHeight: 1, textAlign: "center", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>
+                    {ano}
+                  </p>
+                  <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
+                    {semPeregrinacao ? "Aparecida-SP" : `De ${nomeOrigem} a Aparecida-SP`}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-[6%] gap-y-1 text-white/85" style={{ fontSize: "2.9cqw" }}>
+                    {dadosLinha(13)}
                   </div>
                 </div>
               </div>

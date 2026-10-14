@@ -21,6 +21,9 @@ import {
   MapPin,
   ImageDown,
   HandHeart,
+  QrCode,
+  SearchCheck,
+  Siren,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -52,6 +55,7 @@ const ADMIN_LINK_GROUPS = [
       { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
       { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
       { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
+      { href: "/admin/qrcodes", label: "QR codes dos PAPs (imprimir)", icon: QrCode },
     ],
   },
   {
@@ -63,6 +67,7 @@ const ADMIN_LINK_GROUPS = [
     links: [
       { href: "/admin/riscos", label: "Locais de risco", icon: TriangleAlert },
       { href: "/admin/checkins", label: "Pontos de check-in", icon: MapPin },
+      { href: "/admin/ocorrencias", label: "Ocorrências na Dutra", icon: Siren },
     ],
   },
   {
@@ -78,6 +83,7 @@ const ADMIN_LINK_GROUPS = [
       { href: "/admin/mensagens", label: "Falar com o desenvolvedor", icon: MessageCircle },
       { href: "/admin/mensagens-conquista", label: "Mensagens de conquista", icon: Megaphone },
       { href: "/admin/mural", label: "Mural e agradecimentos", icon: HandHeart },
+      { href: "/admin/achados-perdidos", label: "Achados e perdidos", icon: SearchCheck },
       { href: "/admin/avisos", label: "Avisos para todos", icon: BellRing },
       { href: "/admin/equipe", label: "Equipe (admins/agentes)", icon: UserCog },
       { href: "/admin/otimizar-fotos", label: "Otimizar fotos", icon: ImageDown },

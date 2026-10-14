@@ -5,6 +5,8 @@ import PeregrinacaoClient from "./PeregrinacaoClient";
 import VoltarButton from "@/components/VoltarButton";
 import AltimetriaGrafico from "@/components/AltimetriaGrafico";
 import IntencaoForm, { type IntencaoAtual } from "@/components/IntencaoForm";
+import CadernoDeBordo from "@/components/CadernoDeBordo";
+import type { DadosCarimbo } from "@/components/CarimboPap";
 import TempoNoCaminho from "@/components/TempoNoCaminho";
 import { perfilAltimetria, subidaEntre } from "@/lib/altimetria";
 import { previsaoCaminho } from "@/lib/tempo-caminho";
@@ -233,6 +235,16 @@ export default async function PeregrinacaoPage() {
         .maybeSingle()
     : { data: null };
 
+  // Rodada 68 — caderno de bordo (carimbos dos PAPs lidos pelo QR code).
+  const { data: carimbosData } =
+    peregrinacao && (peregrinacao.status === "em_andamento" || peregrinacao.status === "planejada")
+      ? await supabase
+          .from("carimbos_caderno")
+          .select("id, pap_nome, cidade, km, carimbado_em")
+          .eq("peregrinacao_id", peregrinacao.id)
+          .order("carimbado_em", { ascending: true })
+      : { data: null };
+
   // Rodada 64 — altimetria da rota (com a posição pelo último check-in) e
   // tempo nas próximas cidades do caminho.
   let perfilAlt: Awaited<ReturnType<typeof perfilAltimetria>> = null;
@@ -284,6 +296,11 @@ export default async function PeregrinacaoPage() {
         todosPontosCheckin={todosPontosCheckin}
         checkinsFeitosIds={checkinsFeitosIds}
       />
+      {peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") && (
+        <div id="caderno" className="mt-6 scroll-mt-6">
+          <CadernoDeBordo carimbos={(carimbosData ?? []) as DadosCarimbo[]} />
+        </div>
+      )}
       {peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") && (
         <div className="mt-6">
           <IntencaoForm

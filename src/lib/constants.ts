@@ -105,6 +105,8 @@ export const SERVICOS_PONTO_APOIO: { value: string; label: string }[] = [
   // Rodada 62
   { value: "dietas_restritivas", label: "Dietas restritivas" },
   { value: "massagem", label: "Massagem" },
+  // Rodada 68
+  { value: "wifi", label: "Wi-Fi" },
 ];
 
 export const MEIO_TRANSPORTE_OPTIONS: { value: string; label: string }[] = [
@@ -474,3 +476,31 @@ export function formatarDatasFuncionamento(datas: string[] | null | undefined): 
     .map((g) => (g.length === 1 ? formatarData(g[0]) : `${formatarData(g[0])} a ${formatarData(g[g.length - 1])}`))
     .join(", ");
 }
+
+// Rodada 68 — ocorrências na Dutra (qualquer ano), para alerta e
+// conhecimento. Não é boletim de ocorrência policial.
+export const TIPOS_OCORRENCIA_DUTRA: { value: string; label: string }[] = [
+  { value: "acidente", label: "Acidente" },
+  { value: "atropelamento", label: "Atropelamento" },
+  { value: "assalto", label: "Assalto / roubo" },
+  { value: "furto", label: "Furto" },
+  { value: "agressao", label: "Agressão" },
+  { value: "assedio", label: "Assédio / importunação" },
+  { value: "animal_pista", label: "Animal na pista" },
+  { value: "problema_via", label: "Problema na via (buraco, sem acostamento, iluminação)" },
+  { value: "mal_subito", label: "Mal súbito / problema de saúde" },
+  { value: "outro", label: "Outro" },
+];
+
+export const TIPO_OCORRENCIA_LABELS: Record<string, string> = Object.fromEntries(
+  TIPOS_OCORRENCIA_DUTRA.map((t) => [t.value, t.label])
+);
+
+export const PERIODOS_DIA: { value: string; label: string }[] = [
+  { value: "madrugada", label: "Madrugada" },
+  { value: "manha", label: "Manhã" },
+  { value: "tarde", label: "Tarde" },
+  { value: "noite", label: "Noite" },
+];
+
+export const PERIODO_DIA_LABELS: Record<string, string> = Object.fromEntries(PERIODOS_DIA.map((p) => [p.value, p.label]));

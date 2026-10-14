@@ -6057,3 +6057,476 @@ $$;
 grant execute on function public.cracha_publico(text) to anon, authenticated;
 
 -- FIM DA MIGRATION 56
+
+
+-- =====================================================================
+-- Migration 57 (Rodada 68)
+-- =====================================================================
+-- =====================================================================
+-- Migration 57 (Rodada 68)
+-- 1) ocorrencias_dutra: registro de ocorrências na Via Dutra de QUALQUER
+--    ano (alerta e conhecimento — NÃO é boletim de ocorrência). Só aparece
+--    ao público depois de aprovado pela administração, sem identificar
+--    quem registrou. A administração marca quando comunicou às autoridades.
+-- 2) achados_perdidos: "perdi"/"achei" (sem foto), vence em 60 dias.
+-- 3) paps_qr: um QR code fixo (token) para cada PAP — aprovados e
+--    pré-cadastrados (criado sozinho para os novos). Se um gerente vincula
+--    um PAP pré-cadastrado, o mesmo QR continua valendo.
+-- 4) carimbos_caderno + carimbar_pap(): caderno de bordo — ao ler o QR do
+--    PAP durante a peregrinação, registra o carimbo com data e hora.
+-- 5) cinco modelos novos de arte da Romaria Plus.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 56.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 1) Ocorrências na Dutra
+-- ---------------------------------------------------------------------
+create table if not exists public.ocorrencias_dutra (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  tipo text not null check (tipo in ('acidente', 'atropelamento', 'assalto', 'furto', 'agressao', 'assedio',
+                                     'animal_pista', 'problema_via', 'mal_subito', 'outro')),
+  data_ocorrido date not null check (data_ocorrido >= date '1950-01-01'),
+  periodo text check (periodo in ('madrugada', 'manha', 'tarde', 'noite')),
+  km numeric(5,1) check (km is null or km between 0 and 500),
+  sentido_pista text check (sentido_pista in ('sp', 'rj')),
+  cidade text check (cidade is null or char_length(cidade) <= 80),
+  descricao text not null check (char_length(trim(descricao)) between 10 and 1000),
+  envolveu_peregrino boolean not null default false,
+  status text not null default 'pendente' check (status in ('pendente', 'aprovado', 'rejeitado')),
+  comunicado_autoridades boolean not null default false,
+  comunicado_em timestamptz,
+  observacao_admin text,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.ocorrencias_dutra is 'Rodada 68 — ocorrências na Dutra (qualquer ano) para alerta e conhecimento. Não é boletim de ocorrência policial.';
+
+create index if not exists ocorrencias_dutra_status_idx on public.ocorrencias_dutra (status, km);
+
+alter table public.ocorrencias_dutra enable row level security;
+
+drop policy if exists ocorrencias_select_own_ou_admin on public.ocorrencias_dutra;
+create policy ocorrencias_select_own_ou_admin on public.ocorrencias_dutra for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists ocorrencias_insert_own on public.ocorrencias_dutra;
+create policy ocorrencias_insert_own on public.ocorrencias_dutra for insert to authenticated
+  with check (user_id = auth.uid() and status = 'pendente' and comunicado_autoridades = false);
+
+drop policy if exists ocorrencias_update_admin on public.ocorrencias_dutra;
+create policy ocorrencias_update_admin on public.ocorrencias_dutra for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists ocorrencias_delete_own_pendente_ou_admin on public.ocorrencias_dutra;
+create policy ocorrencias_delete_own_pendente_ou_admin on public.ocorrencias_dutra for delete to authenticated
+  using ((user_id = auth.uid() and status = 'pendente') or public.is_admin());
+
+-- Data no futuro não faz sentido (checado aqui, não no "check", porque
+-- depende do dia de hoje).
+create or replace function public.ocorrencias_validar_data()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.data_ocorrido > (now() at time zone 'America/Sao_Paulo')::date then
+    raise exception 'A data da ocorrência não pode ser no futuro.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists ocorrencias_validar_data on public.ocorrencias_dutra;
+create trigger ocorrencias_validar_data
+  before insert or update of data_ocorrido on public.ocorrencias_dutra
+  for each row execute function public.ocorrencias_validar_data();
+
+-- Pública: só as aprovadas, sem identificar quem registrou.
+drop view if exists public.ocorrencias_dutra_publicas;
+create view public.ocorrencias_dutra_publicas as
+select id, tipo, data_ocorrido, periodo, km, sentido_pista, cidade, descricao, envolveu_peregrino, criado_em
+from public.ocorrencias_dutra
+where status = 'aprovado';
+
+grant select on public.ocorrencias_dutra_publicas to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 2) Achados e perdidos (sem foto)
+-- ---------------------------------------------------------------------
+create table if not exists public.achados_perdidos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  tipo text not null check (tipo in ('perdido', 'achado')),
+  titulo text not null check (char_length(trim(titulo)) between 3 and 80),
+  descricao text check (descricao is null or char_length(descricao) <= 500),
+  local_texto text check (local_texto is null or char_length(local_texto) <= 120),
+  km numeric(5,1) check (km is null or km between 0 and 500),
+  data_ocorrido date,
+  contato text check (contato is null or char_length(contato) <= 80),
+  nome text not null default 'Peregrino',
+  cidade text,
+  status text not null default 'aberto' check (status in ('aberto', 'resolvido')),
+  ativo boolean not null default true,
+  expira_em timestamptz not null default now() + interval '60 days',
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.achados_perdidos is 'Rodada 68 — achados e perdidos do caminho (sem foto). Vence em 60 dias.';
+
+alter table public.achados_perdidos enable row level security;
+
+drop policy if exists achados_select_own_ou_admin on public.achados_perdidos;
+create policy achados_select_own_ou_admin on public.achados_perdidos for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists achados_insert_own on public.achados_perdidos;
+create policy achados_insert_own on public.achados_perdidos for insert to authenticated
+  with check (user_id = auth.uid() and status = 'aberto' and ativo = true);
+
+drop policy if exists achados_update_own_ou_admin on public.achados_perdidos;
+create policy achados_update_own_ou_admin on public.achados_perdidos for update to authenticated
+  using (user_id = auth.uid() or public.is_admin())
+  with check (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists achados_delete_own_ou_admin on public.achados_perdidos;
+create policy achados_delete_own_ou_admin on public.achados_perdidos for delete to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+-- Nome (primeiro) e cidade vêm do perfil; o dono não muda "ativo",
+-- "nome", "cidade" nem o vencimento (só a administração).
+create or replace function public.achados_preencher_e_proteger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_nome text;
+  v_cidade text;
+begin
+  if tg_op = 'INSERT' then
+    select split_part(trim(coalesce(nome_completo, '')), ' ', 1), cidade into v_nome, v_cidade
+    from public.profiles where id = new.user_id;
+    new.nome := coalesce(nullif(v_nome, ''), 'Peregrino');
+    new.cidade := v_cidade;
+    new.expira_em := now() + interval '60 days';
+    new.criado_em := now();
+  elsif auth.uid() is not null and not public.is_admin() then
+    new.ativo := old.ativo;
+    new.nome := old.nome;
+    new.cidade := old.cidade;
+    new.expira_em := old.expira_em;
+    new.user_id := old.user_id;
+    new.criado_em := old.criado_em;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists achados_preencher_e_proteger on public.achados_perdidos;
+create trigger achados_preencher_e_proteger
+  before insert or update on public.achados_perdidos
+  for each row execute function public.achados_preencher_e_proteger();
+
+-- Pública: abertos, ativos e no prazo. O contato só aparece para quem
+-- está logado (evita robôs colhendo telefones).
+drop view if exists public.achados_perdidos_publicos;
+create view public.achados_perdidos_publicos as
+select id, tipo, titulo, descricao, local_texto, km, data_ocorrido,
+       case when auth.uid() is not null then contato end as contato,
+       (contato is not null) as tem_contato,
+       nome, cidade, criado_em, expira_em
+from public.achados_perdidos
+where status = 'aberto' and ativo and expira_em > now();
+
+grant select on public.achados_perdidos_publicos to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 3) QR code fixo de cada PAP
+-- ---------------------------------------------------------------------
+create table if not exists public.paps_qr (
+  id uuid primary key default gen_random_uuid(),
+  token text not null unique,
+  pap_id uuid unique references public.pontos_apoio(id) on delete cascade,
+  pre_cadastro_id uuid unique references public.paps_pre_cadastro(id) on delete cascade,
+  criado_em timestamptz not null default now(),
+  constraint paps_qr_um_destino check (pap_id is not null or pre_cadastro_id is not null)
+);
+
+comment on table public.paps_qr is 'Rodada 68 — QR code fixo de cada PAP (aprovado ou pré-cadastrado), usado no cartaz e no caderno de bordo.';
+
+alter table public.paps_qr enable row level security;
+-- Sem políticas: ninguém lê direto; tudo passa pelas funções abaixo.
+
+create or replace function public.gerar_token_qr()
+returns text
+language plpgsql
+as $$
+declare
+  v_letras constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  v_token text;
+begin
+  loop
+    v_token := '';
+    for i in 1..8 loop
+      v_token := v_token || substr(v_letras, 1 + floor(random() * length(v_letras))::int, 1);
+    end loop;
+    exit when not exists (select 1 from public.paps_qr where token = v_token);
+  end loop;
+  return v_token;
+end;
+$$;
+
+-- PAP pré-cadastrado novo → ganha QR.
+create or replace function public.paps_qr_pre_cadastro()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.paps_qr (token, pre_cadastro_id)
+  values (public.gerar_token_qr(), new.id)
+  on conflict (pre_cadastro_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists paps_qr_pre_cadastro on public.paps_pre_cadastro;
+create trigger paps_qr_pre_cadastro
+  after insert on public.paps_pre_cadastro
+  for each row execute function public.paps_qr_pre_cadastro();
+
+-- PAP novo → ganha QR, a não ser que venha de um pré-cadastro (aí usa o
+-- QR do pré-cadastro, que já pode estar impresso).
+create or replace function public.paps_qr_pap()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.pre_cadastro_id is null then
+    insert into public.paps_qr (token, pap_id)
+    values (public.gerar_token_qr(), new.id)
+    on conflict (pap_id) do nothing;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists paps_qr_pap on public.pontos_apoio;
+create trigger paps_qr_pap
+  after insert on public.pontos_apoio
+  for each row execute function public.paps_qr_pap();
+
+-- Pré-criar para todos os que já existem.
+insert into public.paps_qr (token, pre_cadastro_id)
+select public.gerar_token_qr(), pc.id
+from public.paps_pre_cadastro pc
+where not exists (select 1 from public.paps_qr q where q.pre_cadastro_id = pc.id);
+
+insert into public.paps_qr (token, pap_id)
+select public.gerar_token_qr(), pa.id
+from public.pontos_apoio pa
+where pa.pre_cadastro_id is null
+  and not exists (select 1 from public.paps_qr q where q.pap_id = pa.id);
+
+-- Dados atuais de um QR: se for de um pré-cadastro que já virou PAP
+-- (vinculado por um gerente), usa os dados do PAP.
+create or replace function public.qr_pap_dados(p_token text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_q public.paps_qr;
+  v_pa public.pontos_apoio;
+  v_pc public.paps_pre_cadastro;
+begin
+  select * into v_q from public.paps_qr where token = upper(trim(p_token));
+  if not found then
+    return null;
+  end if;
+  if v_q.pap_id is not null then
+    select * into v_pa from public.pontos_apoio where id = v_q.pap_id;
+  elsif v_q.pre_cadastro_id is not null then
+    select * into v_pa from public.pontos_apoio
+    where pre_cadastro_id = v_q.pre_cadastro_id
+    order by (status_aprovacao = 'aprovado') desc, criado_em desc
+    limit 1;
+    select * into v_pc from public.paps_pre_cadastro where id = v_q.pre_cadastro_id;
+  end if;
+
+  if v_pa.id is not null then
+    return jsonb_build_object(
+      'token', v_q.token,
+      'nome', v_pa.nome,
+      'cidade', v_pa.cidade,
+      'km', v_pa.km_referencia,
+      'br', v_pa.br,
+      'sentido_pista', v_pa.sentido_pista,
+      'pap_id', case when v_pa.status_aprovacao = 'aprovado' then v_pa.id end
+    );
+  end if;
+  return jsonb_build_object(
+    'token', v_q.token,
+    'nome', v_pc.nome,
+    'cidade', v_pc.cidade,
+    'km', v_pc.km,
+    'br', v_pc.br,
+    'sentido_pista', v_pc.sentido_pista,
+    'pap_id', null
+  );
+end;
+$$;
+
+grant execute on function public.qr_pap_dados(text) to anon, authenticated;
+
+-- Lista para a administração imprimir.
+create or replace function public.admin_qr_paps()
+returns table (token text, nome text, cidade text, km numeric, br text, sentido_pista text, origem text)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Somente administradores.';
+  end if;
+  return query
+  select q.token,
+         (d ->> 'nome'),
+         (d ->> 'cidade'),
+         (d ->> 'km')::numeric,
+         (d ->> 'br'),
+         (d ->> 'sentido_pista'),
+         case when q.pap_id is not null or (d ->> 'pap_id') is not null then 'pap' else 'pre' end
+  from public.paps_qr q
+  cross join lateral public.qr_pap_dados(q.token) d
+  order by (d ->> 'km')::numeric desc nulls last, (d ->> 'nome');
+end;
+$$;
+
+revoke all on function public.admin_qr_paps() from public;
+grant execute on function public.admin_qr_paps() to authenticated;
+
+-- Token do QR de um PAP (página de QR individual do admin).
+create or replace function public.admin_token_qr_pap(p_pap_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_token text;
+begin
+  if not public.is_admin() then
+    raise exception 'Somente administradores.';
+  end if;
+  select q.token into v_token
+  from public.paps_qr q
+  left join public.pontos_apoio pa on pa.id = p_pap_id
+  where q.pap_id = p_pap_id or (pa.pre_cadastro_id is not null and q.pre_cadastro_id = pa.pre_cadastro_id)
+  limit 1;
+  return v_token;
+end;
+$$;
+
+revoke all on function public.admin_token_qr_pap(uuid) from public;
+grant execute on function public.admin_token_qr_pap(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 4) Caderno de bordo (carimbos)
+-- ---------------------------------------------------------------------
+create table if not exists public.carimbos_caderno (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  peregrinacao_id uuid not null references public.peregrinacoes(id) on delete cascade,
+  qr_id uuid references public.paps_qr(id) on delete set null,
+  pap_nome text not null,
+  cidade text,
+  km numeric(5,1),
+  carimbado_em timestamptz not null default now(),
+  unique (peregrinacao_id, qr_id)
+);
+
+comment on table public.carimbos_caderno is 'Rodada 68 — caderno de bordo: carimbo de cada PAP visitado (lido pelo QR) durante a peregrinação.';
+
+alter table public.carimbos_caderno enable row level security;
+
+drop policy if exists carimbos_select_own_ou_admin on public.carimbos_caderno;
+create policy carimbos_select_own_ou_admin on public.carimbos_caderno for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+-- Sem insert/update direto: só pela função carimbar_pap.
+
+create or replace function public.carimbar_pap(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_q public.paps_qr;
+  v_d jsonb;
+  v_peregrinacao uuid;
+  v_carimbo public.carimbos_caderno;
+begin
+  if v_uid is null then
+    return jsonb_build_object('status', 'sem_login');
+  end if;
+  select * into v_q from public.paps_qr where token = upper(trim(p_token));
+  if not found then
+    return jsonb_build_object('status', 'qr_invalido');
+  end if;
+  select id into v_peregrinacao from public.peregrinacoes
+  where user_id = v_uid and status = 'em_andamento'
+  order by data_inicio desc nulls last
+  limit 1;
+  if v_peregrinacao is null then
+    return jsonb_build_object('status', 'sem_peregrinacao');
+  end if;
+
+  select * into v_carimbo from public.carimbos_caderno
+  where peregrinacao_id = v_peregrinacao and qr_id = v_q.id;
+  if found then
+    return jsonb_build_object('status', 'ja_carimbado', 'carimbo', to_jsonb(v_carimbo));
+  end if;
+
+  v_d := public.qr_pap_dados(v_q.token);
+  insert into public.carimbos_caderno (user_id, peregrinacao_id, qr_id, pap_nome, cidade, km)
+  values (v_uid, v_peregrinacao, v_q.id, coalesce(v_d ->> 'nome', 'PAP'), v_d ->> 'cidade', (v_d ->> 'km')::numeric)
+  returning * into v_carimbo;
+  return jsonb_build_object('status', 'carimbado', 'carimbo', to_jsonb(v_carimbo));
+end;
+$$;
+
+revoke all on function public.carimbar_pap(text) from public;
+grant execute on function public.carimbar_pap(text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 5) Modelos novos de arte da Romaria Plus
+-- ---------------------------------------------------------------------
+alter table public.romaria_plus_fotos
+  drop constraint if exists romaria_plus_fotos_modelo_check;
+alter table public.romaria_plus_fotos
+  add constraint romaria_plus_fotos_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo',
+                    'basilica', 'santa', 'terco', 'postal', 'credencial',
+                    'lata', 'rodovia', 'placa', 'manto', 'amanhecer'));
+
+alter table public.compras_romaria_plus
+  drop constraint if exists compras_romaria_plus_modelo_check;
+alter table public.compras_romaria_plus
+  add constraint compras_romaria_plus_modelo_check
+  check (modelo in ('classico', 'destaque', 'painel', 'moldura', 'itinerario', 'selo',
+                    'basilica', 'santa', 'terco', 'postal', 'credencial',
+                    'lata', 'rodovia', 'placa', 'manto', 'amanhecer'));
+
+-- FIM DA MIGRATION 57

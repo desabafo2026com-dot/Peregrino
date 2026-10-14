@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { MapPin, MapPinPlus, Route, Footprints, Hotel, Smartphone, ShieldCheck, Tent, Sparkles } from "lucide-react";
+import { MapPin, MapPinPlus, Route, Footprints, Hotel, Smartphone, ShieldCheck, Tent, Sparkles, Siren, SearchCheck } from "lucide-react";
 import CompartilharInstalarCard from "@/components/CompartilharInstalarCard";
 import SigaNosRedes from "@/components/SigaNosRedes";
 import BotaoInstalarApp from "@/components/BotaoInstalarApp";
@@ -118,6 +118,19 @@ export default async function Home() {
       icon: Hotel,
       title: "Hotéis e Restaurantes",
       desc: "Opções de hospedagem e alimentação ao longo da rodovia, com mapa e filtro por tipo.",
+    },
+    {
+      // Rodada 68
+      href: "/ocorrencias",
+      icon: Siren,
+      title: "Ocorrências na Dutra",
+      desc: "O que já aconteceu na rodovia (acidentes, assaltos, atropelamentos...) para você redobrar o cuidado. Registre também o que você viu.",
+    },
+    {
+      href: "/achados-perdidos",
+      icon: SearchCheck,
+      title: "Achados e perdidos",
+      desc: "Perdeu ou achou algo no caminho? Publique aqui e ajude a devolver ao dono.",
     },
   ];
 
