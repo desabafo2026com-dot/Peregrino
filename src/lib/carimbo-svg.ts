@@ -6,6 +6,8 @@ export interface DadosCarimbo {
   cidade: string | null;
   km: number | null;
   carimbado_em: string;
+  // Rodada 72 — imagem própria do carimbo do PAP (enviada pelo admin).
+  imagem_url?: string | null;
 }
 
 export const CORES_CARIMBO = ["#1d4ed8", "#b91c1c", "#15803d", "#7e22ce", "#b45309", "#0f766e", "#be185d"];
@@ -72,4 +74,12 @@ export function svgCarimboSanta(imagemDataUrl: string): string {
 <text font-size="22" letter-spacing="3"><textPath href="#santa-base" xlink:href="#santa-base" startOffset="50%">APARECIDA-SP</textPath></text>
 <text x="38" y="207" font-size="18">★</text><text x="362" y="207" font-size="18">★</text>
 </g></svg>`;
+}
+
+export function dataHoraCarimbo(iso: string) {
+  const dt = new Date(iso);
+  return {
+    data: dt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+    hora: dt.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
+  };
 }

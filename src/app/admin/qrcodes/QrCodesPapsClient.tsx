@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, Search } from "lucide-react";
+import { FileText, Search, Stamp } from "lucide-react";
+import CarimboPapEditor from "./CarimboPapEditor";
 import { BR_LABELS, SENTIDO_PISTA_LABELS } from "@/lib/constants";
 
 export interface QrPap {
@@ -12,6 +13,7 @@ export interface QrPap {
   br: string | null;
   sentido_pista: string | null;
   origem: "pap" | "pre";
+  carimbo_url?: string | null;
 }
 
 function normalizar(t: string) {
@@ -28,7 +30,9 @@ function localPap(p: QrPap) {
     .join(" · ");
 }
 
-export default function QrCodesPapsClient({ lista }: { lista: QrPap[] }) {
+export default function QrCodesPapsClient({ lista: listaInicial }: { lista: QrPap[] }) {
+  const [lista, setLista] = useState(listaInicial);
+  const [carimboAberto, setCarimboAberto] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<"todos" | "pap" | "pre">("todos");
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
@@ -136,6 +140,19 @@ export default function QrCodesPapsClient({ lista }: { lista: QrPap[] }) {
                 <span className="font-semibold">{p.nome ?? "PAP"}</span>
                 <span className="block text-xs text-neutral-500">{localPap(p)}</span>
               </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCarimboAberto((a) => (a === p.token ? null : p.token));
+                }}
+                className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold ${
+                  p.carimbo_url ? "border-amber-400 text-amber-800" : "border-neutral-200 text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
+                }`}
+                aria-label="Ver e trocar o carimbo virtual"
+              >
+                <Stamp size={13} /> Carimbo
+              </button>
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                   p.origem === "pap"
@@ -146,6 +163,16 @@ export default function QrCodesPapsClient({ lista }: { lista: QrPap[] }) {
                 {p.origem === "pap" ? "com gerente" : "pré-cadastro"}
               </span>
             </label>
+            {carimboAberto === p.token && (
+              <CarimboPapEditor
+                token={p.token}
+                nome={p.nome ?? "PAP"}
+                cidade={p.cidade}
+                km={p.km}
+                urlInicial={p.carimbo_url ?? null}
+                onMudou={(url) => setLista((l) => l.map((x) => (x.token === p.token ? { ...x, carimbo_url: url } : x)))}
+              />
+            )}
           </li>
         ))}
         {filtrados.length === 0 && <li className="px-3 py-4 text-sm text-neutral-500">Nenhum PAP encontrado.</li>}

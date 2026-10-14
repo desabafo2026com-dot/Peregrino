@@ -25,7 +25,7 @@ export default async function CadernoPage() {
   const [{ data: carimbosData }, { data: peregrinacoesData }, { data: perfil }] = await Promise.all([
     supabase
       .from("carimbos_caderno")
-      .select("id, peregrinacao_id, pap_nome, cidade, km, carimbado_em")
+      .select("id, peregrinacao_id, pap_nome, cidade, km, carimbado_em, imagem_url")
       .eq("user_id", user.id)
       .order("carimbado_em", { ascending: true }),
     supabase

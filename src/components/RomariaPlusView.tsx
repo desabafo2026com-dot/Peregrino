@@ -136,36 +136,11 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean; soAdmin?: boolean
   { id: "amanhecer", nome: "Amanhecer no caminho", temAjuste: false },
 ];
 
-// Rodada 68 — contorno do manto de Nossa Senhora Aparecida (modelo "manto"),
-// em % da caixa da foto. Rodada 69: contorno suave, calculado a partir de
-// curvas (cabeça arredondada, laterais que se abrem e cantos arredondados
-// na base), em vez de poucos pontos retos.
-type Ponto = [number, number];
-function curva(p0: Ponto, c1: Ponto, c2: Ponto, p1: Ponto, passos = 18): Ponto[] {
-  const pts: Ponto[] = [];
-  for (let i = 1; i <= passos; i++) {
-    const t = i / passos;
-    const u = 1 - t;
-    pts.push([
-      u * u * u * p0[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p1[0],
-      u * u * u * p0[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p1[1],
-    ]);
-  }
-  return pts;
-}
-const MANTO_LADO_DIREITO: Ponto[] = [
-  [50, 0],
-  ...curva([50, 0], [57.5, 0], [63, 3.5], [64.5, 10]),
-  ...curva([64.5, 10], [65.8, 15], [65.8, 20], [66.2, 25]),
-  ...curva([66.2, 25], [69.5, 48], [83, 74], [95.5, 93]),
-  ...curva([95.5, 93], [98.5, 97.5], [95, 100], [90, 100], 8),
-];
-const MANTO_PONTOS: Ponto[] = [
-  ...MANTO_LADO_DIREITO,
-  ...[...MANTO_LADO_DIREITO].reverse().map(([x, y]) => [100 - x, y] as Ponto).slice(1),
-];
-const MANTO_POLIGONO = MANTO_PONTOS.map(([x, y]) => `${x.toFixed(2)}% ${y.toFixed(2)}%`).join(", ");
-const MANTO_PONTOS_SVG = MANTO_PONTOS.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+// Rodada 72 — modelo "manto": contorno de Nossa Senhora Aparecida enviado
+// pelo usuário (public/arte/manto-contorno.webp, traço dourado). A foto fica
+// recortada no interior do manto (polígono abaixo, em % da imagem, extraído
+// do próprio desenho) e o ano vai na faixa de baixo.
+const MANTO_POLIGONO = "49.34% 19.22%, 45.61% 19.78%, 44.52% 20.33%, 43.86% 20.89%, 43.42% 21.45%, 42.98% 22.01%, 42.54% 22.56%, 42.32% 23.12%, 41.89% 23.68%, 41.67% 24.23%, 41.23% 24.79%, 41.01% 25.35%, 40.57% 25.91%, 40.35% 26.46%, 39.91% 27.02%, 39.69% 27.58%, 39.47% 28.13%, 39.04% 28.69%, 38.82% 29.25%, 38.38% 29.81%, 38.16% 30.36%, 37.72% 30.92%, 37.28% 31.48%, 36.84% 32.03%, 36.4% 32.59%, 35.96% 33.15%, 35.53% 33.7%, 35.09% 34.26%, 34.65% 34.82%, 34.21% 35.38%, 33.77% 35.93%, 33.33% 36.49%, 32.89% 37.05%, 32.46% 37.6%, 32.24% 38.16%, 31.8% 38.72%, 31.36% 39.28%, 31.14% 39.83%, 30.7% 40.39%, 30.26% 40.95%, 30.04% 41.5%, 29.61% 42.06%, 29.39% 42.62%, 28.95% 43.18%, 28.51% 43.73%, 28.29% 44.29%, 27.85% 44.85%, 27.63% 45.4%, 27.19% 45.96%, 26.75% 46.52%, 26.54% 47.08%, 26.1% 47.63%, 25.88% 48.19%, 25.44% 48.75%, 25.0% 49.3%, 24.78% 49.86%, 24.34% 50.42%, 24.12% 50.97%, 23.68% 51.53%, 23.46% 52.09%, 23.03% 52.65%, 22.59% 53.2%, 22.37% 53.76%, 21.93% 54.32%, 21.49% 54.87%, 21.27% 55.43%, 20.83% 55.99%, 20.61% 56.55%, 20.18% 57.1%, 19.74% 57.66%, 19.3% 58.22%, 19.08% 58.77%, 18.64% 59.33%, 18.2% 59.89%, 17.98% 60.45%, 17.54% 61.0%, 17.11% 61.56%, 16.89% 62.12%, 16.45% 62.67%, 16.01% 63.23%, 15.57% 63.79%, 15.35% 64.35%, 14.91% 64.9%, 14.47% 65.46%, 14.25% 66.02%, 13.82% 66.57%, 13.38% 67.13%, 13.16% 67.69%, 12.72% 68.25%, 12.28% 68.8%, 12.06% 69.36%, 11.62% 69.92%, 11.18% 70.47%, 10.96% 71.03%, 10.53% 71.59%, 10.09% 72.14%, 9.87% 72.7%, 9.43% 73.26%, 8.99% 73.82%, 8.77% 74.37%, 8.33% 74.93%, 7.89% 75.49%, 7.68% 76.04%, 7.24% 76.6%, 7.02% 77.16%, 6.58% 77.72%, 6.36% 78.27%, 7.02% 78.83%, 8.33% 79.39%, 9.65% 79.94%, 11.18% 80.5%, 12.5% 81.06%, 14.04% 81.62%, 15.79% 82.17%, 17.76% 82.73%, 20.18% 83.29%, 22.59% 83.84%, 26.1% 84.4%, 38.6% 84.96%, 39.91% 85.52%, 41.45% 86.07%, 43.64% 86.63%, 47.81% 87.19%, 47.81% 87.19%, 52.63% 87.19%, 52.63% 87.19%, 56.36% 86.63%, 58.55% 86.07%, 60.09% 85.52%, 61.18% 84.96%, 73.68% 84.4%, 77.41% 83.84%, 80.04% 83.29%, 82.24% 82.73%, 84.21% 82.17%, 85.96% 81.62%, 87.5% 81.06%, 89.04% 80.5%, 90.35% 79.94%, 91.67% 79.39%, 92.76% 78.83%, 93.64% 78.27%, 93.42% 77.72%, 92.98% 77.16%, 92.76% 76.6%, 92.32% 76.04%, 92.11% 75.49%, 91.67% 74.93%, 91.23% 74.37%, 91.01% 73.82%, 90.57% 73.26%, 90.13% 72.7%, 89.69% 72.14%, 89.47% 71.59%, 89.04% 71.03%, 88.82% 70.47%, 88.38% 69.92%, 87.94% 69.36%, 87.72% 68.8%, 87.28% 68.25%, 86.84% 67.69%, 86.62% 67.13%, 86.18% 66.57%, 85.75% 66.02%, 85.53% 65.46%, 85.09% 64.9%, 84.65% 64.35%, 84.21% 63.79%, 83.99% 63.23%, 83.55% 62.67%, 83.11% 62.12%, 82.68% 61.56%, 82.46% 61.0%, 82.02% 60.45%, 81.58% 59.89%, 81.36% 59.33%, 80.92% 58.77%, 80.48% 58.22%, 80.26% 57.66%, 79.82% 57.1%, 79.39% 56.55%, 79.17% 55.99%, 78.73% 55.43%, 78.29% 54.87%, 78.07% 54.32%, 77.63% 53.76%, 77.41% 53.2%, 76.97% 52.65%, 76.54% 52.09%, 76.32% 51.53%, 75.88% 50.97%, 75.66% 50.42%, 75.22% 49.86%, 75.0% 49.3%, 74.56% 48.75%, 74.12% 48.19%, 73.9% 47.63%, 73.46% 47.08%, 73.03% 46.52%, 72.81% 45.96%, 72.37% 45.4%, 72.15% 44.85%, 71.71% 44.29%, 71.27% 43.73%, 71.05% 43.18%, 70.61% 42.62%, 70.39% 42.06%, 69.96% 41.5%, 69.52% 40.95%, 69.3% 40.39%, 68.86% 39.83%, 68.64% 39.28%, 68.2% 38.72%, 67.76% 38.16%, 67.54% 37.6%, 67.11% 37.05%, 66.67% 36.49%, 66.23% 35.93%, 65.79% 35.38%, 65.35% 34.82%, 64.91% 34.26%, 64.47% 33.7%, 64.04% 33.15%, 63.6% 32.59%, 63.16% 32.03%, 62.72% 31.48%, 62.28% 30.92%, 61.84% 30.36%, 61.62% 29.81%, 61.18% 29.25%, 60.96% 28.69%, 60.53% 28.13%, 60.31% 27.58%, 59.87% 27.02%, 59.65% 26.46%, 59.43% 25.91%, 58.99% 25.35%, 58.77% 24.79%, 58.33% 24.23%, 58.11% 23.68%, 57.89% 23.12%, 57.68% 22.56%, 57.24% 22.01%, 56.8% 21.45%, 56.14% 20.89%, 55.48% 20.33%, 54.39% 19.78%, 51.1% 19.22%";
 
 
 // Transparência do fundo escurecido do "Selo de conquista" (Rodada 30, a
@@ -2235,8 +2210,8 @@ export default function RomariaPlusView({
                 de rodovia anunciando a chegada a Aparecida, com o marco do
                 km 71 da Dutra. */}
             {modelo === "placa" && (
-              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #8fc3e8 0%, #cfe6f3 50%, #7aa35a 72%, #4f7a38 100%)" }}>
-                <div className="absolute inset-x-0 top-0 h-[56%] overflow-hidden">
+              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #8fc3e8 0%, #cfe6f3 55%, #7aa35a 80%, #4f7a38 100%)" }}>
+                <div className="absolute inset-x-0 top-0 h-[67%] overflow-hidden">
                   <FotoComPanZoom
                     src={fotoUrl}
                     fotoPos={fotoPos}
@@ -2252,10 +2227,10 @@ export default function RomariaPlusView({
                 </div>
                 {cabecalho(false)}
                 {/* postes da placa */}
-                <div className="absolute bottom-0 left-[20%] h-[30%] w-[2.6%] bg-neutral-500" />
-                <div className="absolute right-[20%] bottom-0 h-[30%] w-[2.6%] bg-neutral-500" />
+                <div className="absolute bottom-0 left-[20%] h-[20%] w-[2.6%] bg-neutral-500" />
+                <div className="absolute right-[20%] bottom-0 h-[20%] w-[2.6%] bg-neutral-500" />
                 <div
-                  className="absolute inset-x-[5%] top-[50%] flex flex-col items-center gap-[1cqw] rounded-[2.5cqw] px-[5%] py-[4%] text-center text-white shadow-2xl"
+                  className="absolute inset-x-[5%] top-[61%] flex flex-col items-center gap-[1cqw] rounded-[2.5cqw] px-[5%] py-[4%] text-center text-white shadow-2xl"
                   style={{ background: "#0b6b3a", boxShadow: "inset 0 0 0 0.9cqw #0b6b3a, inset 0 0 0 1.5cqw #fff, 0 2cqw 4cqw rgba(0,0,0,.35)" }}
                 >
                   <p className="font-semibold" style={{ fontSize: fonteTitulo(4.6), lineHeight: 1.1, textAlign: "center" }}>
@@ -2299,7 +2274,7 @@ export default function RomariaPlusView({
                 }}
               >
                 {cabecalho(false)}
-                <div className="absolute top-[15%] left-1/2 w-[70%] -translate-x-1/2" style={{ aspectRatio: "7 / 9.6" }}>
+                <div className="absolute top-[9%] left-1/2 w-[72%] -translate-x-1/2" style={{ aspectRatio: "456 / 718" }}>
                   <div className="absolute inset-0 overflow-hidden" style={{ clipPath: `polygon(${MANTO_POLIGONO})` }}>
                     <FotoComPanZoom
                       src={fotoUrl}
@@ -2310,56 +2285,24 @@ export default function RomariaPlusView({
                       onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                     />
                   </div>
-                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-                    <polygon points={MANTO_PONTOS_SVG} fill="none" stroke="#7a5a14" strokeWidth="9" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                    <polygon points={MANTO_PONTOS_SVG} fill="none" stroke="#f0cf6e" strokeWidth="5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                    <polygon
-                      points={MANTO_PONTOS_SVG}
-                      fill="none"
-                      stroke="#fff3c4"
-                      strokeOpacity="0.7"
-                      strokeWidth="1.5"
-                      strokeLinejoin="round"
-                      vectorEffect="non-scaling-stroke"
-                      transform="translate(50 56) scale(0.955) translate(-50 -56)"
-                    />
-                  </svg>
-                  {/* coroa */}
-                  <svg viewBox="0 0 100 80" className="pointer-events-none absolute top-[-13.5%] left-1/2 w-[36%] -translate-x-1/2" aria-hidden="true">
-                    <path d="M18,63 C18,35 40,25 50,25 C60,25 82,35 82,63 Z" fill="#7f1d1d" opacity="0.6" />
-                    <g fill="none" stroke="#7a5a14" strokeWidth="7" strokeLinecap="round">
-                      <path d="M17,63 C17,32 40,23 50,23 C60,23 83,32 83,63" />
-                      <path d="M34,63 C34,40 44,28 50,26 C56,28 66,40 66,63" />
-                    </g>
-                    <g fill="none" stroke="#f0cf6e" strokeWidth="4.2" strokeLinecap="round">
-                      <path d="M17,63 C17,32 40,23 50,23 C60,23 83,32 83,63" />
-                      <path d="M34,63 C34,40 44,28 50,26 C56,28 66,40 66,63" />
-                    </g>
-                    <g fill="#fff4cf">
-                      <circle cx="21" cy="46" r="1.8" />
-                      <circle cx="28" cy="34" r="1.8" />
-                      <circle cx="38" cy="27" r="1.8" />
-                      <circle cx="62" cy="27" r="1.8" />
-                      <circle cx="72" cy="34" r="1.8" />
-                      <circle cx="79" cy="46" r="1.8" />
-                    </g>
-                    <rect x="13" y="61" width="74" height="13" rx="3" fill="#e5bd5a" stroke="#7a5a14" strokeWidth="2" />
-                    <circle cx="50" cy="67.5" r="3.6" fill="#1d4ed8" stroke="#7a5a14" strokeWidth="1" />
-                    <circle cx="33" cy="67.5" r="2.8" fill="#b91c1c" stroke="#7a5a14" strokeWidth="1" />
-                    <circle cx="67" cy="67.5" r="2.8" fill="#b91c1c" stroke="#7a5a14" strokeWidth="1" />
-                    <circle cx="21" cy="67.5" r="2" fill="#15803d" />
-                    <circle cx="79" cy="67.5" r="2" fill="#15803d" />
-                    <circle cx="50" cy="19" r="5" fill="#f0cf6e" stroke="#7a5a14" strokeWidth="1.5" />
-                    <rect x="48.4" y="2" width="3.2" height="13" rx="1" fill="#f0cf6e" stroke="#7a5a14" strokeWidth="1" />
-                    <rect x="44.5" y="5.6" width="11" height="3.2" rx="1" fill="#f0cf6e" stroke="#7a5a14" strokeWidth="1" />
-                  </svg>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/arte/manto-contorno.webp"
+                    alt=""
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    style={{ filter: "drop-shadow(0 0.6cqw 1.2cqw rgba(0,0,0,.45))" }}
+                    draggable={false}
+                  />
+                  <p
+                    className="absolute inset-x-0 top-[87.5%] font-bold text-[#13306a]"
+                    style={{ fontFamily: FONTE_TITULO, fontSize: "6cqw", lineHeight: 1, textAlign: "center" }}
+                  >
+                    {ano}
+                  </p>
                 </div>
-                <div className="absolute inset-x-[8%] bottom-[5%] flex flex-col items-center gap-[1cqw] text-center text-white">
+                <div className="absolute inset-x-[8%] bottom-[4.5%] flex flex-col items-center gap-[1cqw] text-center text-white">
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.08, textAlign: "center", color: "#f5d27a" }}>
                     {tituloTexto}
-                  </p>
-                  <p className="font-bold" style={{ fontSize: "8cqw", lineHeight: 1, textAlign: "center", color: "#f5d27a" }}>
-                    {ano}
                   </p>
                   <p className="font-semibold text-white/90" style={{ fontSize: "3.1cqw", textAlign: "center" }}>
                     {semPeregrinacao ? "Aparecida-SP" : `De ${nomeOrigem} a Aparecida-SP`}
@@ -2372,17 +2315,17 @@ export default function RomariaPlusView({
             )}
 
             {/* Rodada 68 — "Amanhecer no caminho": a foto como o sol nascendo
-                no horizonte da estrada. Rodada 70b: embaixo, foto da Dutra com
+                no horizonte da estrada. Rodada 70b/72: embaixo, foto da Dutra com
                 romeiros no acostamento (imagem enviada pelo usuário, com
-                direito de uso), fundida ao céu do amanhecer. */}
+                direito de uso), fundida a um céu maior do amanhecer. */}
             {modelo === "amanhecer" && (
               <div
                 className="absolute inset-0"
-                style={{ background: "linear-gradient(180deg, #16234a 0%, #33296a 13%, #8f3f63 26%, #cf5f4c 34%, #f08a3c 41%, #f39a3d 46%)" }}
+                style={{ background: "radial-gradient(ellipse 70% 18% at 50% 29%, rgba(255,238,200,.95) 0%, rgba(255,214,170,.55) 45%, rgba(255,200,160,0) 100%), linear-gradient(180deg, #16234a 0%, #2c2a63 10%, #6b3a6e 18%, #c46e6e 24%, #e9b49a 28%, #f3cfab 31%)" }}
               >
                 {cabecalho(false)}
                 <div
-                  className="absolute top-[24%] left-1/2 w-[46%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full"
+                  className="absolute top-[19.5%] left-1/2 w-[40%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full"
                   style={{ aspectRatio: "1 / 1", boxShadow: "0 0 0 1.2cqw #ffe3a3, 0 0 9cqw 3cqw rgba(255,196,92,.75)" }}
                 >
                   <FotoComPanZoom
@@ -2398,7 +2341,7 @@ export default function RomariaPlusView({
                 <img
                   src="/arte/amanhecer-dutra.webp"
                   alt=""
-                  className="pointer-events-none absolute inset-x-0 bottom-0 h-[62%] w-full object-cover object-top"
+                  className="pointer-events-none absolute inset-x-0 top-[26%] h-[80%] w-full object-cover object-top"
                   draggable={false}
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[30%]" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 40%, rgba(0,0,0,.78) 100%)" }} />

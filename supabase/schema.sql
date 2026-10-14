@@ -6662,3 +6662,139 @@ update public.paps_pre_cadastro set sentido_pista = 'sp', datas_funcionamento = 
   where nome = 'Pássaro Marrom' and cidade = 'Roseira' and br = '116' and km = 79.0;
 
 -- FIM DA MIGRATION 59
+
+
+-- =====================================================================
+-- Migration 60 (Rodada 72)
+-- =====================================================================
+-- =====================================================================
+-- Migration 60 (Rodada 72)
+-- Carimbo virtual personalizado por PAP: a administração vê como é o
+-- carimbo de cada PAP e pode trocar por uma imagem própria (ex.: o
+-- carimbo de verdade do PAP). Quem já carimbou guarda a imagem daquele
+-- momento (carimbos_caderno.imagem_url).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 59.
+-- =====================================================================
+
+alter table public.paps_qr add column if not exists carimbo_url text;
+alter table public.carimbos_caderno add column if not exists imagem_url text;
+
+comment on column public.paps_qr.carimbo_url is 'Rodada 72 — imagem própria do carimbo virtual deste PAP (nula = carimbo padrão do app).';
+
+-- Imagens dos carimbos (pequenas, enviadas pela administração).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('carimbos', 'carimbos', true, 2 * 1024 * 1024, array['image/png', 'image/webp', 'image/jpeg'])
+on conflict (id) do nothing;
+
+drop policy if exists "carimbos_select_all" on storage.objects;
+create policy "carimbos_select_all" on storage.objects for select
+  using (bucket_id = 'carimbos');
+
+drop policy if exists "carimbos_insert_admin" on storage.objects;
+create policy "carimbos_insert_admin" on storage.objects for insert to authenticated
+  with check (bucket_id = 'carimbos' and public.is_admin());
+
+drop policy if exists "carimbos_update_admin" on storage.objects;
+create policy "carimbos_update_admin" on storage.objects for update to authenticated
+  using (bucket_id = 'carimbos' and public.is_admin());
+
+drop policy if exists "carimbos_delete_admin" on storage.objects;
+create policy "carimbos_delete_admin" on storage.objects for delete to authenticated
+  using (bucket_id = 'carimbos' and public.is_admin());
+
+-- Lista do admin passa a trazer a imagem do carimbo.
+drop function if exists public.admin_qr_paps();
+create function public.admin_qr_paps()
+returns table (token text, nome text, cidade text, km numeric, br text, sentido_pista text, origem text, carimbo_url text)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Somente administradores.';
+  end if;
+  return query
+  select q.token,
+         (d ->> 'nome'),
+         (d ->> 'cidade'),
+         (d ->> 'km')::numeric,
+         (d ->> 'br'),
+         (d ->> 'sentido_pista'),
+         case when q.pap_id is not null or (d ->> 'pap_id') is not null then 'pap' else 'pre' end,
+         q.carimbo_url
+  from public.paps_qr q
+  cross join lateral public.qr_pap_dados(q.token) d
+  order by (d ->> 'km')::numeric desc nulls last, (d ->> 'nome');
+end;
+$$;
+
+revoke all on function public.admin_qr_paps() from public;
+grant execute on function public.admin_qr_paps() to authenticated;
+
+create or replace function public.admin_definir_carimbo(p_token text, p_url text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Somente administradores.';
+  end if;
+  update public.paps_qr set carimbo_url = nullif(trim(p_url), '') where token = upper(trim(p_token));
+end;
+$$;
+
+revoke all on function public.admin_definir_carimbo(text, text) from public;
+grant execute on function public.admin_definir_carimbo(text, text) to authenticated;
+
+-- Carimbar guarda a imagem do carimbo daquele momento.
+create or replace function public.carimbar_pap(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_q public.paps_qr;
+  v_d jsonb;
+  v_peregrinacao uuid;
+  v_carimbo public.carimbos_caderno;
+begin
+  if v_uid is null then
+    return jsonb_build_object('status', 'sem_login');
+  end if;
+  select * into v_q from public.paps_qr where token = upper(trim(p_token));
+  if not found then
+    return jsonb_build_object('status', 'qr_invalido');
+  end if;
+  select id into v_peregrinacao from public.peregrinacoes
+  where user_id = v_uid and status = 'em_andamento'
+  order by data_inicio desc nulls last
+  limit 1;
+  if v_peregrinacao is null then
+    return jsonb_build_object('status', 'sem_peregrinacao');
+  end if;
+
+  select * into v_carimbo from public.carimbos_caderno
+  where peregrinacao_id = v_peregrinacao and qr_id = v_q.id;
+  if found then
+    return jsonb_build_object('status', 'ja_carimbado', 'carimbo', to_jsonb(v_carimbo));
+  end if;
+
+  v_d := public.qr_pap_dados(v_q.token);
+  insert into public.carimbos_caderno (user_id, peregrinacao_id, qr_id, pap_nome, cidade, km, imagem_url)
+  values (v_uid, v_peregrinacao, v_q.id, coalesce(v_d ->> 'nome', 'PAP'), v_d ->> 'cidade', (v_d ->> 'km')::numeric, v_q.carimbo_url)
+  returning * into v_carimbo;
+  return jsonb_build_object('status', 'carimbado', 'carimbo', to_jsonb(v_carimbo));
+end;
+$$;
+
+revoke all on function public.carimbar_pap(text) from public;
+grant execute on function public.carimbar_pap(text) to authenticated;
+
+-- FIM DA MIGRATION 60

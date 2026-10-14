@@ -240,7 +240,7 @@ export default async function PeregrinacaoPage() {
     peregrinacao && (peregrinacao.status === "em_andamento" || peregrinacao.status === "planejada")
       ? await supabase
           .from("carimbos_caderno")
-          .select("id, pap_nome, cidade, km, carimbado_em")
+          .select("id, pap_nome, cidade, km, carimbado_em, imagem_url")
           .eq("peregrinacao_id", peregrinacao.id)
           .order("carimbado_em", { ascending: true })
       : { data: null };

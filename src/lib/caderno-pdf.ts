@@ -3,7 +3,7 @@
 // carimbos dos PAPs separados por cidade e, no fim, o carimbo de Nossa
 // Senhora Aparecida ("Ela me protegeu com seu manto" · "Aparecida-SP").
 // Tudo gerado no próprio aparelho (sem servidor e sem custo).
-import { giroCarimbo, svgCarimbo, svgCarimboSanta, type DadosCarimbo } from "@/lib/carimbo-svg";
+import { dataHoraCarimbo, giroCarimbo, svgCarimbo, svgCarimboSanta, type DadosCarimbo } from "@/lib/carimbo-svg";
 
 export interface CapaCaderno {
   nome: string;
@@ -29,6 +29,20 @@ function carregarImagem(src: string): Promise<HTMLImageElement> {
     img.onerror = reject;
     img.src = src;
   });
+}
+
+// Imagem própria do carimbo (Rodada 72) → PNG quadrado, girado.
+async function imagemParaPng(url: string, lado: number, giroGraus = 0): Promise<string> {
+  const img = await carregarImagem(await dataUrlDe(url));
+  const canvas = document.createElement("canvas");
+  canvas.width = lado;
+  canvas.height = lado;
+  const ctx = canvas.getContext("2d")!;
+  ctx.translate(lado / 2, lado / 2);
+  ctx.rotate((giroGraus * Math.PI) / 180);
+  const escala = (lado * 0.86) / Math.max(img.width, img.height);
+  ctx.drawImage(img, (-img.width * escala) / 2, (-img.height * escala) / 2, img.width * escala, img.height * escala);
+  return canvas.toDataURL("image/png");
 }
 
 // SVG (texto) → PNG, opcionalmente girado.
@@ -221,8 +235,24 @@ export async function exportarCadernoPdf(carimbos: DadosCarimbo[], capa: CapaCad
       const col = i % COLS;
       if (col === 0 && i > 0) y += LADO + 4;
       if (col === 0 && y + LADO > H - 18) novaPagina();
-      const png = await svgParaPng(svgCarimbo(g.lista[i]), 600, giroCarimbo(g.lista[i].id));
-      pdf.addImage(png, "PNG", X0 + col * (LADO + 6), y, LADO, LADO);
+      const c = g.lista[i];
+      let png: string;
+      try {
+        png = c.imagem_url
+          ? await imagemParaPng(c.imagem_url, 600, giroCarimbo(c.id))
+          : await svgParaPng(svgCarimbo(c), 600, giroCarimbo(c.id));
+      } catch {
+        png = await svgParaPng(svgCarimbo(c), 600, giroCarimbo(c.id));
+      }
+      const xc = X0 + col * (LADO + 6);
+      pdf.addImage(png, "PNG", xc, y, LADO, LADO);
+      if (c.imagem_url) {
+        const { data, hora } = dataHoraCarimbo(c.carimbado_em);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8);
+        pdf.setTextColor(90, 70, 40);
+        pdf.text(`${data} · ${hora}`, xc + LADO / 2, y + LADO + 1.5, { align: "center" });
+      }
     }
     y += LADO + 10;
   }

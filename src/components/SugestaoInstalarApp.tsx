@@ -51,7 +51,11 @@ export default function SugestaoInstalarApp() {
   useEffect(() => {
     if (jaInstalado) return;
     if (!pathname || PREFIXOS_SEM_SUGESTAO.some((p) => pathname.startsWith(p))) return;
-    if (detectarAparelho().sistema === "outro") return; // computador
+    const aparelho = detectarAparelho();
+    if (aparelho.sistema === "outro") return; // computador
+    // Rodada 72 — dentro do Instagram/Facebook etc. quem cuida é o aviso
+    // "Abra no navegador" (AbrirNoNavegador).
+    if (aparelho.navegador === "app-interno") return;
     if (!podeSugerirAgora()) return;
     const t = setTimeout(() => {
       marcarSugerido();

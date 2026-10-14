@@ -55,7 +55,7 @@ const ADMIN_LINK_GROUPS = [
       { href: "/admin/pap/novo", label: "Cadastrar PAP", icon: MapPinPlus },
       { href: "/admin/pap", label: "Aprovar PAP", icon: MapPinned },
       { href: "/admin/gerentes", label: "Gerentes de PAP", icon: Users },
-      { href: "/admin/qrcodes", label: "QR codes dos PAPs (imprimir)", icon: QrCode },
+      { href: "/admin/qrcodes", label: "QR codes e carimbos dos PAPs", icon: QrCode },
     ],
   },
   {
