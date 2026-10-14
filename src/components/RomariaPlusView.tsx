@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { KM_DUTRA_APARECIDA } from "@/lib/km-dutra";
+import CenaRodoviaAmanhecer from "@/components/CenaRodoviaAmanhecer";
 import { comprimirImagem, CACHE_UM_ANO } from "@/lib/comprimir-imagem";
 import type { Certificado, AjusteOverlayRomariaPlus } from "@/types/database";
 
@@ -129,7 +130,7 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean; soAdmin?: boolean
   { id: "postal", nome: "Cartão-postal", temAjuste: false },
   { id: "credencial", nome: "Credencial do peregrino", temAjuste: false },
   // Rodada 68
-  { id: "lata", nome: "Santa de Lata", temAjuste: false },
+  { id: "lata", nome: "Estátua NS Aparecida", temAjuste: false },
   { id: "rodovia", nome: "Rodovia BR-116", temAjuste: false },
   { id: "placa", nome: "Placa de chegada", temAjuste: false },
   { id: "manto", nome: "Manto de Nossa Senhora", temAjuste: false },
@@ -137,28 +138,36 @@ const MODELOS: { id: Modelo; nome: string; temAjuste: boolean; soAdmin?: boolean
 ];
 
 // Rodada 68 — contorno do manto de Nossa Senhora Aparecida (modelo "manto"),
-// em % da caixa da foto: cabeça arredondada em cima, abrindo até a base.
-const MANTO_POLIGONO = [
-  "50% 0%", "57% 1%", "62% 4%", "65% 9%", "66% 16%", "67% 24%", "70% 36%", "74% 50%",
-  "80% 66%", "88% 82%", "96% 96%", "94% 100%", "6% 100%", "4% 96%", "12% 82%", "20% 66%",
-  "26% 50%", "30% 36%", "33% 24%", "34% 16%", "35% 9%", "38% 4%", "43% 1%",
-].join(", ");
-const MANTO_PONTOS_SVG = MANTO_POLIGONO.split("%").join("").split(", ").join(" ");
-
-// Rodada 68 — pegadas na estrada do modelo "amanhecer" (viewBox 1080x730),
-// diminuindo em direção ao horizonte.
-const PEGADAS_AMANHECER = [
-  { x: 600, y: 690, r: 26, giro: 8 },
-  { x: 650, y: 610, r: 23, giro: 10 },
-  { x: 590, y: 530, r: 20, giro: 6 },
-  { x: 628, y: 460, r: 17, giro: 9 },
-  { x: 578, y: 395, r: 15, giro: 5 },
-  { x: 606, y: 335, r: 13, giro: 8 },
-  { x: 570, y: 280, r: 11, giro: 4 },
-  { x: 590, y: 230, r: 9, giro: 7 },
-  { x: 565, y: 186, r: 8, giro: 4 },
-  { x: 578, y: 148, r: 6, giro: 6 },
+// em % da caixa da foto. Rodada 69: contorno suave, calculado a partir de
+// curvas (cabeça arredondada, laterais que se abrem e cantos arredondados
+// na base), em vez de poucos pontos retos.
+type Ponto = [number, number];
+function curva(p0: Ponto, c1: Ponto, c2: Ponto, p1: Ponto, passos = 18): Ponto[] {
+  const pts: Ponto[] = [];
+  for (let i = 1; i <= passos; i++) {
+    const t = i / passos;
+    const u = 1 - t;
+    pts.push([
+      u * u * u * p0[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p1[0],
+      u * u * u * p0[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p1[1],
+    ]);
+  }
+  return pts;
+}
+const MANTO_LADO_DIREITO: Ponto[] = [
+  [50, 0],
+  ...curva([50, 0], [57.5, 0], [63, 3.5], [64.5, 10]),
+  ...curva([64.5, 10], [65.8, 15], [65.8, 20], [66.2, 25]),
+  ...curva([66.2, 25], [69.5, 48], [83, 74], [95.5, 93]),
+  ...curva([95.5, 93], [98.5, 97.5], [95, 100], [90, 100], 8),
 ];
+const MANTO_PONTOS: Ponto[] = [
+  ...MANTO_LADO_DIREITO,
+  ...[...MANTO_LADO_DIREITO].reverse().map(([x, y]) => [100 - x, y] as Ponto).slice(1),
+];
+const MANTO_POLIGONO = MANTO_PONTOS.map(([x, y]) => `${x.toFixed(2)}% ${y.toFixed(2)}%`).join(", ");
+const MANTO_PONTOS_SVG = MANTO_PONTOS.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+
 
 // Transparência do fundo escurecido do "Selo de conquista" (Rodada 30, a
 // pedido do usuário — "tem que... deixar mais transparente"): 0 = bem
@@ -223,13 +232,15 @@ const TRANSPARENCIA_FUNDO_BASILICA_PADRAO = 20;
 // em ajuste.fraseCustom — ver tituloTexto abaixo). O ano ao lado da frase
 // continua sempre fixo (o da conclusão), sem opção de mudar, em qualquer
 // escolha.
-type FraseTitulo = "peregrinacao" | "venci" | "gracas" | "comigo" | "obrigado" | "personalizada";
+type FraseTitulo = "peregrinacao" | "venci" | "gracas" | "comigo" | "obrigado" | "manto" | "personalizada";
 const FRASES_TITULO: { id: FraseTitulo; nome: string; texto: string | null }[] = [
   { id: "peregrinacao", nome: "Peregrinação para Aparecida", texto: "Peregrinação para Aparecida" },
   { id: "venci", nome: "Eu fui e venci!", texto: "Eu fui e venci!" },
   { id: "gracas", nome: "Graças alcançadas!", texto: "Graças alcançadas!" },
   { id: "comigo", nome: "Ela caminhou comigo!", texto: "Ela caminhou comigo!" },
   { id: "obrigado", nome: "Obrigado, Nossa Senhora Aparecida!", texto: "Obrigado, Nossa Senhora Aparecida!" },
+  // Rodada 69
+  { id: "manto", nome: "Cubra-me com seu manto!", texto: "Cubra-me com seu manto!" },
   { id: "personalizada", nome: "Digitar minha frase...", texto: null },
 ];
 const FRASE_CUSTOM_MAX = 42;
@@ -2125,8 +2136,8 @@ export default function RomariaPlusView({
               </div>
             )}
 
-            {/* Rodada 68 — "Santa de Lata": a foto em cima e, embaixo, a
-                Santa de Lata de Aparecida (imagem enviada pelo usuário, com
+            {/* Rodada 68 — "Estátua NS Aparecida" (Rodada 69: nome novo): a foto em cima e, embaixo, a
+                estátua de Nossa Senhora Aparecida (imagem enviada pelo usuário, com
                 o fundo removido) ao lado do título. */}
             {modelo === "lata" && (
               <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #efe9dc 0%, #e3dac6 100%)" }}>
@@ -2148,7 +2159,7 @@ export default function RomariaPlusView({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/arte/santa-de-lata.webp"
-                  alt="Santa de Lata de Aparecida"
+                  alt="Estátua de Nossa Senhora Aparecida"
                   className="pointer-events-none absolute right-[-6%] bottom-[2%] w-[62%]"
                   style={{ filter: "drop-shadow(0 1cqw 1.6cqw rgba(0,0,0,.35))" }}
                   draggable={false}
@@ -2301,18 +2312,47 @@ export default function RomariaPlusView({
                     />
                   </div>
                   <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-                    <polygon points={MANTO_PONTOS_SVG} fill="none" stroke="#e5bd5a" strokeWidth="4" vectorEffect="non-scaling-stroke" />
+                    <polygon points={MANTO_PONTOS_SVG} fill="none" stroke="#7a5a14" strokeWidth="9" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                    <polygon points={MANTO_PONTOS_SVG} fill="none" stroke="#f0cf6e" strokeWidth="5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                    <polygon
+                      points={MANTO_PONTOS_SVG}
+                      fill="none"
+                      stroke="#fff3c4"
+                      strokeOpacity="0.7"
+                      strokeWidth="1.5"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                      transform="translate(50 56) scale(0.955) translate(-50 -56)"
+                    />
                   </svg>
                   {/* coroa */}
-                  <svg viewBox="0 0 100 60" className="pointer-events-none absolute top-[-11%] left-1/2 w-[34%] -translate-x-1/2" aria-hidden="true">
-                    <path d="M8,52 L4,18 L26,34 L50,6 L74,34 L96,18 L92,52 Z" fill="#e5bd5a" stroke="#9c7420" strokeWidth="2.5" />
-                    <rect x="8" y="50" width="84" height="8" rx="2" fill="#d4a943" stroke="#9c7420" strokeWidth="2" />
-                    <circle cx="50" cy="6" r="4" fill="#fff4cf" />
-                    <circle cx="4" cy="18" r="3.4" fill="#fff4cf" />
-                    <circle cx="96" cy="18" r="3.4" fill="#fff4cf" />
-                    <circle cx="50" cy="40" r="4" fill="#1d4ed8" />
-                    <circle cx="30" cy="44" r="3" fill="#b91c1c" />
-                    <circle cx="70" cy="44" r="3" fill="#b91c1c" />
+                  <svg viewBox="0 0 100 80" className="pointer-events-none absolute top-[-13.5%] left-1/2 w-[36%] -translate-x-1/2" aria-hidden="true">
+                    <path d="M18,63 C18,35 40,25 50,25 C60,25 82,35 82,63 Z" fill="#7f1d1d" opacity="0.6" />
+                    <g fill="none" stroke="#7a5a14" strokeWidth="7" strokeLinecap="round">
+                      <path d="M17,63 C17,32 40,23 50,23 C60,23 83,32 83,63" />
+                      <path d="M34,63 C34,40 44,28 50,26 C56,28 66,40 66,63" />
+                    </g>
+                    <g fill="none" stroke="#f0cf6e" strokeWidth="4.2" strokeLinecap="round">
+                      <path d="M17,63 C17,32 40,23 50,23 C60,23 83,32 83,63" />
+                      <path d="M34,63 C34,40 44,28 50,26 C56,28 66,40 66,63" />
+                    </g>
+                    <g fill="#fff4cf">
+                      <circle cx="21" cy="46" r="1.8" />
+                      <circle cx="28" cy="34" r="1.8" />
+                      <circle cx="38" cy="27" r="1.8" />
+                      <circle cx="62" cy="27" r="1.8" />
+                      <circle cx="72" cy="34" r="1.8" />
+                      <circle cx="79" cy="46" r="1.8" />
+                    </g>
+                    <rect x="13" y="61" width="74" height="13" rx="3" fill="#e5bd5a" stroke="#7a5a14" strokeWidth="2" />
+                    <circle cx="50" cy="67.5" r="3.6" fill="#1d4ed8" stroke="#7a5a14" strokeWidth="1" />
+                    <circle cx="33" cy="67.5" r="2.8" fill="#b91c1c" stroke="#7a5a14" strokeWidth="1" />
+                    <circle cx="67" cy="67.5" r="2.8" fill="#b91c1c" stroke="#7a5a14" strokeWidth="1" />
+                    <circle cx="21" cy="67.5" r="2" fill="#15803d" />
+                    <circle cx="79" cy="67.5" r="2" fill="#15803d" />
+                    <circle cx="50" cy="19" r="5" fill="#f0cf6e" stroke="#7a5a14" strokeWidth="1.5" />
+                    <rect x="48.4" y="2" width="3.2" height="13" rx="1" fill="#f0cf6e" stroke="#7a5a14" strokeWidth="1" />
+                    <rect x="44.5" y="5.6" width="11" height="3.2" rx="1" fill="#f0cf6e" stroke="#7a5a14" strokeWidth="1" />
                   </svg>
                 </div>
                 <div className="absolute inset-x-[8%] bottom-[5%] flex flex-col items-center gap-[1cqw] text-center text-white">
@@ -2333,15 +2373,16 @@ export default function RomariaPlusView({
             )}
 
             {/* Rodada 68 — "Amanhecer no caminho": a foto como o sol nascendo
-                no horizonte da estrada, com pegadas na pista. */}
+                no horizonte da estrada. Rodada 69: embaixo, a cena da Dutra
+                com romeiros caminhando no acostamento. */}
             {modelo === "amanhecer" && (
               <div
                 className="absolute inset-0"
-                style={{ background: "linear-gradient(180deg, #16234a 0%, #3b2f6b 22%, #a84a6a 40%, #f08a3c 54%, #ffd27a 62%, #1d1a17 62.2%, #0f0d0b 100%)" }}
+                style={{ background: "linear-gradient(180deg, #16234a 0%, #3b2f6b 18%, #a84a6a 32%, #f08a3c 45%, #ffd27a 55%)" }}
               >
                 {cabecalho(false)}
                 <div
-                  className="absolute top-[34%] left-1/2 w-[58%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full"
+                  className="absolute top-[31%] left-1/2 w-[54%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full"
                   style={{ aspectRatio: "1 / 1", boxShadow: "0 0 0 1.2cqw #ffe3a3, 0 0 9cqw 3cqw rgba(255,196,92,.75)" }}
                 >
                   <FotoComPanZoom
@@ -2353,23 +2394,8 @@ export default function RomariaPlusView({
                     onSoltarArraste={() => agendarPersistirAjuste(ajuste)}
                   />
                 </div>
-                <svg viewBox="0 0 1080 730" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-[38%] w-full" aria-hidden="true">
-                  <polygon points="520,0 560,0 900,730 180,730" fill="#2b2622" />
-                  <polygon points="538,0 542,0 548,730 532,730" fill="#f6b531" opacity="0.7" />
-                  {PEGADAS_AMANHECER.map((p, i) => (
-                    <ellipse
-                      key={i}
-                      cx={p.x}
-                      cy={p.y}
-                      rx={p.r * 0.55}
-                      ry={p.r}
-                      fill="#f5e6c8"
-                      opacity="0.55"
-                      transform={`rotate(${p.giro} ${p.x} ${p.y})`}
-                    />
-                  ))}
-                </svg>
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[26%]" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.7) 45%, rgba(0,0,0,.8) 100%)" }} />
+                <CenaRodoviaAmanhecer className="absolute inset-x-0 bottom-0 h-[45%] w-full" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[24%]" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 40%, rgba(0,0,0,.8) 100%)" }} />
                 <div className="absolute inset-x-[7%] bottom-[4%] flex flex-col items-center gap-[1cqw] text-center text-white">
                   <p style={{ fontFamily: FONTE_TITULO, fontWeight: 800, fontSize: fonteTitulo(6.4), lineHeight: 1.08, textAlign: "center", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>
                     {tituloTexto}

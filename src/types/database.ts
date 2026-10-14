@@ -359,7 +359,7 @@ export interface AjusteOverlayRomariaPlus {
   // ("comigo"/"obrigado") e uma opção "personalizada" (texto livre digitado
   // pelo peregrino, guardado em fraseCustom) — o ano exibido continua sempre
   // fixo (o da conclusão), sem opção de mudar, em qualquer frase.
-  frase?: "peregrinacao" | "venci" | "gracas" | "comigo" | "obrigado" | "personalizada";
+  frase?: "peregrinacao" | "venci" | "gracas" | "comigo" | "obrigado" | "manto" | "personalizada";
   fraseCustom?: string;
   // Transparência do fundo escurecido do "Selo de conquista" (Rodada 30) —
   // 0 a 100, quanto maior mais a foto aparece por trás do selo/texto.
