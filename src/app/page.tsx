@@ -114,23 +114,23 @@ export default async function Home() {
       desc: "Cadastre sua Romaria para que autoridades, Pontos de Apoio e outros peregrinos saibam que seu grupo estará na estrada.",
     },
     {
+      // Rodada 68/69 — exigem cadastro; antes de Hotéis e Restaurantes.
+      href: user ? "/achados-perdidos" : "/login?tipo=peregrino&redirect=/achados-perdidos",
+      icon: SearchCheck,
+      title: "Achados e perdidos",
+      desc: "Perdeu ou achou algo no caminho? Publique aqui e ajude a devolver ao dono.",
+    },
+    {
+      href: user ? "/ocorrencias" : "/login?tipo=peregrino&redirect=/ocorrencias",
+      icon: Siren,
+      title: "Ocorrências na Dutra",
+      desc: "Aconteceu algo na rodovia, neste ano ou antes? Conte para a administração do app, que analisa e pode comunicar às autoridades.",
+    },
+    {
       href: "/hospedagem",
       icon: Hotel,
       title: "Hotéis e Restaurantes",
       desc: "Opções de hospedagem e alimentação ao longo da rodovia, com mapa e filtro por tipo.",
-    },
-    {
-      // Rodada 68
-      href: "/ocorrencias",
-      icon: Siren,
-      title: "Ocorrências na Dutra",
-      desc: "O que já aconteceu na rodovia (acidentes, assaltos, atropelamentos...) para você redobrar o cuidado. Registre também o que você viu.",
-    },
-    {
-      href: "/achados-perdidos",
-      icon: SearchCheck,
-      title: "Achados e perdidos",
-      desc: "Perdeu ou achou algo no caminho? Publique aqui e ajude a devolver ao dono.",
     },
   ];
 

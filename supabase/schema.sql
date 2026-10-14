@@ -6530,3 +6530,22 @@ alter table public.compras_romaria_plus
                     'lata', 'rodovia', 'placa', 'manto', 'amanhecer'));
 
 -- FIM DA MIGRATION 57
+
+
+-- =====================================================================
+-- Migration 58 (Rodada 69)
+-- =====================================================================
+-- =====================================================================
+-- Migration 58 (Rodada 69)
+-- As ocorrências na Dutra deixam de ser publicadas: ficam só para análise
+-- da administração (que pode comunicar às autoridades). Remove a view
+-- pública criada na Migration 57.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 57.
+-- =====================================================================
+
+drop view if exists public.ocorrencias_dutra_publicas;
+
+comment on table public.ocorrencias_dutra is 'Rodada 68/69 — ocorrências na Dutra (qualquer ano), só para análise da administração (não são publicadas). Não é boletim de ocorrência policial.';
+
+-- FIM DA MIGRATION 58

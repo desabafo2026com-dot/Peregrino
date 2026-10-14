@@ -8,9 +8,9 @@ export default function AvisoNaoEBoletim() {
       <ShieldAlert size={22} className="mt-0.5 shrink-0" />
       <div className="flex flex-col gap-1" style={{ textAlign: "left" }}>
         <p style={{ textAlign: "left" }}>
-          <strong>Isto não é um boletim de ocorrência policial.</strong> O registro aqui serve para alertar outros
-          peregrinos e dar conhecimento do que acontece na rodovia. Depois da análise da administração, as
-          informações podem ser repassadas às autoridades.
+          <strong>Isto não é um boletim de ocorrência policial.</strong> O registro serve para a administração do app
+          conhecer o que acontece na rodovia. Ele não é publicado: depois da análise, as informações podem ser
+          repassadas às autoridades.
         </p>
         <p style={{ textAlign: "left" }}>
           <strong>Se houve crime, procure a Polícia Civil</strong> e registre o boletim de ocorrência (em SP também dá

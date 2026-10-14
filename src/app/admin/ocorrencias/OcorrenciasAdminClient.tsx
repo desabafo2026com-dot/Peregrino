@@ -25,8 +25,8 @@ export interface OcorrenciaAdmin {
 
 const STATUS: Record<OcorrenciaAdmin["status"], { rotulo: string; cor: string }> = {
   pendente: { rotulo: "Aguardando análise", cor: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300" },
-  aprovado: { rotulo: "Publicada", cor: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300" },
-  rejeitado: { rotulo: "Não publicada", cor: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300" },
+  aprovado: { rotulo: "Analisada (procede)", cor: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300" },
+  rejeitado: { rotulo: "Analisada (descartada)", cor: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300" },
 };
 
 export default function OcorrenciasAdminClient({ iniciais }: { iniciais: OcorrenciaAdmin[] }) {
@@ -114,7 +114,7 @@ export default function OcorrenciasAdminClient({ iniciais }: { iniciais: Ocorren
                 onClick={() => atualizar(o.id, { status: "aprovado" })}
                 className="flex items-center gap-1 rounded-lg bg-green-100 px-2 py-1 text-green-800 dark:bg-green-950 dark:text-green-300"
               >
-                <Check size={14} /> Publicar
+                <Check size={14} /> Procede
               </button>
             )}
             {o.status !== "rejeitado" && (
@@ -123,7 +123,7 @@ export default function OcorrenciasAdminClient({ iniciais }: { iniciais: Ocorren
                 onClick={() => atualizar(o.id, { status: "rejeitado" })}
                 className="flex items-center gap-1 rounded-lg bg-neutral-200 px-2 py-1 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
               >
-                <X size={14} /> {o.status === "aprovado" ? "Despublicar" : "Não publicar"}
+                <X size={14} /> Descartar
               </button>
             )}
             <button

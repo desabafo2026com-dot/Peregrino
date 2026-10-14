@@ -3,9 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
 import OcorrenciasAdminClient, { type OcorrenciaAdmin } from "./OcorrenciasAdminClient";
 
-// Rodada 68 — análise das ocorrências na Dutra: publicar (ou não), ajustar
-// o texto (tirar nomes/dados pessoais) e marcar quando foi comunicado às
-// autoridades.
+// Rodada 68 — análise das ocorrências na Dutra e marca de quando foi
+// comunicado às autoridades. Rodada 69 — nada é publicado.
 export default async function AdminOcorrenciasPage() {
   const supabase = await createClient();
   const {
@@ -28,8 +27,8 @@ export default async function AdminOcorrenciasPage() {
       <VoltarButton href="/admin" />
       <h2 className="mb-1 text-xl font-bold">Ocorrências na Dutra</h2>
       <p className="mb-6 text-sm text-neutral-500">
-        Registros de peregrinos (de qualquer ano). Só aparecem ao público depois de publicados aqui, sem o nome de
-        quem registrou. Ajuste o texto se tiver nomes ou dados pessoais. Marque quando comunicar às autoridades.
+        Registros de peregrinos (de qualquer ano), só para análise da administração: nada é publicado. Marque se
+        procede ou se foi descartado, e quando comunicar às autoridades.
       </p>
       <OcorrenciasAdminClient iniciais={lista} />
     </div>

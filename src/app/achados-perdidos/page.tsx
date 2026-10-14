@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SearchCheck } from "lucide-react";
 import VoltarButton from "@/components/VoltarButton";
@@ -14,16 +15,17 @@ export default async function AchadosPerdidosPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // Rodada 69 — exige cadastro (os anúncios ficam visíveis para todos os
+  // usuários cadastrados).
+  if (!user) redirect("/login?tipo=peregrino&redirect=/achados-perdidos");
 
   const [{ data: anuncios }, { data: meus }] = await Promise.all([
     supabase.from("achados_perdidos_publicos").select("*").order("criado_em", { ascending: false }).limit(300),
-    user
-      ? supabase
-          .from("achados_perdidos")
-          .select("id, tipo, titulo, status, ativo, expira_em")
-          .eq("user_id", user.id)
-          .order("criado_em", { ascending: false })
-      : Promise.resolve({ data: [] }),
+    supabase
+      .from("achados_perdidos")
+      .select("id, tipo, titulo, status, ativo, expira_em")
+      .eq("user_id", user.id)
+      .order("criado_em", { ascending: false }),
   ]);
 
   return (
@@ -37,7 +39,7 @@ export default async function AchadosPerdidosPage() {
         documento, você também pode deixar num PAP ou entregar à polícia.
       </p>
       <AchadosPerdidosClient
-        userId={user?.id ?? null}
+        userId={user.id}
         anuncios={(anuncios ?? []) as AnuncioPublico[]}
         meusIniciais={(meus ?? []) as MeuAnuncio[]}
       />
