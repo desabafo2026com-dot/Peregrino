@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import PeregrinacaoClient from "./PeregrinacaoClient";
+import PeregrinacaoClient, { type IntencaoPlano } from "./PeregrinacaoClient";
+import { cidadeDoCheckin, montarCarimbosCaderno, type CheckinCaderno } from "@/lib/caderno-checkins";
 import VoltarButton from "@/components/VoltarButton";
 import AltimetriaGrafico from "@/components/AltimetriaGrafico";
 import IntencaoForm, { type IntencaoAtual } from "@/components/IntencaoForm";
@@ -153,6 +154,8 @@ export default async function PeregrinacaoPage() {
   let checkinsCount = 0;
   let pontosCheckin: PontoCheckin[] = [];
   let checkinsFeitosIds: string[] = [];
+  // Rodada 74 — check-ins com cidade e horário, para os carimbos do caderno.
+  let checkinsCaderno: CheckinCaderno[] = [];
   // Avisos de peregrinos da rota atual (Rodada 20): entram se forem da
   // rota atual ou sem rota marcada.
   let avisos: RiscoInformado[] = [];
@@ -207,7 +210,7 @@ export default async function PeregrinacaoPage() {
         : Promise.resolve(null),
       supabase
         .from("checkins")
-        .select("ponto_checkin_id")
+        .select("id, ponto_checkin_id, criado_em, pontos_checkin(cidade)")
         .eq("peregrinacao_id", peregrinacao.id)
         .not("ponto_checkin_id", "is", null)
         // Na ordem em que foram feitos — o mapa numera os check-ins nessa
@@ -231,6 +234,11 @@ export default async function PeregrinacaoPage() {
     checkinsFeitosIds = (feitos ?? [])
       .map((f) => f.ponto_checkin_id as string | null)
       .filter((v): v is string => !!v);
+    checkinsCaderno = (feitos ?? []).map((f) => ({
+      id: f.id as string,
+      criado_em: f.criado_em as string,
+      cidade: cidadeDoCheckin(f.pontos_checkin),
+    }));
   }
 
   // Rodada 65 — pedido ou agradecimento da peregrinação (opcional).
@@ -279,6 +287,39 @@ export default async function PeregrinacaoPage() {
     }
   }
 
+  const origemCaderno = peregrinacao ? (peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio ?? null) : null;
+  const caderno =
+    peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") ? (
+      <div id="caderno" className="scroll-mt-6">
+        <CadernoDeBordo
+          carimbos={montarCarimbosCaderno((carimbosData ?? []) as DadosCarimbo[], checkinsCaderno, {
+            cidadeSaida: peregrinacao.status === "em_andamento" ? origemCaderno : null,
+          })}
+          podeLerQr={peregrinacao.status === "em_andamento"}
+          liberarPdf={false}
+          capa={{
+            nome: p0.nome_completo,
+            ano: (peregrinacao.data_inicio ? new Date(peregrinacao.data_inicio) : new Date()).toLocaleDateString("pt-BR", {
+              timeZone: "America/Sao_Paulo",
+              year: "numeric",
+            }),
+            origem: origemCaderno,
+            periodo: peregrinacao.data_inicio
+              ? `Início em ${new Date(peregrinacao.data_inicio).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
+              : null,
+            // Rodada 73 — carimbo de saída (contorno da cidade de início)
+            // assim que a caminhada começa; o de chegada só depois de
+            // chegar em Aparecida (fica em /caderno).
+            saida:
+              peregrinacao.status === "em_andamento" && peregrinacao.data_inicio && origemCaderno
+                ? { cidade: origemCaderno, uf: ufDaOrigem(origemCaderno, p0), iso: peregrinacao.data_inicio }
+                : null,
+            chegadaIso: null,
+          }}
+        />
+      </div>
+    ) : null;
+
   return (
     <div className="mx-auto max-w-2xl">
       <VoltarButton href="/" />
@@ -302,49 +343,9 @@ export default async function PeregrinacaoPage() {
         pontosCheckin={pontosCheckin}
         todosPontosCheckin={todosPontosCheckin}
         checkinsFeitosIds={checkinsFeitosIds}
+        intencaoInicial={(intencaoData as IntencaoPlano | null) ?? null}
+        caderno={caderno}
       />
-      {peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") && (
-        <div id="caderno" className="mt-6 scroll-mt-6">
-          <CadernoDeBordo
-            carimbos={(carimbosData ?? []) as DadosCarimbo[]}
-            podeLerQr={peregrinacao.status === "em_andamento"}
-            capa={{
-              nome: p0.nome_completo,
-              ano: (peregrinacao.data_inicio ? new Date(peregrinacao.data_inicio) : new Date()).toLocaleDateString("pt-BR", {
-                timeZone: "America/Sao_Paulo",
-                year: "numeric",
-              }),
-              origem: peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio ?? null,
-              periodo: peregrinacao.data_inicio
-                ? `Início em ${new Date(peregrinacao.data_inicio).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
-                : null,
-              // Rodada 73 — carimbo de saída (contorno da cidade de início)
-              // assim que a caminhada começa; o de chegada só depois de
-              // chegar em Aparecida (fica em /caderno).
-              saida:
-                peregrinacao.status === "em_andamento" &&
-                peregrinacao.data_inicio &&
-                (peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio)
-                  ? {
-                      cidade: peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio ?? "",
-                      uf: ufDaOrigem(peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio, p0),
-                      iso: peregrinacao.data_inicio,
-                    }
-                  : null,
-              chegadaIso: null,
-            }}
-          />
-        </div>
-      )}
-      {peregrinacao && (peregrinacao.status === "planejada" || peregrinacao.status === "em_andamento") && (
-        <div className="mt-6">
-          <IntencaoForm
-            peregrinacaoId={peregrinacao.id}
-            userId={user.id}
-            inicial={(intencaoData as IntencaoAtual | null) ?? null}
-          />
-        </div>
-      )}
       {previsoes && previsoes.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
@@ -364,6 +365,18 @@ export default async function PeregrinacaoPage() {
             <AltimetriaGrafico perfil={perfilAlt} kmAtual={kmAtual} proximos={proximos} />
           </div>
         </section>
+      )}
+      {/* Rodada 74 — o pedido/agradecimento é escrito no plano; com a
+          caminhada em andamento ele fica no fim da página. Depois de
+          encerrada, vai para Meu painel → Minhas mensagens. */}
+      {peregrinacao && peregrinacao.status === "em_andamento" && (
+        <div className="mt-6">
+          <IntencaoForm
+            peregrinacaoId={peregrinacao.id}
+            userId={user.id}
+            inicial={(intencaoData as IntencaoAtual | null) ?? null}
+          />
+        </div>
       )}
     </div>
   );

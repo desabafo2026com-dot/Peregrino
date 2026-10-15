@@ -6973,3 +6973,66 @@ where pa.pre_cadastro_id = pc.id
   and pa.sentido_pista = (case pc.sentido_pista when 'sp' then 'rj' when 'rj' then 'sp' end);
 
 -- FIM DA MIGRATION 61
+
+
+-- ======================= peregrino_migration_62.sql (Rodada 74) =======================
+-- =====================================================================
+-- Migration 62 (Rodada 74)
+-- 1) Motivo da peregrinação gravado na própria peregrinação (antes ficava
+--    só no perfil e era sobrescrito a cada nova peregrinação). Serve para
+--    tirar das métricas as peregrinações de teste (motivo "Outros" com a
+--    descrição "teste"). As que já existem recebem o motivo atual do
+--    perfil (é o melhor dado disponível para elas).
+-- 2) "Minhas mensagens": o peregrino pode editar o texto dos agradecimentos
+--    que mandou aos PAPs (antes só podia apagar). Nome, cidade, PAP e a
+--    ocultação feita pela administração não mudam.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 61.
+-- =====================================================================
+
+alter table public.peregrinacoes add column if not exists motivo text;
+alter table public.peregrinacoes add column if not exists motivo_outro_desc text;
+
+comment on column public.peregrinacoes.motivo is 'Rodada 74 — motivo escolhido no planejamento desta peregrinação (mesmos valores de profiles.motivo).';
+
+update public.peregrinacoes p
+set motivo = pr.motivo,
+    motivo_outro_desc = case when pr.motivo = 'outros' then pr.motivo_outro_desc end
+from public.profiles pr
+where pr.id = p.user_id
+  and p.motivo is null
+  and pr.motivo is not null;
+
+-- 2) Agradecimentos aos PAPs: o autor pode editar a mensagem.
+drop policy if exists agradecimentos_update_own on public.agradecimentos_pap;
+create policy agradecimentos_update_own on public.agradecimentos_pap for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+create or replace function public.agradecimentos_proteger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    new.user_id := old.user_id;
+    new.certificado_id := old.certificado_id;
+    new.pap_id := old.pap_id;
+    new.pap_nome := old.pap_nome;
+    new.nome := old.nome;
+    new.cidade := old.cidade;
+    new.ativo := old.ativo;
+    new.criado_em := old.criado_em;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists agradecimentos_proteger on public.agradecimentos_pap;
+create trigger agradecimentos_proteger
+  before update on public.agradecimentos_pap
+  for each row execute function public.agradecimentos_proteger();
+
+-- FIM DA MIGRATION 62

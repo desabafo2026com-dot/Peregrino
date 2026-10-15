@@ -3,7 +3,8 @@
 // carimbos dos PAPs separados por cidade e, no fim, o carimbo de Nossa
 // Senhora Aparecida ("Ela me protegeu com seu manto" · "Aparecida-SP").
 // Tudo gerado no próprio aparelho (sem servidor e sem custo).
-import { dataHoraCarimbo, giroCarimbo, svgCarimbo, svgCarimboSaida, svgCarimboSanta, type DadosCarimbo } from "@/lib/carimbo-svg";
+import { removerFundoClaro } from "@/lib/fundo-transparente";
+import { dataHoraCarimbo, giroCarimbo, svgCarimbo, svgCarimboCidade, svgCarimboSaida, svgCarimboSanta, type DadosCarimbo } from "@/lib/carimbo-svg";
 
 export interface CapaCaderno {
   nome: string;
@@ -45,7 +46,13 @@ async function imagemParaPng(url: string, lado: number, giroGraus = 0): Promise<
   ctx.translate(lado / 2, lado / 2);
   ctx.rotate((giroGraus * Math.PI) / 180);
   const escala = (lado * 0.86) / Math.max(img.width, img.height);
-  ctx.drawImage(img, (-img.width * escala) / 2, (-img.height * escala) / 2, img.width * escala, img.height * escala);
+  // Rodada 74 — tira o fundo branco antes de girar (imagens antigas).
+  const base = document.createElement("canvas");
+  base.width = Math.round(img.width * escala);
+  base.height = Math.round(img.height * escala);
+  base.getContext("2d")!.drawImage(img, 0, 0, base.width, base.height);
+  removerFundoClaro(base);
+  ctx.drawImage(base, -base.width / 2, -base.height / 2);
   return canvas.toDataURL("image/png");
 }
 
@@ -94,7 +101,7 @@ function centralizado(ctx: CanvasRenderingContext2D, texto: string, x: number, y
 }
 
 // Capa desenhada num canvas A4 (1240 x 1754, 150 dpi).
-async function desenharCapa(capa: CapaCaderno, qtdCarimbos: number, qtdCidades: number): Promise<string> {
+async function desenharCapa(capa: CapaCaderno, qtdCarimbos: number, qtdCidades: number, qtdCheckins = 0): Promise<string> {
   const W = 1240;
   const H = 1754;
   const canvas = document.createElement("canvas");
@@ -169,7 +176,9 @@ async function desenharCapa(capa: CapaCaderno, qtdCarimbos: number, qtdCidades: 
   ctx.font = "700 34px Arial, Helvetica, sans-serif";
   centralizado(
     ctx,
-    `${qtdCarimbos} carimbo${qtdCarimbos === 1 ? "" : "s"} de Pontos de Apoio · ${qtdCidades} cidade${qtdCidades === 1 ? "" : "s"}`,
+    qtdCheckins > 0
+      ? `${qtdCheckins} check-in${qtdCheckins === 1 ? "" : "s"} · ${qtdCarimbos} carimbo${qtdCarimbos === 1 ? "" : "s"} de PAP · ${qtdCidades} cidade${qtdCidades === 1 ? "" : "s"}`
+      : `${qtdCarimbos} carimbo${qtdCarimbos === 1 ? "" : "s"} de Pontos de Apoio · ${qtdCidades} cidade${qtdCidades === 1 ? "" : "s"}`,
     W / 2,
     yDados + 260,
     W - 340
@@ -178,6 +187,7 @@ async function desenharCapa(capa: CapaCaderno, qtdCarimbos: number, qtdCidades: 
 }
 
 function agruparPorCidade(carimbos: DadosCarimbo[]) {
+  // Rodada 74 — na mesma cidade, o check-in da cidade vem antes dos PAPs.
   const ordenados = [...carimbos].sort((a, b) => a.carimbado_em.localeCompare(b.carimbado_em));
   const grupos: { cidade: string; lista: DadosCarimbo[] }[] = [];
   for (const c of ordenados) {
@@ -189,6 +199,7 @@ function agruparPorCidade(carimbos: DadosCarimbo[]) {
     }
     g.lista.push(c);
   }
+  for (const g of grupos) g.lista.sort((a, b) => (a.tipo === "cidade" ? 0 : 1) - (b.tipo === "cidade" ? 0 : 1));
   return grupos;
 }
 
@@ -200,7 +211,8 @@ export async function exportarCadernoPdf(carimbos: DadosCarimbo[], capa: CapaCad
   const H = 297;
 
   // 1) capa
-  pdf.addImage(await desenharCapa(capa, carimbos.length, grupos.length), "JPEG", 0, 0, W, H);
+  const qtdCheckins = carimbos.filter((c) => c.tipo === "cidade").length;
+  pdf.addImage(await desenharCapa(capa, carimbos.length - qtdCheckins, grupos.length, qtdCheckins), "JPEG", 0, 0, W, H);
 
   // 2) carimbos por cidade
   const fundo = () => {
@@ -264,15 +276,17 @@ export async function exportarCadernoPdf(carimbos: DadosCarimbo[], capa: CapaCad
       const c = g.lista[i];
       let png: string;
       try {
-        png = c.imagem_url
+        png = c.tipo === "cidade"
+          ? await svgParaPng(svgCarimboCidade(c), 600, giroCarimbo(c.id))
+          : c.imagem_url
           ? await imagemParaPng(c.imagem_url, 600, giroCarimbo(c.id))
           : await svgParaPng(svgCarimbo(c), 600, giroCarimbo(c.id));
       } catch {
-        png = await svgParaPng(svgCarimbo(c), 600, giroCarimbo(c.id));
+        png = await svgParaPng(c.tipo === "cidade" ? svgCarimboCidade(c) : svgCarimbo(c), 600, giroCarimbo(c.id));
       }
       const xc = X0 + col * (LADO + 6);
       pdf.addImage(png, "PNG", xc, y, LADO, LADO);
-      if (c.imagem_url) {
+      if (c.imagem_url && c.tipo !== "cidade") {
         const { data, hora } = dataHoraCarimbo(c.carimbado_em);
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(8);

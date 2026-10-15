@@ -13,6 +13,7 @@ import {
   Users,
   Medal,
   BookOpen,
+  HandHeart,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import ModelosPlusVitrine from "@/components/ModelosPlusVitrine";
@@ -107,7 +108,15 @@ export default async function PainelPage() {
     redirect("/perfil?primeiro=1");
   }
 
-  const [{ data: certificados }, { data: ativa }, { data: cracha }, { data: comprasData }, { data: carimbosData }] = await Promise.all([
+  const [
+    { data: certificados },
+    { data: ativa },
+    { data: cracha },
+    { data: comprasData },
+    { data: encerradasData },
+    { count: qtdIntencoes },
+    { count: qtdAgradecimentos },
+  ] = await Promise.all([
     supabase
       .from("certificados")
       .select("id, emitido_em")
@@ -128,14 +137,22 @@ export default async function PainelPage() {
       .eq("user_id", user.id)
       .eq("status", "pago")
       .order("criado_em", { ascending: false }),
-    // Rodada 68 — carimbos do caderno de bordo.
-    supabase.from("carimbos_caderno").select("peregrinacao_id").eq("user_id", user.id),
+    // Rodada 74 — peregrinações encerradas que chegaram a começar: cada uma
+    // tem caderno de bordo liberado para imprimir (concluída ou não).
+    supabase
+      .from("peregrinacoes")
+      .select("id")
+      .eq("user_id", user.id)
+      .in("status", ["concluida", "cancelada"])
+      .not("data_inicio", "is", null),
+    // Rodada 74 — "Minhas mensagens": pedidos/agradecimentos e agradecimentos aos PAPs.
+    supabase.from("intencoes_peregrinacao").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("agradecimentos_pap").select("id", { count: "exact", head: true }).eq("user_id", user.id),
   ]);
   // Depois de encerrada, o caderno de bordo sai de "Minha peregrinação" e vai
   // para o painel, com módulo próprio.
-  const carimbosEncerradas = ((carimbosData ?? []) as { peregrinacao_id: string }[]).filter(
-    (c) => c.peregrinacao_id !== ativa?.id
-  ).length;
+  const cadernosEncerrados = (encerradasData ?? []).length;
+  const qtdMensagens = (qtdIntencoes ?? 0) + (qtdAgradecimentos ?? 0);
 
   const compras = (comprasData ?? []) as CompraResumo[];
   const compraPlus = compras.find((c) => c.tipo === "inicial") ?? null;
@@ -297,13 +314,22 @@ export default async function PainelPage() {
           Icone={Medal}
           cor={AZUL}
         />
-        {carimbosEncerradas > 0 && (
+        {cadernosEncerrados > 0 && (
           <Modulo
             href="/caderno"
             titulo="Caderno de bordo"
-            descricao={`${carimbosEncerradas} carimbo${carimbosEncerradas > 1 ? "s" : ""} dos PAPs por onde passou`}
+            descricao={`Carimbos de ${cadernosEncerrados} peregrinaç${cadernosEncerrados > 1 ? "ões" : "ão"} · PDF para imprimir`}
             Icone={BookOpen}
             cor={OURO}
+          />
+        )}
+        {qtdMensagens > 0 && (
+          <Modulo
+            href="/minhas-mensagens"
+            titulo="Minhas mensagens"
+            descricao={`${qtdMensagens} pedido${qtdMensagens > 1 ? "s" : ""}/agradecimento${qtdMensagens > 1 ? "s" : ""} · editar ou apagar`}
+            Icone={HandHeart}
+            cor={CREME}
           />
         )}
         {ehGerente && (

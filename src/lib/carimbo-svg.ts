@@ -8,6 +8,9 @@ export interface DadosCarimbo {
   carimbado_em: string;
   // Rodada 72 — imagem própria do carimbo do PAP (enviada pelo admin).
   imagem_url?: string | null;
+  // Rodada 74 — "cidade" = check-in na cidade (carimbo retangular); sem
+  // nada = carimbo de PAP.
+  tipo?: "pap" | "cidade";
 }
 
 export const CORES_CARIMBO = ["#1d4ed8", "#b91c1c", "#15803d", "#7e22ce", "#b45309", "#0f766e", "#be185d"];
@@ -103,5 +106,25 @@ ${forma}
 <text x="100" y="${tam > 14 ? 108 : 105}" font-size="${tam}">${nome}</text>
 <text x="100" y="125" font-size="10" font-weight="700">${data}</text>
 <text x="100" y="139" font-size="10" font-weight="700">${hora}</text>
+</g></svg>`;
+}
+
+// Rodada 74 — carimbo de CHECK-IN numa cidade do caminho: selo retangular
+// (diferente do redondo dos PAPs), com a cidade, a data e a hora.
+const CORES_CIDADE = ["#1f3b6b", "#7c2d12", "#3f6212", "#5b21b6", "#9f1239", "#155e75"];
+
+export function svgCarimboCidade(c: { id: string; cidade: string | null; carimbado_em: string }): string {
+  const cor = CORES_CIDADE[hashTexto(c.cidade ?? c.id) % CORES_CIDADE.length];
+  const { data, hora } = dataHoraCarimbo(c.carimbado_em);
+  const nome = esc(encurtar((c.cidade ?? "").toUpperCase(), 20)) || "CIDADE";
+  const tam = nome.length > 15 ? 13 : nome.length > 10 ? 16 : 20;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+<g fill="none" stroke="${cor}" stroke-opacity="0.88"><rect x="10" y="38" width="180" height="124" rx="6" stroke-width="5"/><rect x="19" y="47" width="162" height="106" rx="3" stroke-width="1.5" stroke-dasharray="5 3"/></g>
+<g fill="${cor}" fill-opacity="0.92" font-family="Arial, Helvetica, sans-serif" text-anchor="middle" font-weight="800">
+<text x="100" y="69" font-size="11" letter-spacing="3">CHECK-IN</text>
+<text x="100" y="${tam > 15 ? 98 : 96}" font-size="${tam}">${nome}</text>
+<line x1="44" y1="108" x2="156" y2="108" stroke="${cor}" stroke-width="1.2"/>
+<text x="100" y="125" font-size="11" font-weight="700">${data} · ${hora}</text>
+<text x="100" y="143" font-size="9" letter-spacing="2">VIA DUTRA · O PEREGRINO</text>
 </g></svg>`;
 }

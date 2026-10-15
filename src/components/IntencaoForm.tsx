@@ -126,6 +126,9 @@ export default function IntencaoForm({
               Aparece só depois que eu iniciar a peregrinação.
             </span>
           </label>
+          <p className="text-xs text-neutral-500" style={{ textAlign: "left" }}>
+            Depois que a peregrinação terminar, ela fica em Meu painel → Minhas mensagens, onde dá para editar ou apagar.
+          </p>
           {atual && !atual.ativo && (
             <p className="text-xs text-red-600">A administração ocultou esta mensagem do mural.</p>
           )}

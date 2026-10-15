@@ -13,6 +13,7 @@ export default function CadernoDeBordo({
   mostrarDica = true,
   capa,
   podeLerQr = false,
+  liberarPdf = true,
 }: {
   // Rodada 73 — saída e chegada vêm de capa.saida / capa.chegadaIso.
   carimbos: DadosCarimbo[];
@@ -22,6 +23,8 @@ export default function CadernoDeBordo({
   capa?: CapaCaderno;
   // Rodada 73 — botão para ler o QR do PAP pela câmera, dentro do app.
   podeLerQr?: boolean;
+  // Rodada 74 — o PDF só é liberado depois de encerrar a peregrinação.
+  liberarPdf?: boolean;
 }) {
   return (
     <section
@@ -38,7 +41,7 @@ export default function CadernoDeBordo({
         <p className="flex items-start gap-2 text-sm text-amber-950/80" style={{ textAlign: "left" }}>
           <QrCode size={18} className="mt-0.5 shrink-0" />
           Em cada Ponto de Apoio, leia o QR code do PAP pelo botão abaixo (ou aponte a câmera do celular): o carimbo
-          entra aqui com a data e a hora da sua passagem.
+          entra aqui com a data e a hora da sua passagem. Os check-ins nas cidades também viram carimbos.
         </p>
       )}
       {podeLerQr && <LerQrCodePap />}
@@ -61,7 +64,13 @@ export default function CadernoDeBordo({
         </ul>
       )}
       {capa?.chegadaIso && <CarimboChegada iso={capa.chegadaIso} />}
-      {capa && (carimbos.length > 0 || capa.saida) && <ExportarCadernoPdf carimbos={carimbos} capa={capa} />}
+      {capa && liberarPdf && (carimbos.length > 0 || capa.saida) && <ExportarCadernoPdf carimbos={carimbos} capa={capa} />}
+      {!liberarPdf && (
+        <p className="text-xs text-amber-950/70" style={{ textAlign: "left" }}>
+          O PDF do caderno para imprimir fica liberado quando você encerrar a peregrinação — mesmo que ela não seja
+          concluída em Aparecida — em Meu painel → Caderno de bordo.
+        </p>
+      )}
     </section>
   );
 }

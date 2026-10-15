@@ -276,6 +276,10 @@ export interface Peregrinacao {
   // continua sendo sempre uma cidade real, usada para filtrar os
   // check-ins). Nula em peregrinações criadas antes desta rodada.
   cidade_origem: string | null;
+  // Rodada 74 (Migration 62) — motivo desta peregrinação (antes só no
+  // perfil). Opcionais para não quebrar antes da migration rodar.
+  motivo?: string | null;
+  motivo_outro_desc?: string | null;
   em_grupo: boolean;
   nome_grupo: string | null;
   tamanho_grupo: number | null;

@@ -1,6 +1,6 @@
 import AcessosSiteResumo, { type EstatisticasAcessos } from "@/components/AcessosSiteResumo";
 import { createClient } from "@/lib/supabase/server";
-import { nomeRota, avisoVisivelPublicamente, papAtivoHoje } from "@/lib/constants";
+import { nomeRota, avisoVisivelPublicamente, papAtivoHoje, ehPeregrinacaoTeste } from "@/lib/constants";
 import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
 import type { PapPreCadastroMapa } from "@/components/MapView";
 import AdminMapClient from "./AdminMapClient";
@@ -153,7 +153,7 @@ export default async function AdminDashboardPage() {
       { data: basePreCadastroCidadeKm },
       { data: acessosData, error: erroAcessos },
     ] = await Promise.all([
-      supabase.from("profiles").select("id, nome_completo, cidade, uf, is_admin, is_agente"),
+      supabase.from("profiles").select("id, nome_completo, cidade, uf, is_admin, is_agente, motivo, motivo_outro_desc"),
       supabase.from("gerentes_pap").select("id, nome_completo, telefone, nome_organizacao, status, criado_em"),
       supabase.from("peregrinacoes").select("*").order("criado_em", { ascending: false }),
       supabase.from("rotas").select("*"),
@@ -246,6 +246,8 @@ export default async function AdminDashboardPage() {
       uf: string | null;
       is_admin: boolean;
       is_agente: boolean;
+      motivo: string | null;
+      motivo_outro_desc: string | null;
     }
 
     const perfilPorId = new Map(((todosPerfis ?? []) as PerfilBasico[]).map((p) => [p.id, p]));
@@ -290,7 +292,11 @@ export default async function AdminDashboardPage() {
       criadoEm: r.criado_em,
     }));
 
-    const peregrinacoes = (todasPeregrinacoes ?? []) as Peregrinacao[];
+    // Rodada 74 — peregrinações de teste (motivo "Outros: teste") ficam fora
+    // dos números e das listas do painel.
+    const peregrinacoes = ((todasPeregrinacoes ?? []) as Peregrinacao[]).filter(
+      (p) => !ehPeregrinacaoTeste(p, perfilPorId.get(p.user_id))
+    );
     const peregrinacaoIds = peregrinacoes.map((p) => p.id);
     const { data: checkins } = peregrinacaoIds.length
       ? await supabase.from("checkins").select("peregrinacao_id").in("peregrinacao_id", peregrinacaoIds)

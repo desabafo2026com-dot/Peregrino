@@ -21,6 +21,8 @@ import {
   Megaphone,
   TriangleAlert,
   Pencil,
+  HandHeart,
+  BookOpen,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
 import InformarSinistro from "@/components/InformarSinistro";
@@ -93,6 +95,19 @@ interface Props {
   pontosCheckin: PontoCheckin[];
   todosPontosCheckin: PontoCheckin[];
   checkinsFeitosIds: string[];
+  // Rodada 74 — pedido/agradecimento já salvo (para o formulário do plano)
+  // e o caderno de bordo (montado no servidor), que fica logo acima de
+  // "Informe sinistro ou suspeita" na caminhada em andamento.
+  intencaoInicial?: IntencaoPlano | null;
+  caderno?: ReactNode;
+}
+
+export interface IntencaoPlano {
+  id: string;
+  tipo: "pedido" | "agradecimento";
+  texto: string;
+  publico: boolean;
+  ativo: boolean;
 }
 
 function formatarDuracao(inicio: string | null, fim: Date) {
@@ -200,9 +215,11 @@ export default function PeregrinacaoClient({
   avisos,
   rotas,
   checkinsCount: checkinsCountInicial,
-  pontosCheckin,
+  pontosCheckin: pontosCheckinServidor,
   todosPontosCheckin,
   checkinsFeitosIds: checkinsFeitosIdsInicial,
+  intencaoInicial = null,
+  caderno = null,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
@@ -217,6 +234,22 @@ export default function PeregrinacaoClient({
   const [mostrarAvisosMapa, setMostrarAvisosMapa] = useState(true);
 
   const [peregrinacao, setPeregrinacao] = useState(peregrinacaoInicial);
+  // Rodada 74 — os pontos de check-in da caminhada são calculados aqui, a
+  // partir da peregrinação atual. Antes vinham só do servidor, calculados
+  // quando a página abriu: quem planejava e iniciava sem sair da tela ficava
+  // com a lista vazia (sem check-in inicial, sem linha do tempo e sem
+  // caderno) até fechar e abrir o app de novo.
+  const pontosCheckin = useMemo(() => {
+    if (!peregrinacao?.rota_id) return pontosCheckinServidor;
+    const pontosRota = todosPontosCheckin
+      .filter((p) => p.rota_id === peregrinacao.rota_id)
+      .sort((a, b) => a.ordem - b.ordem);
+    if (pontosRota.length === 0) return pontosCheckinServidor;
+    const ordemInicio = peregrinacao.cidade_inicio
+      ? (pontosRota.find((p) => p.cidade === peregrinacao.cidade_inicio)?.ordem ?? 1)
+      : 1;
+    return pontosRota.filter((p) => p.ordem >= ordemInicio);
+  }, [peregrinacao, todosPontosCheckin, pontosCheckinServidor]);
   const [checkinsCount, setCheckinsCount] = useState(checkinsCountInicial);
   const [checkinsFeitosIds, setCheckinsFeitosIds] = useState(checkinsFeitosIdsInicial);
   const [diasPrevistos, setDiasPrevistos] = useState("");
@@ -243,6 +276,14 @@ export default function PeregrinacaoClient({
   const [jaFezTrajeto, setJaFezTrajeto] = useState(false);
   // Rodada 73 — editar o plano depois de salvo (antes de iniciar).
   const [editandoPlano, setEditandoPlano] = useState(false);
+  // Rodada 74 — pedido ou agradecimento (opcional) no próprio plano.
+  const [intencao, setIntencao] = useState<IntencaoPlano | null>(intencaoInicial);
+  const [intencaoTipo, setIntencaoTipo] = useState<IntencaoPlano["tipo"]>(intencaoInicial?.tipo ?? "pedido");
+  const [intencaoTexto, setIntencaoTexto] = useState(intencaoInicial?.texto ?? "");
+  const [intencaoPublico, setIntencaoPublico] = useState(intencaoInicial?.publico ?? false);
+  // Rodada 74 — ao encerrar (com ou sem certificado), o caderno de bordo
+  // fica liberado para imprimir em /caderno.
+  const [cadernoLiberado, setCadernoLiberado] = useState(false);
 
   const OUTRA_ORIGEM = "__outra__";
 
@@ -362,6 +403,8 @@ export default function PeregrinacaoClient({
     checkinsFeitosRef.current = ids;
     setCheckinsFeitosIds(ids);
     setCheckinsCount(ids.length);
+    // Rodada 74 — novos check-ins viram carimbos de cidade no caderno.
+    router.refresh();
     if (!avisar) return;
     const cidades = novos
       .map((id) => pontosCheckin.find((p) => p.id === id)?.cidade)
@@ -408,6 +451,31 @@ export default function PeregrinacaoClient({
       .eq("id", user.id);
   }
 
+  // Rodada 74 — grava (ou apaga, se ficou em branco) o pedido/agradecimento
+  // do plano. Não impede salvar o plano se falhar: avisa e segue.
+  async function salvarIntencao(peregrinacaoId: string, userId: string): Promise<boolean> {
+    const texto = intencaoTexto.trim();
+    if (!texto) {
+      if (intencao) {
+        const { error } = await supabase.from("intencoes_peregrinacao").delete().eq("id", intencao.id);
+        if (error) return false;
+        setIntencao(null);
+      }
+      return true;
+    }
+    const dados = { tipo: intencaoTipo, texto, publico: intencaoPublico, atualizado_em: new Date().toISOString() };
+    const resp = intencao
+      ? await supabase.from("intencoes_peregrinacao").update(dados).eq("id", intencao.id).select("id, tipo, texto, publico, ativo").single()
+      : await supabase
+          .from("intencoes_peregrinacao")
+          .insert({ ...dados, peregrinacao_id: peregrinacaoId, user_id: userId })
+          .select("id, tipo, texto, publico, ativo")
+          .single();
+    if (resp.error || !resp.data) return false;
+    setIntencao(resp.data as IntencaoPlano);
+    return true;
+  }
+
   function abrirEdicaoPlano() {
     if (!peregrinacao) return;
     setErro(null);
@@ -418,7 +486,11 @@ export default function PeregrinacaoClient({
     setEmGrupo(!!peregrinacao.em_grupo);
     setNomeGrupo(peregrinacao.nome_grupo ?? "");
     setTamanhoGrupo(peregrinacao.tamanho_grupo ? String(peregrinacao.tamanho_grupo) : "");
-    setMotivo((perfil.motivo as Motivo | null) ?? "");
+    setMotivo(((peregrinacao.motivo ?? perfil.motivo) as Motivo | null) ?? "");
+    setMotivoOutro((peregrinacao.motivo ? peregrinacao.motivo_outro_desc : perfil.motivo_outro_desc) ?? "");
+    setIntencaoTipo(intencao?.tipo ?? "pedido");
+    setIntencaoTexto(intencao?.texto ?? "");
+    setIntencaoPublico(intencao?.publico ?? false);
     setJaFezTrajeto(!!perfil.ja_fez_trajeto);
     setCarroApoio(!!perfil.tem_acompanhamento_carro_apoio);
     const origem = peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio ?? "";
@@ -482,6 +554,8 @@ export default function PeregrinacaoClient({
           em_grupo: emGrupo,
           nome_grupo: emGrupo ? nomeGrupo || null : null,
           tamanho_grupo: emGrupo && tamanhoGrupo ? Number(tamanhoGrupo) : null,
+          motivo: motivo || null,
+          motivo_outro_desc: motivo === "outros" ? motivoOutro || null : null,
         })
         .eq("id", peregrinacao.id)
         .eq("status", "planejada")
@@ -492,8 +566,10 @@ export default function PeregrinacaoClient({
         setErro(erroEdicao?.message ?? "Não foi possível salvar as alterações.");
         return;
       }
+      const intencaoOk = await salvarIntencao(peregrinacao.id, peregrinacao.user_id);
       setPeregrinacao(atualizada as Peregrinacao);
       setEditandoPlano(false);
+      if (!intencaoOk) setErro("O plano foi salvo, mas não foi possível salvar o pedido/agradecimento. Tente de novo em Editar plano.");
       router.refresh();
       return;
     }
@@ -544,6 +620,8 @@ export default function PeregrinacaoClient({
         nome_grupo: emGrupo ? nomeGrupo || null : null,
         tamanho_grupo: emGrupo && tamanhoGrupo ? Number(tamanhoGrupo) : null,
         compartilhar_localizacao: false,
+        motivo: motivo || null,
+        motivo_outro_desc: motivo === "outros" ? motivoOutro || null : null,
       })
       .select()
       .single();
@@ -562,7 +640,10 @@ export default function PeregrinacaoClient({
       return;
     }
 
+    const intencaoOk = await salvarIntencao((data as Peregrinacao).id, user.id);
+    if (!intencaoOk) setErro("O plano foi salvo, mas não foi possível salvar o pedido/agradecimento. Tente de novo em Editar plano.");
     setPeregrinacao(data as Peregrinacao);
+    router.refresh();
   }
 
   // O primeiro check-in (cidade de início) é feito automaticamente ao
@@ -673,6 +754,9 @@ export default function PeregrinacaoClient({
         ? `Caminhada iniciada! Check-in inicial em ${cidade} registrado.`
         : "Caminhada iniciada!"
     );
+    // Rodada 74 — atualiza o caderno (carimbo de saída) e leva o pedido ou
+    // agradecimento para o fim da página.
+    router.refresh();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -855,6 +939,7 @@ export default function PeregrinacaoClient({
       setMsg(
         "Peregrinação concluída. Certificado não emitido: é necessário ter feito o check-in inicial em uma cidade diferente de Aparecida e o check-in final em Aparecida. Você encontra essa peregrinação na lista de concluídas abaixo."
       );
+      setCadernoLiberado(true);
       setPeregrinacao(null);
       router.refresh();
       return;
@@ -1155,6 +1240,63 @@ export default function PeregrinacaoClient({
               />
             </div>
           )}
+          {/* Rodada 74 — pedido ou agradecimento (opcional) no plano. */}
+          <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 sm:col-span-2 dark:border-amber-900 dark:bg-amber-950/20">
+            <p className="flex items-center gap-2 text-sm font-bold text-amber-800 dark:text-amber-500" style={{ textAlign: "left" }}>
+              <HandHeart size={18} /> Pedido ou agradecimento <span className="text-xs font-normal text-neutral-500">(opcional)</span>
+            </p>
+            <div className="flex gap-2">
+              {(
+                [
+                  ["pedido", "Pedido"],
+                  ["agradecimento", "Agradecimento"],
+                ] as const
+              ).map(([v, r]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setIntencaoTipo(v)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                    intencaoTipo === v
+                      ? "bg-amber-800 text-white"
+                      : "bg-white text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <textarea
+              className="input"
+              rows={3}
+              maxLength={280}
+              value={intencaoTexto}
+              onChange={(e) => setIntencaoTexto(e.target.value)}
+              placeholder={
+                intencaoTipo === "pedido"
+                  ? "Ex.: Pela saúde da minha mãe."
+                  : "Ex.: Pela graça alcançada no nascimento do meu filho."
+              }
+            />
+            <p className="-mt-1 text-xs text-neutral-400" style={{ textAlign: "right" }}>
+              {intencaoTexto.length}/280
+            </p>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={intencaoPublico}
+                onChange={(e) => setIntencaoPublico(e.target.checked)}
+              />
+              <span style={{ textAlign: "left" }}>
+                Autorizo mostrar no <strong>mural de pedidos e agradecimentos</strong>, com meu primeiro nome e cidade.
+                Só é publicado quando eu iniciar a peregrinação.
+              </span>
+            </label>
+            {intencao && !intencao.ativo && (
+              <p className="text-xs text-red-600">A administração ocultou esta mensagem do mural.</p>
+            )}
+          </div>
         </div>
         <p className="mb-3 text-xs text-neutral-500">
           Salve seu plano agora; o botão para iniciar a caminhada (e passar a
@@ -1203,8 +1345,32 @@ export default function PeregrinacaoClient({
             <Pencil size={16} /> Editar plano
           </button>
         </div>
+        {intencao && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
+            <p className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-500">
+              <HandHeart size={16} /> {intencao.tipo === "pedido" ? "Meu pedido" : "Meu agradecimento"}
+            </p>
+            <p className="mt-1 text-neutral-700 dark:text-neutral-200" style={{ textAlign: "left" }}>
+              &ldquo;{intencao.texto}&rdquo;
+            </p>
+            <p className="mt-1 text-xs text-neutral-500" style={{ textAlign: "left" }}>
+              {intencao.publico
+                ? "Vai para o mural quando você iniciar a caminhada."
+                : "Fica só com você (não vai para o mural)."}{" "}
+              Para mudar, toque em Editar plano.
+            </p>
+          </div>
+        )}
       </div>
     );
+    if (caderno) {
+      principal = (
+        <div className="flex flex-col gap-4">
+          {principal}
+          {caderno}
+        </div>
+      );
+    }
   } else if (peregrinacao.status === "em_andamento") {
     const rotaAtiva = rotas.find((r) => r.id === peregrinacao.rota_id);
     principal = (
@@ -1337,6 +1503,10 @@ export default function PeregrinacaoClient({
           />
         </div>
 
+        {/* Rodada 74 — caderno de bordo logo acima de "Informe sinistro ou
+            suspeita". */}
+        {caderno}
+
         {/* Módulo 4 — Informe sinistro ou suspeita, abaixo do mapa (Rodada
             20). Rodada 46: botão grande, vermelho forte, ocupando a largura
             toda — é o que precisa ser achado rápido numa emergência. */}
@@ -1378,6 +1548,17 @@ export default function PeregrinacaoClient({
   return (
     <div className="flex flex-col gap-6">
       {parabens && <ParabensConclusao onReceber={() => router.push("/certificado")} />}
+      {cadernoLiberado && (
+        <Link href="/caderno" className="card flex items-center gap-3 border-amber-300 transition hover:border-amber-500">
+          <BookOpen size={26} className="shrink-0 text-amber-700" />
+          <span>
+            <span className="block font-bold">Caderno de bordo liberado para imprimir</span>
+            <span className="block text-sm text-neutral-500">
+              Seus carimbos desta peregrinação estão em Caderno de bordo, com o PDF para guardar ou imprimir.
+            </span>
+          </span>
+        </Link>
+      )}
       {principal}
 
     </div>

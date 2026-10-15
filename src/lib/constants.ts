@@ -508,3 +508,16 @@ export const PERIODOS_DIA: { value: string; label: string }[] = [
 ];
 
 export const PERIODO_DIA_LABELS: Record<string, string> = Object.fromEntries(PERIODOS_DIA.map((p) => [p.value, p.label]));
+
+// Rodada 74 — peregrinações de teste (motivo "Outros" descrito como
+// "teste", "testando"...) ficam fora de todas as métricas. Usa o motivo da
+// própria peregrinação (Migration 62) e, se ele não existir, o do perfil.
+export function ehPeregrinacaoTeste(
+  peregrinacao: { motivo?: string | null; motivo_outro_desc?: string | null },
+  perfil?: { motivo?: string | null; motivo_outro_desc?: string | null } | null
+): boolean {
+  const motivo = peregrinacao.motivo ?? perfil?.motivo ?? null;
+  const desc = peregrinacao.motivo ? peregrinacao.motivo_outro_desc : perfil?.motivo_outro_desc;
+  if (motivo !== "outros") return false;
+  return /test/.test((desc ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase());
+}

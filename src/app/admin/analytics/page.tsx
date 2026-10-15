@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { nomeRota } from "@/lib/constants";
+import { ehPeregrinacaoTeste, nomeRota } from "@/lib/constants";
 import VoltarButton from "@/components/VoltarButton";
 import AcessosSiteResumo, { type EstatisticasAcessos } from "@/components/AcessosSiteResumo";
 import AdminAnalyticsClient, {
@@ -103,7 +103,12 @@ export default async function AdminAnalyticsPage() {
     (certificadosData ?? []).map((c) => c.peregrinacao_id as string)
   );
 
-  const peregrinacoes: PeregrinacaoAnalytics[] = ((peregrinacoesData ?? []) as Peregrinacao[]).map(
+  // Rodada 74 — peregrinações de teste (motivo "Outros: teste") não
+  // entram em nenhuma métrica.
+  const brutas = (peregrinacoesData ?? []) as Peregrinacao[];
+  const semTeste = brutas.filter((p) => !ehPeregrinacaoTeste(p, perfilPorId.get(p.user_id)));
+  const qtdTeste = brutas.length - semTeste.length;
+  const peregrinacoes: PeregrinacaoAnalytics[] = semTeste.map(
     (p) => {
       const perfil = perfilPorId.get(p.user_id);
       return {
@@ -122,7 +127,7 @@ export default async function AdminAnalyticsPage() {
         tamanhoGrupo: p.tamanho_grupo,
         criadoEm: p.criado_em,
         temCertificado: idsComCertificado.has(p.id),
-        motivo: perfil?.motivo ?? null,
+        motivo: p.motivo ?? perfil?.motivo ?? null,
         religiao: perfil?.religiao ?? null,
         sexo: perfil?.sexo ?? null,
         dataNascimento: perfil?.data_nascimento ?? null,
@@ -185,6 +190,12 @@ export default async function AdminAnalyticsPage() {
       <VoltarButton href="/admin" />
       {/* Rodada 50 — acessos ao site, com ou sem cadastro (Migration 44). */}
       <AcessosSiteResumo dados={erroAcessos ? null : ((acessosData ?? null) as EstatisticasAcessos | null)} />
+      {qtdTeste > 0 && (
+        <p className="text-xs text-neutral-500" style={{ textAlign: "left" }}>
+          {qtdTeste} peregrinaç{qtdTeste === 1 ? "ão" : "ões"} de teste (motivo &quot;Outros&quot; descrito como teste)
+          fora{qtdTeste === 1 ? "" : "m"} deixada{qtdTeste === 1 ? "" : "s"} de fora das métricas.
+        </p>
+      )}
       <AdminAnalyticsClient
         peregrinacoes={peregrinacoesReais}
         checkins={checkins}
