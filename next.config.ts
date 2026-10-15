@@ -22,7 +22,9 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), payment=()" },
+          // Rodada 73 — câmera liberada só para o próprio app (leitor de QR
+          // code do caderno de bordo); continua bloqueada para terceiros.
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), payment=()" },
           // Rodada 59 — política de conteúdo mínima, sem risco de quebrar o
           // app: bloqueia plugins (<object>/<embed>), troca de <base> e
           // incorporação em iframe.

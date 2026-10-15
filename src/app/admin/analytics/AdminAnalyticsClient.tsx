@@ -22,6 +22,7 @@ import {
   Award,
   Clock,
   CalendarDays,
+  MapPinned,
 } from "lucide-react";
 import { MOTIVOS, RELIGIOES, MEIO_TRANSPORTE_OPTIONS, SENTIDO_PISTA_LABELS } from "@/lib/constants";
 import type { StatusPeregrinacao, StatusAprovacaoPap, StatusRiscoInformado, CategoriaSinistro } from "@/types/database";
@@ -421,6 +422,144 @@ function TrendLineChart({
 // ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
+// Rodada 73 — saídas por cidade: planejadas para um dia, iniciadas no dia
+// e, por cidade, quantos dias antes de 12 de outubro e em que horário as
+// pessoas mais saem (pelas peregrinações iniciadas antes do dia 12).
+const FUSO_BR = "America/Sao_Paulo";
+function diaBR(iso: string) {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: FUSO_BR });
+}
+function horaBR(iso: string) {
+  return Number(new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO_BR, hour: "2-digit", hourCycle: "h23" }).format(new Date(iso)));
+}
+function hojeBR() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: FUSO_BR });
+}
+function moda(valores: number[]): { valor: number; vezes: number } | null {
+  if (!valores.length) return null;
+  const m = new Map<number, number>();
+  valores.forEach((v) => m.set(v, (m.get(v) ?? 0) + 1));
+  let melhor: { valor: number; vezes: number } | null = null;
+  m.forEach((vezes, valor) => {
+    if (!melhor || vezes > melhor.vezes || (vezes === melhor.vezes && valor < melhor.valor)) melhor = { valor, vezes };
+  });
+  return melhor;
+}
+
+function cidadeDe(p: PeregrinacaoAnalytics) {
+  return (p.cidadeOrigem ?? "").trim() || "Sem cidade";
+}
+
+function SaidasPorCidade({ peregrinacoes, dark }: { peregrinacoes: PeregrinacaoAnalytics[]; dark: boolean }) {
+  const [dia, setDia] = useState(hojeBR);
+
+  const planejadas = useMemo(() => {
+    const lista = peregrinacoes.filter((p) => p.dataInicioPrevista && p.dataInicioPrevista.slice(0, 10) === dia);
+    return paraSerie(contarPor(lista, cidadeDe), (c) => c).slice(0, 12);
+  }, [peregrinacoes, dia]);
+  const iniciadas = useMemo(() => {
+    const lista = peregrinacoes.filter((p) => p.dataInicio && diaBR(p.dataInicio) === dia);
+    return paraSerie(contarPor(lista, cidadeDe), (c) => c).slice(0, 12);
+  }, [peregrinacoes, dia]);
+
+  // Métrica por cidade: saídas reais (data_inicio) antes do dia 12/10 do
+  // mesmo ano (de 1º de setembro a 11 de outubro).
+  const metricas = useMemo(() => {
+    const porCidade = new Map<string, { dias: number[]; horas: number[] }>();
+    for (const p of peregrinacoes) {
+      if (!p.dataInicio) continue;
+      const d = diaBR(p.dataInicio);
+      const ano = d.slice(0, 4);
+      if (d < `${ano}-09-01` || d >= `${ano}-10-12`) continue;
+      const diasAntes = Math.round((Date.parse(`${ano}-10-12T00:00:00Z`) - Date.parse(`${d}T00:00:00Z`)) / 86400000);
+      const c = cidadeDe(p);
+      const item = porCidade.get(c) ?? { dias: [], horas: [] };
+      item.dias.push(diasAntes);
+      item.horas.push(horaBR(p.dataInicio));
+      porCidade.set(c, item);
+    }
+    return [...porCidade.entries()]
+      .map(([cidade, { dias, horas }]) => ({
+        cidade,
+        total: dias.length,
+        diasModa: moda(dias),
+        diasMedia: dias.reduce((a, b) => a + b, 0) / dias.length,
+        horaModa: moda(horas),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [peregrinacoes]);
+
+  const dataLegivel = dia.split("-").reverse().join("/");
+  return (
+    <section>
+      <SecaoTitulo
+        icon={MapPinned}
+        titulo="Saídas por cidade"
+        descricao="Quantos planejaram sair e quantos saíram de cada cidade no dia escolhido."
+      />
+      <label className="mb-3 flex items-center gap-2 text-sm">
+        Dia:
+        <input type="date" className="input w-auto" value={dia} onChange={(e) => setDia(e.target.value || hojeBR())} />
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="card">
+          <p className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
+            Planejadas para {dataLegivel} (por cidade de origem)
+          </p>
+          <RankedBarChart data={planejadas} dark={dark} />
+        </div>
+        <div className="card">
+          <p className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
+            Iniciadas em {dataLegivel} (por cidade de origem)
+          </p>
+          <RankedBarChart data={iniciadas} dark={dark} />
+        </div>
+      </div>
+      <div className="card mt-3 overflow-x-auto">
+        <p className="mb-1 text-sm font-medium text-neutral-600 dark:text-neutral-300" style={{ textAlign: "left" }}>
+          Antes do dia 12 de outubro: quando cada cidade sai
+        </p>
+        <p className="mb-3 text-xs text-neutral-500" style={{ textAlign: "left" }}>
+          Pelas peregrinações iniciadas entre 1º de setembro e 11 de outubro (de todos os anos registrados). &quot;Dias
+          antes&quot; = quantos dias antes do dia 12 a pessoa começou a caminhar.
+        </p>
+        {metricas.length === 0 ? (
+          <p className="py-4 text-center text-sm text-neutral-400">Ainda sem peregrinações iniciadas nesse período.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500 dark:border-neutral-800">
+                <th className="py-1 pr-2">Cidade</th>
+                <th className="py-1 pr-2 text-right">Saídas</th>
+                <th className="py-1 pr-2">Dias antes (mais comum)</th>
+                <th className="py-1 pr-2 text-right">Média</th>
+                <th className="py-1">Horário mais comum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metricas.map((m) => (
+                <tr key={m.cidade} className="border-b border-neutral-100 dark:border-neutral-900">
+                  <td className="py-1.5 pr-2 font-medium">{m.cidade}</td>
+                  <td className="py-1.5 pr-2 text-right">{m.total}</td>
+                  <td className="py-1.5 pr-2">
+                    {m.diasModa ? `${m.diasModa.valor} dia${m.diasModa.valor === 1 ? "" : "s"} (${m.diasModa.vezes}×)` : "-"}
+                  </td>
+                  <td className="py-1.5 pr-2 text-right">{m.diasMedia.toFixed(1)}</td>
+                  <td className="py-1.5">
+                    {m.horaModa
+                      ? `${String(m.horaModa.valor).padStart(2, "0")}h–${String((m.horaModa.valor + 1) % 24).padStart(2, "0")}h (${m.horaModa.vezes}×)`
+                      : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function AdminAnalyticsClient({
   peregrinacoes,
   checkins,
@@ -721,6 +860,8 @@ export default function AdminAnalyticsClient({
           </div>
         </div>
       </section>
+
+      <SaidasPorCidade peregrinacoes={peregrinacoes} dark={dark} />
 
       {/* Quando */}
       <section>

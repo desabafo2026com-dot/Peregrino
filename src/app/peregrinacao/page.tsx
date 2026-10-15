@@ -15,6 +15,13 @@ import { kmPertenceARota, avisoVisivelPublicamente, hojeISO } from "@/lib/consta
 import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
 import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota, PapPreCadastro } from "@/types/database";
 
+// Rodada 73 — a UF do perfil só serve de pista quando a origem é a própria
+// cidade do perfil; senão a busca do contorno tenta SP, RJ, MG...
+function ufDaOrigem(origem: string | null, perfil: Profile): string | null {
+  const n = (t: string | null | undefined) => (t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  return origem && perfil.uf && n(origem) === n(perfil.cidade) ? perfil.uf : null;
+}
+
 export default async function PeregrinacaoPage() {
   const supabase = await createClient();
   const {
@@ -300,6 +307,7 @@ export default async function PeregrinacaoPage() {
         <div id="caderno" className="mt-6 scroll-mt-6">
           <CadernoDeBordo
             carimbos={(carimbosData ?? []) as DadosCarimbo[]}
+            podeLerQr={peregrinacao.status === "em_andamento"}
             capa={{
               nome: p0.nome_completo,
               ano: (peregrinacao.data_inicio ? new Date(peregrinacao.data_inicio) : new Date()).toLocaleDateString("pt-BR", {
@@ -310,6 +318,20 @@ export default async function PeregrinacaoPage() {
               periodo: peregrinacao.data_inicio
                 ? `Início em ${new Date(peregrinacao.data_inicio).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
                 : null,
+              // Rodada 73 — carimbo de saída (contorno da cidade de início)
+              // assim que a caminhada começa; o de chegada só depois de
+              // chegar em Aparecida (fica em /caderno).
+              saida:
+                peregrinacao.status === "em_andamento" &&
+                peregrinacao.data_inicio &&
+                (peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio)
+                  ? {
+                      cidade: peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio ?? "",
+                      uf: ufDaOrigem(peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio, p0),
+                      iso: peregrinacao.data_inicio,
+                    }
+                  : null,
+              chegadaIso: null,
             }}
           />
         </div>

@@ -3,13 +3,17 @@
 // carimbos dos PAPs separados por cidade e, no fim, o carimbo de Nossa
 // Senhora Aparecida ("Ela me protegeu com seu manto" · "Aparecida-SP").
 // Tudo gerado no próprio aparelho (sem servidor e sem custo).
-import { dataHoraCarimbo, giroCarimbo, svgCarimbo, svgCarimboSanta, type DadosCarimbo } from "@/lib/carimbo-svg";
+import { dataHoraCarimbo, giroCarimbo, svgCarimbo, svgCarimboSaida, svgCarimboSanta, type DadosCarimbo } from "@/lib/carimbo-svg";
 
 export interface CapaCaderno {
   nome: string;
   ano: string;
   origem: string | null;
   periodo: string | null; // "09 a 12/10/2026" ou "desde 09/10/2026"
+  // Rodada 73 — carimbo de saída (contorno da cidade) e de chegada (só
+  // depois de chegar a Aparecida).
+  saida?: { cidade: string; uf: string | null; iso: string } | null;
+  chegadaIso?: string | null;
 }
 
 async function dataUrlDe(url: string): Promise<string> {
@@ -221,6 +225,28 @@ export async function exportarCadernoPdf(carimbos: DadosCarimbo[], capa: CapaCad
     y = 24;
   };
   novaPagina();
+  if (capa.saida) {
+    let caminho: string | null = null;
+    try {
+      const params = new URLSearchParams({ cidade: capa.saida.cidade });
+      if (capa.saida.uf) params.set("uf", capa.saida.uf);
+      const r = await fetch(`/api/contorno-cidade?${params}`);
+      caminho = r.ok ? ((await r.json()).caminho ?? null) : null;
+    } catch {
+      caminho = null;
+    }
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(15);
+    pdf.setTextColor(21, 128, 61);
+    pdf.text(`Saída — ${capa.saida.cidade}`, X0, y + 6);
+    pdf.setDrawColor(21, 128, 61);
+    pdf.setLineWidth(0.6);
+    pdf.line(X0, y + 8.5, W - X0, y + 8.5);
+    y += 13;
+    const png = await svgParaPng(svgCarimboSaida({ caminho, cidade: capa.saida.cidade, iso: capa.saida.iso }), 700, -4);
+    pdf.addImage(png, "PNG", (W - 70) / 2, y, 70, 70);
+    y += 80;
+  }
   for (const g of grupos) {
     if (y + 12 + LADO > H - 18) novaPagina();
     pdf.setFont("helvetica", "bold");
@@ -257,7 +283,8 @@ export async function exportarCadernoPdf(carimbos: DadosCarimbo[], capa: CapaCad
     y += LADO + 10;
   }
 
-  // 3) carimbo de Nossa Senhora Aparecida
+  // 3) carimbo de Nossa Senhora Aparecida — só depois da chegada
+  if (capa.chegadaIso) {
   pdf.addPage();
   fundo();
   const santa = await dataUrlDe("/arte/santa-desenho-escuro.webp");
@@ -276,7 +303,10 @@ export async function exportarCadernoPdf(carimbos: DadosCarimbo[], capa: CapaCad
   pdf.setFont("times", "italic");
   pdf.setFontSize(14);
   pdf.setTextColor(90, 70, 40);
-  pdf.text(`${capa.nome} · ${capa.ano}`, W / 2, 228, { align: "center" });
+  const chegada = dataHoraCarimbo(capa.chegadaIso);
+  pdf.text(`Chegada em Aparecida · ${chegada.data} às ${chegada.hora}`, W / 2, 228, { align: "center" });
+  pdf.text(`${capa.nome} · ${capa.ano}`, W / 2, 238, { align: "center" });
+  }
 
   const nomeArquivo = `caderno-de-bordo-${capa.ano}-${capa.nome.split(" ")[0].toLowerCase()}.pdf`
     .normalize("NFD")

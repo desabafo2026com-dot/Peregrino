@@ -22,7 +22,7 @@ export default async function CadernoPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?redirect=/caderno");
 
-  const [{ data: carimbosData }, { data: peregrinacoesData }, { data: perfil }] = await Promise.all([
+  const [{ data: carimbosData }, { data: peregrinacoesData }, { data: perfil }, { data: certificadosData }] = await Promise.all([
     supabase
       .from("carimbos_caderno")
       .select("id, peregrinacao_id, pap_nome, cidade, km, carimbado_em, imagem_url")
@@ -33,8 +33,14 @@ export default async function CadernoPage() {
       .select("id, status, data_inicio, data_fim, cidade_origem, cidade_inicio")
       .eq("user_id", user.id)
       .order("data_inicio", { ascending: false }),
-    supabase.from("profiles").select("nome_completo").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("nome_completo, cidade, uf").eq("id", user.id).maybeSingle(),
+    // Rodada 73 — o carimbo de chegada só aparece para quem chegou em
+    // Aparecida (peregrinação concluída com certificado emitido).
+    supabase.from("certificados").select("peregrinacao_id").eq("user_id", user.id),
   ]);
+  const comCertificado = new Set(((certificadosData ?? []) as { peregrinacao_id: string }[]).map((c) => c.peregrinacao_id));
+  const normalizar = (t: string | null | undefined) =>
+    (t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
   const nome = (perfil?.nome_completo as string | undefined) ?? "Peregrino";
   const dataBr = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
@@ -49,7 +55,7 @@ export default async function CadernoPage() {
   }[]).filter((p) => p.status !== "planejada" && p.status !== "em_andamento");
   const grupos = encerradas
     .map((p) => ({ p, lista: carimbos.filter((c) => c.peregrinacao_id === p.id) }))
-    .filter((g) => g.lista.length > 0);
+    .filter((g) => g.lista.length > 0 || (g.p.status === "concluida" && !!g.p.data_inicio));
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
@@ -59,7 +65,7 @@ export default async function CadernoPage() {
       </h1>
       {grupos.length === 0 ? (
         <p className="card text-sm text-neutral-500">
-          Os carimbos dos PAPs aparecem aqui depois que a peregrinação é encerrada. A peregrinação em andamento tem o
+          Os carimbos (saída, PAPs e chegada) aparecem aqui depois que a peregrinação é encerrada. A peregrinação em andamento tem o
           caderno dentro de Minha peregrinação.
         </p>
       ) : (
@@ -84,6 +90,15 @@ export default async function CadernoPage() {
                     : p.data_inicio
                       ? `Início em ${dataBr(p.data_inicio)}`
                       : null,
+                saida:
+                  p.data_inicio && origem
+                    ? {
+                        cidade: origem,
+                        uf: perfil?.uf && normalizar(origem) === normalizar(perfil.cidade as string | null) ? (perfil.uf as string) : null,
+                        iso: p.data_inicio,
+                      }
+                    : null,
+                chegadaIso: p.status === "concluida" && p.data_fim && comCertificado.has(p.id) ? p.data_fim : null,
               }}
             />
           );

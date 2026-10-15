@@ -1,7 +1,9 @@
 import { BookOpen, QrCode } from "lucide-react";
 import CarimboPap, { type DadosCarimbo } from "@/components/CarimboPap";
 import ExportarCadernoPdf from "@/components/ExportarCadernoPdf";
+import { CarimboChegada, CarimboSaida } from "@/components/CarimbosEspeciais";
 import type { CapaCaderno } from "@/lib/caderno-pdf";
+import LerQrCodePap from "@/components/LerQrCodePap";
 
 // Rodada 68 — caderno de bordo: os carimbos dos PAPs por onde o peregrino
 // passou (lidos pelo QR code fixado em cada PAP), em ordem de passagem.
@@ -10,12 +12,16 @@ export default function CadernoDeBordo({
   titulo = "Meu caderno de bordo",
   mostrarDica = true,
   capa,
+  podeLerQr = false,
 }: {
+  // Rodada 73 — saída e chegada vêm de capa.saida / capa.chegadaIso.
   carimbos: DadosCarimbo[];
   titulo?: string;
   mostrarDica?: boolean;
   // Rodada 71 — dados da capa do PDF; sem eles, não mostra o botão.
   capa?: CapaCaderno;
+  // Rodada 73 — botão para ler o QR do PAP pela câmera, dentro do app.
+  podeLerQr?: boolean;
 }) {
   return (
     <section
@@ -31,16 +37,22 @@ export default function CadernoDeBordo({
       {mostrarDica && (
         <p className="flex items-start gap-2 text-sm text-amber-950/80" style={{ textAlign: "left" }}>
           <QrCode size={18} className="mt-0.5 shrink-0" />
-          Em cada Ponto de Apoio, aponte a câmera do celular para o QR code do PAP: o carimbo entra aqui com a data e a
-          hora da sua passagem.
+          Em cada Ponto de Apoio, leia o QR code do PAP pelo botão abaixo (ou aponte a câmera do celular): o carimbo
+          entra aqui com a data e a hora da sua passagem.
         </p>
       )}
-      {carimbos.length === 0 ? (
+      {podeLerQr && <LerQrCodePap />}
+      {carimbos.length === 0 && !capa?.saida ? (
         <p className="rounded-xl border border-dashed border-amber-900/30 p-4 text-center text-sm text-amber-950/60" style={{ textAlign: "center" }}>
           Nenhum carimbo ainda.
         </p>
       ) : (
         <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+          {capa?.saida && (
+            <li>
+              <CarimboSaida cidade={capa.saida.cidade} uf={capa.saida.uf} iso={capa.saida.iso} />
+            </li>
+          )}
           {carimbos.map((c) => (
             <li key={c.id}>
               <CarimboPap carimbo={c} />
@@ -48,7 +60,8 @@ export default function CadernoDeBordo({
           ))}
         </ul>
       )}
-      {capa && carimbos.length > 0 && <ExportarCadernoPdf carimbos={carimbos} capa={capa} />}
+      {capa?.chegadaIso && <CarimboChegada iso={capa.chegadaIso} />}
+      {capa && (carimbos.length > 0 || capa.saida) && <ExportarCadernoPdf carimbos={carimbos} capa={capa} />}
     </section>
   );
 }

@@ -83,3 +83,25 @@ export function dataHoraCarimbo(iso: string) {
     hora: dt.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
   };
 }
+
+// Rodada 73 — carimbo de SAÍDA: o contorno da cidade de início (IBGE) com
+// "Saída", o nome da cidade, a data e a hora. Sem o contorno, um selo
+// retangular.
+export function svgCarimboSaida(opcoes: { caminho: string | null; cidade: string; iso: string }): string {
+  const cor = "#15803d";
+  const { data, hora } = dataHoraCarimbo(opcoes.iso);
+  const nome = esc(encurtar(opcoes.cidade.toUpperCase(), 22));
+  const tam = nome.length > 16 ? 12 : nome.length > 11 ? 15 : 18;
+  const forma = opcoes.caminho
+    ? `<g transform="translate(6,6) scale(1.88)"><path d="${opcoes.caminho}" fill="${cor}" fill-opacity="0.12" stroke="${cor}" stroke-opacity="0.9" stroke-width="1.6" stroke-linejoin="round"/></g>`
+    : `<rect x="12" y="34" width="176" height="132" rx="18" fill="${cor}" fill-opacity="0.1" stroke="${cor}" stroke-width="4"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+${forma}
+<rect x="30" y="70" width="140" height="78" rx="10" fill="#fffaf0" fill-opacity="0.88" stroke="${cor}" stroke-width="1.5"/>
+<g fill="${cor}" font-family="Arial, Helvetica, sans-serif" text-anchor="middle" font-weight="800">
+<text x="100" y="86" font-size="10" letter-spacing="2">SAÍDA</text>
+<text x="100" y="${tam > 14 ? 108 : 105}" font-size="${tam}">${nome}</text>
+<text x="100" y="125" font-size="10" font-weight="700">${data}</text>
+<text x="100" y="139" font-size="10" font-weight="700">${hora}</text>
+</g></svg>`;
+}

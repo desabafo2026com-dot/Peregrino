@@ -38,6 +38,12 @@ export default function CarimbarAgora({ token, logado }: { token: string; logado
         <Link href={`/login?redirect=/carimbo/${token}`} className="btn-primary w-full">
           Entrar e carimbar
         </Link>
+        {/* Rodada 73 — no iPhone a câmera abre o QR no Safari, que não usa o
+            login do app instalado. */}
+        <p className="mt-1 text-xs text-neutral-500" style={{ textAlign: "center" }}>
+          Já tem o app O Peregrino instalado e está logado nele? Abra o app, vá em Minha peregrinação e toque em
+          &quot;Ler QR code do PAP&quot; no caderno de bordo — assim não precisa entrar de novo.
+        </p>
       </div>
     );
   }

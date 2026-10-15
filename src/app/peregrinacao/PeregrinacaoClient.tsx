@@ -20,6 +20,7 @@ import {
   Tent,
   Megaphone,
   TriangleAlert,
+  Pencil,
 } from "lucide-react";
 import { MEIO_TRANSPORTE_OPTIONS, MEIO_TRANSPORTE_LABELS, MOTIVOS, DIAS_PREVISTOS_OPTIONS, nomeRota } from "@/lib/constants";
 import InformarSinistro from "@/components/InformarSinistro";
@@ -240,6 +241,8 @@ export default function PeregrinacaoClient({
   // peregrinação nova começa com a pergunta em aberto, mesmo que a pessoa já
   // tenha marcado "sim" da última vez.
   const [jaFezTrajeto, setJaFezTrajeto] = useState(false);
+  // Rodada 73 — editar o plano depois de salvo (antes de iniciar).
+  const [editandoPlano, setEditandoPlano] = useState(false);
 
   const OUTRA_ORIGEM = "__outra__";
 
@@ -405,6 +408,30 @@ export default function PeregrinacaoClient({
       .eq("id", user.id);
   }
 
+  function abrirEdicaoPlano() {
+    if (!peregrinacao) return;
+    setErro(null);
+    setDiasPrevistos(peregrinacao.dias_previstos ? String(peregrinacao.dias_previstos) : "");
+    setDataInicioPrevista(peregrinacao.data_inicio_prevista ? peregrinacao.data_inicio_prevista.slice(0, 10) : "");
+    setMeioTransporte(peregrinacao.meio_transporte as MeioTransporte);
+    setMeioTransporteOutro(peregrinacao.meio_transporte_outro_desc ?? "");
+    setEmGrupo(!!peregrinacao.em_grupo);
+    setNomeGrupo(peregrinacao.nome_grupo ?? "");
+    setTamanhoGrupo(peregrinacao.tamanho_grupo ? String(peregrinacao.tamanho_grupo) : "");
+    setMotivo((perfil.motivo as Motivo | null) ?? "");
+    setJaFezTrajeto(!!perfil.ja_fez_trajeto);
+    setCarroApoio(!!perfil.tem_acompanhamento_carro_apoio);
+    const origem = peregrinacao.cidade_origem ?? peregrinacao.cidade_inicio ?? "";
+    if (todasAsCidades.some((c) => c.cidade === origem)) {
+      setOrigemSelecionada(origem);
+    } else {
+      setOrigemSelecionada(OUTRA_ORIGEM);
+      setCidadeOrigemLivre(origem);
+      setEntradaRotaCidade(peregrinacao.cidade_inicio ?? "");
+    }
+    setEditandoPlano(true);
+  }
+
   async function criarPeregrinacao() {
     setErro(null);
     if (!diasPrevistos) {
@@ -438,6 +465,38 @@ export default function PeregrinacaoClient({
     const cidadeOrigemFinal =
       origemSelecionada === OUTRA_ORIGEM ? cidadeOrigemLivre.trim() : origemSelecionada;
     setLoading(true);
+
+    // Rodada 73 — salvando a edição de um plano já existente.
+    if (editandoPlano && peregrinacao && peregrinacao.status === "planejada") {
+      await salvarDadosPeregrino();
+      const { data: atualizada, error: erroEdicao } = await supabase
+        .from("peregrinacoes")
+        .update({
+          dias_previstos: diasPrevistos ? Number(diasPrevistos) : null,
+          data_inicio_prevista: dataInicioPrevista || null,
+          meio_transporte: meioTransporte,
+          meio_transporte_outro_desc: meioTransporte === "outros" ? meioTransporteOutro : null,
+          rota_id: pontoEntrada.rota_id,
+          cidade_inicio: pontoEntrada.cidade,
+          cidade_origem: cidadeOrigemFinal,
+          em_grupo: emGrupo,
+          nome_grupo: emGrupo ? nomeGrupo || null : null,
+          tamanho_grupo: emGrupo && tamanhoGrupo ? Number(tamanhoGrupo) : null,
+        })
+        .eq("id", peregrinacao.id)
+        .eq("status", "planejada")
+        .select()
+        .single();
+      setLoading(false);
+      if (erroEdicao || !atualizada) {
+        setErro(erroEdicao?.message ?? "Não foi possível salvar as alterações.");
+        return;
+      }
+      setPeregrinacao(atualizada as Peregrinacao);
+      setEditandoPlano(false);
+      router.refresh();
+      return;
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -860,11 +919,11 @@ export default function PeregrinacaoClient({
         </Link>
       </div>
     );
-  } else if (!peregrinacao) {
+  } else if (!peregrinacao || editandoPlano) {
     principal = (
       <div className="card">
         <h2 className="mb-3 text-base font-bold text-amber-800 dark:text-amber-500">
-          Iniciar peregrinação
+          {editandoPlano ? "Editar plano da peregrinação" : "Iniciar peregrinação"}
         </h2>
         {msg && (
           <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
@@ -1105,8 +1164,13 @@ export default function PeregrinacaoClient({
         {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
         <div className="flex flex-wrap justify-center gap-3">
           <button disabled={loading} onClick={criarPeregrinacao} className="btn-primary">
-            {loading ? "Salvando..." : "Salvar plano"}
+            {loading ? "Salvando..." : editandoPlano ? "Salvar alterações" : "Salvar plano"}
           </button>
+          {editandoPlano && (
+            <button type="button" disabled={loading} onClick={() => setEditandoPlano(false)} className="btn-secondary">
+              Cancelar
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1131,9 +1195,14 @@ export default function PeregrinacaoClient({
           {peregrinacao.dias_previstos ? ` — ${peregrinacao.dias_previstos} dia(s) previstos.` : "."}
         </p>
         {erro && <p className="mb-3 text-sm text-red-600">{erro}</p>}
-        <button disabled={loading} onClick={iniciarCaminhada} className="btn-primary flex items-center gap-2">
-          <Flag size={18} /> Iniciar caminhada
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button disabled={loading} onClick={iniciarCaminhada} className="btn-primary flex items-center gap-2">
+            <Flag size={18} /> Iniciar caminhada
+          </button>
+          <button type="button" disabled={loading} onClick={abrirEdicaoPlano} className="btn-secondary flex items-center gap-2">
+            <Pencil size={16} /> Editar plano
+          </button>
+        </div>
       </div>
     );
   } else if (peregrinacao.status === "em_andamento") {
