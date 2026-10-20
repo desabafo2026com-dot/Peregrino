@@ -345,6 +345,16 @@ export default async function PeregrinacaoPage() {
         checkinsFeitosIds={checkinsFeitosIds}
         intencaoInicial={(intencaoData as IntencaoPlano | null) ?? null}
         caderno={caderno}
+        altimetria={
+          perfilAlt && peregrinacao?.status === "em_andamento" ? (
+            <section className="card">
+              <h2 className="mb-3 flex items-center justify-center gap-2 text-center text-base font-bold text-amber-800 dark:text-amber-500">
+                <Mountain size={18} /> Altimetria do trajeto
+              </h2>
+              <AltimetriaGrafico perfil={perfilAlt} kmAtual={kmAtual} proximos={proximos} />
+            </section>
+          ) : null
+        }
       />
       {previsoes && previsoes.length > 0 && (
         <section className="mt-6">
@@ -356,7 +366,7 @@ export default async function PeregrinacaoPage() {
           </div>
         </section>
       )}
-      {perfilAlt && (
+      {perfilAlt && peregrinacao?.status !== "em_andamento" && (
         <section className="mt-6">
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-800 dark:text-amber-500">
             <Mountain size={20} /> Altimetria do trajeto

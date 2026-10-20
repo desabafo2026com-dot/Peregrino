@@ -1,5 +1,6 @@
 import { normalizarCidade } from "@/lib/pap-pre-cadastro-mapa";
 import type { PontoRisco } from "@/types/database";
+import { rotaDutraBase } from "@/lib/constants";
 
 // Rodada 46 — km real da Via Dutra (BR-116, trecho paulista) de
 // referência na ENTRADA de cada cidade de check-in, informados pelo
@@ -51,9 +52,10 @@ export function kmFaltamAparecida(kmDutra: number): number {
 // continua aparecendo, por segurança.
 export function riscoAindaAFrente(
   risco: Pick<PontoRisco, "km_referencia">,
-  rotaSlug: string | null | undefined,
+  rotaSlugOriginal: string | null | undefined,
   kmReferenciaAtual: number | null
 ): boolean {
+  const rotaSlug = rotaDutraBase(rotaSlugOriginal);
   if (risco.km_referencia == null || kmReferenciaAtual == null || !rotaSlug) return true;
   const km = risco.km_referencia;
   if (rotaSlug === "norte") return km <= kmReferenciaAtual && km >= KM_DUTRA_APARECIDA - 1;

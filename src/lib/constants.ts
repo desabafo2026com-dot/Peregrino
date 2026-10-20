@@ -162,7 +162,21 @@ export const SENTIDO_KM_ABREV: Record<string, string> = {
 export const ROTA_FAIXA_KM: Record<string, string> = {
   norte: "km 231 a 71",
   sul: "km 70 a 0",
+  // Rodada 75 — rotas que entram na Dutra no meio do caminho.
+  campinas: "D. Pedro I + Dutra km 160 a 71",
+  br459: "BR-459 + Dutra km 53 a 71",
 };
+
+// Rodada 75 — as rotas novas entram na Dutra e seguem o mesmo sentido de
+// uma das duas rotas originais: Campinas (D. Pedro I) chega em Jacareí e
+// segue como a São Paulo - Aparecida; Piquete (BR-459) chega em Lorena e
+// segue como a Rio de Janeiro - Aparecida. Usado nas regras de km/riscos.
+export function rotaDutraBase(slug: string | null | undefined): string | null {
+  if (!slug) return null;
+  if (slug === "campinas") return "norte";
+  if (slug === "br459") return "sul";
+  return slug;
+}
 
 // Nome de exibição de cada rota, pelo slug — usado em vez do campo
 // `rotas.nome` do banco diretamente, para que o nome correto ("São Paulo -
@@ -171,6 +185,8 @@ export const ROTA_FAIXA_KM: Record<string, string> = {
 export const ROTA_NOME_LABELS: Record<string, string> = {
   norte: "São Paulo - Aparecida",
   sul: "Rio de Janeiro - Aparecida",
+  campinas: "Campinas - Aparecida (D. Pedro I)",
+  br459: "Piquete - Aparecida (BR-459)",
 };
 
 export function nomeRota(rota: { slug: string; nome: string } | null | undefined): string {
@@ -185,7 +201,8 @@ export function nomeRota(rota: { slug: string; nome: string } | null | undefined
 // Usada para filtrar pontos de risco por rota a partir do km cadastrado,
 // evitando que um ponto (por rota_id incorreto, ou marcado como "ambas as
 // rotas") apareça na tabela de riscos da rota errada.
-export function kmPertenceARota(km: number, rotaSlug: string): boolean {
+export function kmPertenceARota(km: number, rotaSlugOriginal: string): boolean {
+  const rotaSlug = rotaDutraBase(rotaSlugOriginal);
   if (rotaSlug === "norte") return km > 70;
   if (rotaSlug === "sul") return km >= 0 && km <= 70;
   return true;

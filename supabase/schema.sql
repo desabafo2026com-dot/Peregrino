@@ -7036,3 +7036,138 @@ create trigger agradecimentos_proteger
   for each row execute function public.agradecimentos_proteger();
 
 -- FIM DA MIGRATION 62
+
+
+-- ======================= peregrino_migration_63.sql (Rodada 75) =======================
+-- =====================================================================
+-- Migration 63 (Rodada 75)
+-- Novas cidades de check-in:
+-- 1) Rota Rio de Janeiro - Aparecida (sul): a Dutra no RJ, de Volta
+--    Redonda até Itatiaia (Volta Redonda, Barra Mansa, Porto Real,
+--    Resende, Itatiaia), antes de Queluz. Os km aproximados da rota passam
+--    a contar a partir de Volta Redonda (+78 km nos que já existiam).
+-- 2) Rota nova "Campinas - Aparecida (D. Pedro I)": Campinas, Itatiba,
+--    Atibaia, Bom Jesus dos Perdões, Nazaré Paulista, Igaratá e, a partir
+--    de Jacareí, as mesmas cidades da Dutra da rota São Paulo - Aparecida.
+-- 3) Rota nova "Piquete - Aparecida (BR-459)": Piquete e, a partir de
+--    Lorena, as mesmas cidades da rota Rio de Janeiro - Aparecida.
+-- Coordenadas: centro de cada município (base pública do IBGE). Km:
+-- aproximados (distância entre as cidades), como os que já existiam.
+-- Cidades que já existirem na rota não são mexidas.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 62.
+-- =====================================================================
+
+insert into public.rotas (slug, nome, origem, destino, cor, ordem) values
+  ('campinas', 'Campinas - Aparecida (D. Pedro I)', 'Campinas', 'Aparecida', '#0f766e', 3),
+  ('br459', 'Piquete - Aparecida (BR-459)', 'Piquete', 'Aparecida', '#7e22ce', 4)
+on conflict (slug) do nothing;
+
+-- Ajudante temporário: põe uma cidade numa rota, antes de outra cidade
+-- (ou no fim), e renumera a ordem da rota. Não faz nada se a cidade já
+-- estiver na rota.
+create or replace function public._m63_inserir_checkin(
+  p_slug text, p_cidade text, p_lat double precision, p_lng double precision, p_km numeric, p_antes_de text
+) returns void
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_rota uuid;
+  v_id uuid;
+  v_ids uuid[];
+  v_pos int;
+begin
+  select id into v_rota from public.rotas where slug = p_slug;
+  if v_rota is null then
+    raise exception 'rota % não encontrada', p_slug;
+  end if;
+  if exists (select 1 from public.pontos_checkin where rota_id = v_rota and cidade = p_cidade) then
+    return;
+  end if;
+  select coalesce(array_agg(id order by ordem, criado_em), '{}') into v_ids
+    from public.pontos_checkin where rota_id = v_rota;
+  v_pos := null;
+  if p_antes_de is not null then
+    select x.n into v_pos
+    from unnest(v_ids) with ordinality as x(id, n)
+    join public.pontos_checkin pc on pc.id = x.id
+    where pc.cidade = p_antes_de
+    order by x.n limit 1;
+  end if;
+  v_pos := coalesce(v_pos, coalesce(array_length(v_ids, 1), 0) + 1);
+  insert into public.pontos_checkin (rota_id, cidade, ordem, km_aproximado, latitude, longitude)
+  values (v_rota, p_cidade, 32000, p_km, p_lat, p_lng)
+  returning id into v_id;
+  v_ids := v_ids[1:v_pos - 1] || v_id || v_ids[v_pos:];
+  update public.pontos_checkin set ordem = ordem + 10000 where rota_id = v_rota and ordem < 10000;
+  update public.pontos_checkin set ordem = 20000 where id = v_id;
+  update public.pontos_checkin p set ordem = x.n
+    from unnest(v_ids) with ordinality as x(id, n)
+    where p.id = x.id;
+end;
+$$;
+
+do $$
+declare
+  v_sul uuid := (select id from public.rotas where slug = 'sul');
+  v_norte uuid := (select id from public.rotas where slug = 'norte');
+  v_campinas uuid := (select id from public.rotas where slug = 'campinas');
+  v_br459 uuid := (select id from public.rotas where slug = 'br459');
+  v_ordem int;
+  v_km numeric;
+  r record;
+begin
+  perform pg_advisory_xact_lock(hashtext('pontos_checkin_ordem'));
+
+  -- 1) RJ na rota sul (antes de Queluz) --------------------------------
+  if not exists (select 1 from public.pontos_checkin where rota_id = v_sul and cidade = 'Volta Redonda') then
+    update public.pontos_checkin set km_aproximado = km_aproximado + 78
+      where rota_id = v_sul and km_aproximado is not null;
+  end if;
+  perform public._m63_inserir_checkin('sul', 'Volta Redonda', -22.5202, -44.0996, 0, 'Queluz');
+  perform public._m63_inserir_checkin('sul', 'Barra Mansa', -22.5481, -44.1752, 9, 'Queluz');
+  perform public._m63_inserir_checkin('sul', 'Porto Real', -22.4175, -44.2952, 28, 'Queluz');
+  perform public._m63_inserir_checkin('sul', 'Resende', -22.4705, -44.4509, 44, 'Queluz');
+  perform public._m63_inserir_checkin('sul', 'Itatiaia', -22.4897, -44.5675, 57, 'Queluz');
+  update public.rotas set origem = 'Volta Redonda' where id = v_sul;
+
+  -- 2) Campinas pela D. Pedro I ----------------------------------------
+  if not exists (select 1 from public.pontos_checkin where rota_id = v_campinas) then
+    perform public._m63_inserir_checkin('campinas', 'Campinas', -22.9053, -47.0659, 0, null);
+    perform public._m63_inserir_checkin('campinas', 'Itatiba', -23.0035, -46.8464, 30, null);
+    perform public._m63_inserir_checkin('campinas', 'Atibaia', -23.1171, -46.5563, 69, null);
+    perform public._m63_inserir_checkin('campinas', 'Bom Jesus dos Perdões', -23.1356, -46.4675, 80, null);
+    perform public._m63_inserir_checkin('campinas', 'Nazaré Paulista', -23.1747, -46.3983, 90, null);
+    perform public._m63_inserir_checkin('campinas', 'Igaratá', -23.2037, -46.1570, 120, null);
+    -- de Jacareí em diante, igual à rota São Paulo - Aparecida
+    select ordem, km_aproximado into v_ordem, v_km
+      from public.pontos_checkin where rota_id = v_norte and cidade = 'Jacareí';
+    for r in
+      select cidade, latitude, longitude, km_aproximado from public.pontos_checkin
+      where rota_id = v_norte and ordem >= coalesce(v_ordem, 1) order by ordem
+    loop
+      perform public._m63_inserir_checkin('campinas', r.cidade, r.latitude, r.longitude,
+        case when r.km_aproximado is not null and v_km is not null then 147 + (r.km_aproximado - v_km) end, null);
+    end loop;
+  end if;
+
+  -- 3) Piquete pela BR-459 ---------------------------------------------
+  if not exists (select 1 from public.pontos_checkin where rota_id = v_br459) then
+    perform public._m63_inserir_checkin('br459', 'Piquete', -22.6069, -45.1869, 0, null);
+    select ordem, km_aproximado into v_ordem, v_km
+      from public.pontos_checkin where rota_id = v_sul and cidade = 'Lorena';
+    for r in
+      select cidade, latitude, longitude, km_aproximado from public.pontos_checkin
+      where rota_id = v_sul and ordem >= coalesce(v_ordem, 1) order by ordem
+    loop
+      perform public._m63_inserir_checkin('br459', r.cidade, r.latitude, r.longitude,
+        case when r.km_aproximado is not null and v_km is not null then 18 + (r.km_aproximado - v_km) end, null);
+    end loop;
+  end if;
+end;
+$$;
+
+drop function if exists public._m63_inserir_checkin(text, text, double precision, double precision, numeric, text);
+
+-- FIM DA MIGRATION 63

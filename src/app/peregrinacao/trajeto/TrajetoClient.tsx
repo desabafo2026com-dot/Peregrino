@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Circle, TriangleAlert, Megaphone, ThumbsUp, Ban } from "lucide-react";
-import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, CATEGORIA_SINISTRO_LABELS, rotaDutraBase } from "@/lib/constants";
 import { cidadeDoCaminhoProxima } from "@/lib/checkin-cidade";
 import { votarAviso, LIMITE_NAO_EXISTE, type TipoVotoAviso } from "@/lib/avisos-votos";
 import InformarSinistro from "@/components/InformarSinistro";
@@ -166,7 +166,7 @@ export default function TrajetoClient({
   const riscosOrdenados = [...riscosAFrente].sort((a, b) => {
     if (a.km_referencia == null) return 1;
     if (b.km_referencia == null) return -1;
-    return rota?.slug === "sul" ? a.km_referencia - b.km_referencia : b.km_referencia - a.km_referencia;
+    return rotaDutraBase(rota?.slug) === "sul" ? a.km_referencia - b.km_referencia : b.km_referencia - a.km_referencia;
   });
 
   // Os já feitos ganham no mapa o número da sequência em que foram feitos

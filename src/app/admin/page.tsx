@@ -1,3 +1,4 @@
+import ArtesRomariaPlusResumo, { type ResumoArtes } from "@/components/ArtesRomariaPlusResumo";
 import AcessosSiteResumo, { type EstatisticasAcessos } from "@/components/AcessosSiteResumo";
 import { createClient } from "@/lib/supabase/server";
 import { nomeRota, avisoVisivelPublicamente, papAtivoHoje, ehPeregrinacaoTeste } from "@/lib/constants";
@@ -136,6 +137,8 @@ export default async function AdminDashboardPage() {
   let papsPreCadastroAtivosMapa: PapPreCadastroMapa[] = [];
   // Rodada 50 — contador de acessos ao site (Migration 44).
   let acessos: EstatisticasAcessos | null = null;
+  // Rodada 75 — fotos/artes criadas, grátis e pagas.
+  let resumoArtes: ResumoArtes | null = null;
 
   if (isAdmin) {
     const [
@@ -183,6 +186,60 @@ export default async function AdminDashboardPage() {
       supabase.rpc("estatisticas_acessos"),
     ]);
     acessos = erroAcessos ? null : ((acessosData ?? null) as EstatisticasAcessos | null);
+
+    {
+      const [{ data: fotosArtes }, { data: comprasArtes }] = await Promise.all([
+        supabase.from("romaria_plus_fotos").select("compra_id, user_id, criado_em, contador_downloads, contador_compartilhamentos"),
+        supabase.from("compras_romaria_plus").select("id, user_id, valor_centavos, status"),
+      ]);
+      const equipe = new Set(
+        ((todosPerfis ?? []) as { id: string; is_admin: boolean; is_agente: boolean }[])
+          .filter((p) => p.is_admin || p.is_agente)
+          .map((p) => p.id)
+      );
+      const compraPorId = new Map(
+        ((comprasArtes ?? []) as { id: string; user_id: string; valor_centavos: number; status: string }[]).map((c) => [c.id, c])
+      );
+      const agoraMs = new Date().getTime();
+      const hojeBr = new Date(agoraMs).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      const r: ResumoArtes = {
+        gratis: { hoje: 0, d7: 0, total: 0 },
+        pagas: { hoje: 0, d7: 0, total: 0 },
+        downloads: 0,
+        compartilhamentos: 0,
+        comprasPagas: 0,
+        valorPagoCentavos: 0,
+        daEquipe: 0,
+      };
+      for (const f of (fotosArtes ?? []) as {
+        compra_id: string;
+        user_id: string;
+        criado_em: string;
+        contador_downloads: number;
+        contador_compartilhamentos: number;
+      }[]) {
+        if (equipe.has(f.user_id)) {
+          r.daEquipe++;
+          continue;
+        }
+        const c = compraPorId.get(f.compra_id);
+        if (!c || c.status !== "pago") continue;
+        const g = c.valor_centavos > 0 ? r.pagas : r.gratis;
+        g.total++;
+        const t = new Date(f.criado_em).getTime();
+        if (agoraMs - t <= 7 * 24 * 3600 * 1000) g.d7++;
+        if (new Date(f.criado_em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) === hojeBr) g.hoje++;
+        r.downloads += f.contador_downloads ?? 0;
+        r.compartilhamentos += f.contador_compartilhamentos ?? 0;
+      }
+      for (const c of compraPorId.values()) {
+        if (c.status === "pago" && c.valor_centavos > 0 && !equipe.has(c.user_id)) {
+          r.comprasPagas++;
+          r.valorPagoCentavos += c.valor_centavos;
+        }
+      }
+      resumoArtes = r;
+    }
 
     papsPreCadastroAtivosMapa = posicionarPapsPreCadastro({
       paps: ((preCadastro ?? []) as PapPreCadastro[]).filter((p) => papAtivoHoje(p.datas_funcionamento)),
@@ -554,6 +611,7 @@ export default async function AdminDashboardPage() {
       <VoltarButton href="/" />
 
       {isAdmin && <AcessosSiteResumo dados={acessos} />}
+      {isAdmin && resumoArtes && <ArtesRomariaPlusResumo dados={resumoArtes} />}
 
       {isAdmin && (
         <AdminDrilldownClient

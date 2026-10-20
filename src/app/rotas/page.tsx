@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, nomeRota, kmPertenceARota } from "@/lib/constants";
+import { NIVEL_RISCO_LABELS, SENTIDO_KM_ABREV, SENTIDO_PISTA_LABELS, nomeRota, kmPertenceARota, rotaDutraBase } from "@/lib/constants";
 import RiscoMapClient from "./RiscoMapClient";
 import QuadroResumoRiscos from "@/components/QuadroResumoRiscos";
 import FotoAmpliavel from "@/components/FotoAmpliavel";
@@ -86,7 +86,7 @@ export default async function RotasPage({
   const riscosOrdenados = [...((riscos ?? []) as PontoRisco[])].sort((a, b) => {
     if (a.km_referencia == null) return 1;
     if (b.km_referencia == null) return -1;
-    return rotaAtual?.slug === "sul"
+    return rotaDutraBase(rotaAtual?.slug) === "sul"
       ? a.km_referencia - b.km_referencia
       : b.km_referencia - a.km_referencia;
   });
