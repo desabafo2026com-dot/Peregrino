@@ -12,6 +12,8 @@ export interface CheckinCaderno {
 
 function normalizar(t: string | null | undefined) {
   return (t ?? "")
+    // "Itajubá - MG" → "Itajubá" (origem gravada com a UF, Rodada 75)
+    .replace(/\s*[-/]\s*[A-Za-z]{2}\s*$/, "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .trim()
@@ -19,9 +21,11 @@ function normalizar(t: string | null | undefined) {
 }
 
 // Supabase devolve a relação como objeto ou lista, conforme o tipo inferido.
-export function cidadeDoCheckin(rel: unknown): string | null {
+// Rodada 76 — check-in automático por município: sem cidade da rota
+// (ponto_checkin_id nulo), a cidade vem na própria linha (checkins.cidade).
+export function cidadeDoCheckin(rel: unknown, cidadePropria?: unknown): string | null {
   const r = Array.isArray(rel) ? rel[0] : rel;
-  return (r as { cidade?: string } | null)?.cidade ?? null;
+  return (r as { cidade?: string } | null)?.cidade ?? (typeof cidadePropria === "string" ? cidadePropria : null);
 }
 
 export function montarCarimbosCaderno(

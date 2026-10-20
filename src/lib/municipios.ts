@@ -105,11 +105,11 @@ export function municipioMaisProximo(lista: Municipio[], lat: number, lng: numbe
 
 // Por qual cidade de check-in a pessoa entra no caminho: a própria cidade,
 // se ela fizer parte de alguma rota (na ordem das rotas), ou a cidade de
-// check-in mais próxima (sem contar a chegada em Aparecida).
-export function pontoDeEntradaSugerido<P extends { id: string; cidade: string; latitude: number; longitude: number }>(
-  municipio: Municipio,
-  gruposPorRota: { cidades: P[] }[]
-): { ponto: P; distanciaKm: number } | null {
+// check-in mais próxima. Entre as que estão quase tão perto (até 10 km a
+// mais), fica a que está mais adiante no caminho — para não sugerir voltar.
+export function pontoDeEntradaSugerido<
+  P extends { id: string; cidade: string; latitude: number; longitude: number; km_aproximado?: number | null }
+>(municipio: Municipio, gruposPorRota: { cidades: P[] }[]): { ponto: P; distanciaKm: number } | null {
   const nome = normalizarNome(municipio.nome);
   for (const g of gruposPorRota) {
     const p = g.cidades.find(
@@ -117,12 +117,22 @@ export function pontoDeEntradaSugerido<P extends { id: string; cidade: string; l
     );
     if (p) return { ponto: p, distanciaKm: 0 };
   }
-  let melhor: { ponto: P; distanciaKm: number } | null = null;
+  const candidatos: { ponto: P; ate: number; falta: number }[] = [];
   for (const g of gruposPorRota) {
-    g.cidades.slice(0, -1).forEach((c) => {
-      const d = distanciaKm(municipio.lat, municipio.lng, c.latitude, c.longitude);
-      if (!melhor || d < melhor.distanciaKm) melhor = { ponto: c, distanciaKm: d };
-    });
+    const ultimo = g.cidades[g.cidades.length - 1];
+    if (!ultimo) continue;
+    for (const c of g.cidades.slice(0, -1)) {
+      candidatos.push({
+        ponto: c,
+        ate: distanciaKm(municipio.lat, municipio.lng, c.latitude, c.longitude),
+        falta: distanciaKm(c.latitude, c.longitude, ultimo.latitude, ultimo.longitude),
+      });
+    }
   }
-  return melhor;
+  if (candidatos.length === 0) return null;
+  const menor = Math.min(...candidatos.map((c) => c.ate));
+  const escolhido = candidatos
+    .filter((c) => c.ate <= menor + 10)
+    .sort((a, b) => a.falta - b.falta || a.ate - b.ate)[0];
+  return { ponto: escolhido.ponto, distanciaKm: escolhido.ate };
 }

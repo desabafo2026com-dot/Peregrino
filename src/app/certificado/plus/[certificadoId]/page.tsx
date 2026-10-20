@@ -1,3 +1,5 @@
+import { cidadeDoCheckin } from "@/lib/caderno-checkins";
+import { cidadesParaArte } from "@/lib/cidades-arte";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
@@ -98,9 +100,8 @@ export default async function CertificadoPlusPage({ params }: { params: Promise<
     supabase.from("peregrinacoes").select("cidade_origem, cidade_inicio").eq("id", cert.peregrinacao_id).maybeSingle(),
     supabase
       .from("checkins")
-      .select("criado_em, pontos_checkin(cidade)")
+      .select("criado_em, cidade, pontos_checkin(cidade)")
       .eq("peregrinacao_id", cert.peregrinacao_id)
-      .not("ponto_checkin_id", "is", null)
       .order("criado_em", { ascending: true }),
     // Rodada 54 — o modelo "Basílica" só aparece para administradores.
     supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
@@ -110,13 +111,14 @@ export default async function CertificadoPlusPage({ params }: { params: Promise<
     ...cert,
     origem: cert.origem ?? peregrinacao?.cidade_origem ?? peregrinacao?.cidade_inicio ?? null,
   };
-  const cidadesCheckin = (
-    (checkinsCidades ?? []) as {
-      pontos_checkin: { cidade: string } | { cidade: string }[] | null;
-    }[]
-  )
-    .map((c) => (Array.isArray(c.pontos_checkin) ? c.pontos_checkin[0]?.cidade : c.pontos_checkin?.cidade))
-    .filter((cidade): cidade is string => !!cidade);
+  // Rodada 76 — inclui os check-ins automáticos por cidade e, na arte,
+  // deixa só as 4 cidades maiores entre o início e a chegada.
+  const cidadesCheckin = cidadesParaArte(
+    ((checkinsCidades ?? []) as { cidade: string | null; pontos_checkin: unknown }[])
+      .map((c) => cidadeDoCheckin(c.pontos_checkin, c.cidade))
+      .filter((cidade): cidade is string => !!cidade),
+    certificadoComOrigem.origem ?? null
+  );
 
   const listaPacotesExtra = (pacotesExtra ?? []) as CompraRomariaPlus[];
   const pacotesExtraPagos = listaPacotesExtra.filter((p) => p.status === "pago").length;

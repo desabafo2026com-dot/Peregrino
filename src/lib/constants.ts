@@ -171,6 +171,13 @@ export const ROTA_FAIXA_KM: Record<string, string> = {
 // uma das duas rotas originais: Campinas (D. Pedro I) chega em Jacareí e
 // segue como a São Paulo - Aparecida; Piquete (BR-459) chega em Lorena e
 // segue como a Rio de Janeiro - Aparecida. Usado nas regras de km/riscos.
+// Rodada 76 — onde cada rota de acesso entra na Dutra (a altimetria só
+// mostra o trecho da Dutra).
+export const CIDADE_ENTRADA_DUTRA: Record<string, string> = {
+  campinas: "Jacareí",
+  br459: "Lorena",
+};
+
 export function rotaDutraBase(slug: string | null | undefined): string | null {
   if (!slug) return null;
   if (slug === "campinas") return "norte";

@@ -282,7 +282,6 @@ export default function PeregrinacaoClient({
   const [origemMunicipio, setOrigemMunicipio] = useState<Municipio | null>(null);
   const [cidadeOrigemLivre, setCidadeOrigemLivre] = useState("");
   const [entradaPontoId, setEntradaPontoId] = useState("");
-  const [entradaDistanciaKm, setEntradaDistanciaKm] = useState<number | null>(null);
   const [detectandoCidade, setDetectandoCidade] = useState(false);
   const [emGrupo, setEmGrupo] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
@@ -329,13 +328,22 @@ export default function PeregrinacaoClient({
 
   // Ponto de check-in por onde a pessoa entra no caminho (define a rota).
   const pontoEntrada = todasAsCidades.find((p) => p.id === entradaPontoId);
+  // Rodada 76 — "Caminho previsto" mostrado no plano: a origem, a cidade de
+  // entrada e as cidades da rota dali até Aparecida.
+  const caminhoPrevisto = (() => {
+    if (!pontoEntrada) return "";
+    const grupo = gruposCidades.find((g) => g.rota.id === pontoEntrada.rota_id);
+    const cidades = (grupo?.cidades ?? []).filter((c) => c.ordem >= pontoEntrada.ordem).map((c) => c.cidade);
+    const origem = origemMunicipio?.nome;
+    const lista = origem && normalizarNome(origem) !== normalizarNome(cidades[0]) ? [origem, ...cidades] : cidades;
+    return lista.join(" → ");
+  })();
 
   function escolherMunicipio(m: Municipio) {
     setOrigemModo("municipio");
     setOrigemMunicipio(m);
     const sugestao = pontoDeEntradaSugerido(m, gruposCidades);
     setEntradaPontoId(sugestao?.ponto.id ?? "");
-    setEntradaDistanciaKm(sugestao ? sugestao.distanciaKm : null);
   }
 
   // Texto gravado em cidade_origem: o nome puro quando a origem é uma das
@@ -534,7 +542,6 @@ export default function PeregrinacaoClient({
       (c) => c.rota_id === peregrinacao.rota_id && c.cidade === peregrinacao.cidade_inicio
     );
     setEntradaPontoId(entrada?.id ?? "");
-    setEntradaDistanciaKm(null);
     setEditandoPlano(true);
   }
 
@@ -686,6 +693,12 @@ export default function PeregrinacaoClient({
     if (!p.rota_id) return null;
     const primeiroPonto = [...pontosCheckin].sort((a, b) => a.ordem - b.ordem)[0];
     if (!primeiroPonto) return null;
+    // Rodada 76 — quem sai de uma cidade fora da rota (ex.: Itajubá) não
+    // ganha o check-in da cidade de entrada (ex.: Piquete) ao iniciar: ele
+    // é registrado sozinho quando a pessoa chegar lá (check-in por cidade).
+    if (p.cidade_origem && normalizarNome(p.cidade_origem.replace(/\s*[-/]\s*[A-Za-z]{2}\s*$/, "")) !== normalizarNome(primeiroPonto.cidade)) {
+      return null;
+    }
     const { data: jaFeito } = await supabase
       .from("checkins")
       .select("id")
@@ -1112,7 +1125,6 @@ export default function PeregrinacaoClient({
                       setOrigemMunicipio(null);
                       setCidadeOrigemLivre(digitado);
                       setEntradaPontoId("");
-                      setEntradaDistanciaKm(null);
                     }}
                   />
                 </div>
@@ -1142,16 +1154,26 @@ export default function PeregrinacaoClient({
                   />
                 </div>
               )}
-              {origemModo && (
+              {origemModo === "municipio" && pontoEntrada && (
+                <div className="mt-3 rounded-xl border border-green-200 bg-green-50/60 p-3 text-sm dark:border-green-900 dark:bg-green-950/20">
+                  <p className="font-semibold text-green-800 dark:text-green-400" style={{ textAlign: "left" }}>
+                    Check-in automático em cada cidade
+                  </p>
+                  <p className="mt-1 text-neutral-700 dark:text-neutral-200" style={{ textAlign: "left" }}>
+                    Com a localização compartilhada, cada cidade por onde você passar entra sozinha no seu caderno de
+                    bordo, com a hora. Caminho previsto: {caminhoPrevisto}.
+                  </p>
+                </div>
+              )}
+              {(origemModo === "outra" || (origemModo === "municipio" && !pontoEntrada)) && (
                 <div className="mt-3 rounded-xl border border-amber-200 p-3 dark:border-amber-900">
-                  <label className="label">Por qual cidade do caminho você vai entrar</label>
+                  <label className="label">Por qual cidade você vai chegar ao caminho</label>
                   <select
                     required
                     className="input"
                     value={entradaPontoId}
                     onChange={(e) => {
                       setEntradaPontoId(e.target.value);
-                      setEntradaDistanciaKm(null);
                     }}
                   >
                     <option value="" disabled>
@@ -1168,11 +1190,8 @@ export default function PeregrinacaoClient({
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-neutral-500" style={{ textAlign: "left" }}>
-                    {pontoEntrada && entradaDistanciaKm != null && entradaDistanciaKm > 0
-                      ? `Sugerida por ser a cidade de check-in mais perto da sua origem (cerca de ${Math.round(
-                          entradaDistanciaKm
-                        )} km em linha reta). Troque se você vai entrar por outra.`
-                      : "Os check-ins começam a partir desta cidade e a rota é escolhida por ela."}
+                    Só para quem vem de outro estado: define a previsão do tempo e os pontos de apoio do caminho. Os
+                    check-ins das cidades continuam automáticos.
                   </p>
                 </div>
               )}

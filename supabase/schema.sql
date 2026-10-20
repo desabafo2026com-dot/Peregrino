@@ -7171,3 +7171,378 @@ $$;
 drop function if exists public._m63_inserir_checkin(text, text, double precision, double precision, numeric, text);
 
 -- FIM DA MIGRATION 63
+
+
+-- ======================= peregrino_migration_64.sql (Rodada 76) =======================
+-- =====================================================================
+-- Migration 64 (Rodada 76)
+-- 1) Check-in automático por CIDADE (município): com a localização
+--    compartilhada, quando o peregrino entra em outro município, o
+--    check-in daquela cidade é registrado sozinho (qualquer cidade de SP,
+--    MG ou RJ, não só as da lista das rotas). Usa a extensão PostGIS
+--    (gratuita no Supabase) e os contornos dos municípios (base pública do
+--    IBGE), carregados depois pelo botão "Carregar contornos" no admin.
+--    Para evitar erro do GPS na divisa, a cidade só é registrada depois
+--    de pelo menos duas posições seguidas e 1 minuto dentro dela.
+-- 2) manutencao_rotina(): chamada a cada 5 dias pela Vercel (mantém o
+--    Supabase ativo, sem pausar) e apaga posições com mais de 30 dias:
+--    - a última posição (localizacoes_ativas) parada há mais de 30 dias;
+--    - nos check-ins com mais de 30 dias de peregrinações já encerradas, a
+--      posição exata vira o centro da cidade (a cidade, a data e a hora
+--      continuam — caderno de bordo, carimbos e artes não mudam).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 63.
+-- =====================================================================
+
+create schema if not exists extensions;
+create extension if not exists postgis with schema extensions;
+
+-- 1) Municípios ---------------------------------------------------------
+create table if not exists public.municipios (
+  ibge integer primary key,
+  nome text not null,
+  uf text not null,
+  populacao integer,
+  geom extensions.geometry(MultiPolygon, 4326) not null
+);
+create index if not exists idx_municipios_geom on public.municipios using gist (geom);
+
+comment on table public.municipios is 'Rodada 76 — contornos dos municípios de SP, MG e RJ (IBGE) para o check-in automático por cidade. População: Censo 2022.';
+
+alter table public.municipios enable row level security;
+drop policy if exists municipios_select_todos on public.municipios;
+create policy municipios_select_todos on public.municipios for select using (true);
+
+-- Carga feita pelo admin (botão no painel), em lotes. Cada item:
+-- {"ibge":..., "nome":..., "uf":..., "populacao":..., "geometria": <GeoJSON>}
+create or replace function public.admin_carregar_municipios(p_itens jsonb)
+returns integer
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_n integer := 0;
+  v jsonb;
+begin
+  if not public.is_admin() then
+    raise exception 'apenas administradores';
+  end if;
+  for v in select * from jsonb_array_elements(p_itens) loop
+    insert into public.municipios (ibge, nome, uf, populacao, geom)
+    values (
+      (v ->> 'ibge')::integer,
+      v ->> 'nome',
+      v ->> 'uf',
+      nullif(v ->> 'populacao', '')::integer,
+      st_multi(st_makevalid(st_setsrid(st_geomfromgeojson((v -> 'geometria')::text), 4326)))
+    )
+    on conflict (ibge) do update
+      set nome = excluded.nome, uf = excluded.uf, populacao = excluded.populacao, geom = excluded.geom;
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+revoke all on function public.admin_carregar_municipios(jsonb) from public;
+grant execute on function public.admin_carregar_municipios(jsonb) to authenticated;
+
+-- 2) Check-ins por município --------------------------------------------
+alter table public.checkins add column if not exists municipio_ibge integer;
+alter table public.checkins add column if not exists cidade text;
+alter table public.checkins add column if not exists posicao_generalizada boolean not null default false;
+create unique index if not exists uq_checkins_peregrinacao_municipio
+  on public.checkins (peregrinacao_id, municipio_ibge) where municipio_ibge is not null;
+
+comment on column public.checkins.cidade is 'Rodada 76 — cidade do check-in automático por município (quando não é uma cidade da lista da rota, ponto_checkin_id fica nulo).';
+
+alter table public.localizacoes_ativas add column if not exists municipio_candidato integer;
+alter table public.localizacoes_ativas add column if not exists municipio_candidato_vezes smallint not null default 0;
+alter table public.localizacoes_ativas add column if not exists municipio_candidato_desde timestamptz;
+
+create or replace function public.checkin_municipio_por_localizacao()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_pereg record;
+  v_mun record;
+  v_ordem_inicio integer;
+  v_ordem_final integer;
+  v_ponto uuid;
+begin
+  if new.precisao_m is not null and new.precisao_m > 500 then
+    return new;
+  end if;
+
+  select p.id, p.user_id, p.rota_id, p.cidade_inicio, p.status
+    into v_pereg
+  from public.peregrinacoes p
+  where p.id = new.peregrinacao_id;
+  if not found or v_pereg.status <> 'em_andamento' then
+    return new;
+  end if;
+
+  select m.ibge, m.nome into v_mun
+  from public.municipios m
+  where st_intersects(m.geom, st_setsrid(st_makepoint(new.longitude, new.latitude), 4326))
+  limit 1;
+  if v_mun.ibge is null then
+    new.municipio_candidato := null;
+    new.municipio_candidato_vezes := 0;
+    return new;
+  end if;
+
+  if new.municipio_candidato is distinct from v_mun.ibge then
+    new.municipio_candidato := v_mun.ibge;
+    new.municipio_candidato_vezes := 1;
+    new.municipio_candidato_desde := now();
+    return new;
+  end if;
+  new.municipio_candidato_vezes := least(coalesce(new.municipio_candidato_vezes, 0) + 1, 1000);
+  -- duas posições seguidas e pelo menos 1 minuto dentro da cidade
+  if new.municipio_candidato_vezes < 2
+     or coalesce(new.municipio_candidato_desde, now()) > now() - interval '60 seconds' then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('checkin_auto:' || v_pereg.id::text));
+
+  if exists (
+    select 1 from public.checkins c
+    where c.peregrinacao_id = v_pereg.id and c.municipio_ibge = v_mun.ibge
+  ) then
+    return new;
+  end if;
+
+  -- Se a cidade é uma das cidades da rota (fora a chegada em Aparecida,
+  -- que continua sendo registrada no "Finalizar"), o check-in vale também
+  -- como o check-in daquela cidade da rota.
+  if v_pereg.rota_id is not null then
+    select coalesce(min(pc.ordem), 1) into v_ordem_inicio
+    from public.pontos_checkin pc
+    where pc.rota_id = v_pereg.rota_id and pc.cidade = v_pereg.cidade_inicio;
+    select max(pc.ordem) into v_ordem_final
+    from public.pontos_checkin pc where pc.rota_id = v_pereg.rota_id;
+    select pc.id into v_ponto
+    from public.pontos_checkin pc
+    where pc.rota_id = v_pereg.rota_id
+      and pc.ordem >= v_ordem_inicio
+      and pc.ordem < v_ordem_final
+      and public.normalizar_texto_romaria(pc.cidade) = public.normalizar_texto_romaria(v_mun.nome)
+    order by pc.ordem
+    limit 1;
+  end if;
+
+  if v_ponto is not null and exists (
+    select 1 from public.checkins c where c.peregrinacao_id = v_pereg.id and c.ponto_checkin_id = v_ponto
+  ) then
+    update public.checkins
+      set municipio_ibge = v_mun.ibge, cidade = coalesce(cidade, v_mun.nome)
+      where peregrinacao_id = v_pereg.id and ponto_checkin_id = v_ponto and municipio_ibge is null;
+    return new;
+  end if;
+
+  insert into public.checkins (peregrinacao_id, user_id, ponto_checkin_id, latitude, longitude, municipio_ibge, cidade)
+  values (v_pereg.id, v_pereg.user_id, v_ponto, new.latitude, new.longitude, v_mun.ibge, v_mun.nome)
+  on conflict (peregrinacao_id, municipio_ibge) where municipio_ibge is not null do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_checkin_municipio on public.localizacoes_ativas;
+create trigger trg_checkin_municipio
+  before insert or update of latitude, longitude on public.localizacoes_ativas
+  for each row execute function public.checkin_municipio_por_localizacao();
+
+-- 3) Manutenção a cada 5 dias ------------------------------------------
+create or replace function public.manutencao_rotina()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_posicoes integer;
+  v_checkins integer;
+begin
+  delete from public.localizacoes_ativas
+  where atualizado_em < now() - interval '30 days';
+  get diagnostics v_posicoes = row_count;
+
+  update public.checkins c
+  set latitude = coalesce(pc.latitude, st_y(st_pointonsurface(m.geom)), c.latitude),
+      longitude = coalesce(pc.longitude, st_x(st_pointonsurface(m.geom)), c.longitude),
+      posicao_generalizada = true
+  from public.checkins c2
+  join public.peregrinacoes p on p.id = c2.peregrinacao_id
+  left join public.pontos_checkin pc on pc.id = c2.ponto_checkin_id
+  left join public.municipios m on m.ibge = c2.municipio_ibge
+  where c.id = c2.id
+    and not c2.posicao_generalizada
+    and c2.criado_em < now() - interval '30 days'
+    and p.status not in ('planejada', 'em_andamento');
+  get diagnostics v_checkins = row_count;
+
+  return jsonb_build_object(
+    'posicoes_apagadas', v_posicoes,
+    'checkins_generalizados', v_checkins,
+    'executado_em', now()
+  );
+end;
+$$;
+
+revoke all on function public.manutencao_rotina() from public;
+grant execute on function public.manutencao_rotina() to anon, authenticated;
+
+-- 4) Com os contornos carregados, o check-in por cidade substitui a regra
+--    antiga (até 8 km do centro das cidades da rota), e quem completa as
+--    cidades da rota que ficaram para trás só age nos check-ins que não
+--    vieram do contorno (o contorno sabe por onde a pessoa passou de fato).
+create or replace function public.checkin_automatico_por_localizacao()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_pereg record;
+  v_ordem_inicio integer;
+  v_ordem_final integer;
+  v_ponto_id uuid;
+  v_ponto_ordem integer;
+  v_dist_km double precision;
+begin
+  if new.precisao_m is not null and new.precisao_m > 1000 then
+    return new;
+  end if;
+
+  select p.id, p.user_id, p.rota_id, p.cidade_inicio, p.status
+    into v_pereg
+  from public.peregrinacoes p
+  where p.id = new.peregrinacao_id;
+
+  if not found or v_pereg.status <> 'em_andamento' or v_pereg.rota_id is null then
+    return new;
+  end if;
+
+  -- Rodada 76: com os contornos dos municípios carregados, quem registra é
+  -- o check-in por cidade (trg_checkin_municipio).
+  if exists (select 1 from public.municipios limit 1) then
+    return new;
+  end if;
+
+  select coalesce(min(pc.ordem), 1) into v_ordem_inicio
+  from public.pontos_checkin pc
+  where pc.rota_id = v_pereg.rota_id and pc.cidade = v_pereg.cidade_inicio;
+
+  select max(pc.ordem) into v_ordem_final
+  from public.pontos_checkin pc
+  where pc.rota_id = v_pereg.rota_id;
+
+  -- Cidade da caminhada mais próxima da posição atual (distância em linha
+  -- reta, fórmula de haversine).
+  select pc.id, pc.ordem,
+         6371 * 2 * asin(sqrt(
+           power(sin(radians(pc.latitude - new.latitude) / 2), 2)
+           + cos(radians(new.latitude)) * cos(radians(pc.latitude))
+             * power(sin(radians(pc.longitude - new.longitude) / 2), 2)
+         ))
+    into v_ponto_id, v_ponto_ordem, v_dist_km
+  from public.pontos_checkin pc
+  where pc.rota_id = v_pereg.rota_id and pc.ordem >= v_ordem_inicio
+  order by 3
+  limit 1;
+
+  if v_ponto_id is null
+     or v_dist_km > 8
+     or v_ponto_ordem = v_ordem_inicio
+     or v_ponto_ordem = v_ordem_final then
+    return new;
+  end if;
+
+  -- Evita dois check-ins da mesma cidade se duas posições chegarem juntas.
+  perform pg_advisory_xact_lock(hashtext('checkin_auto:' || v_pereg.id::text));
+
+  if exists (
+    select 1 from public.checkins c
+    where c.peregrinacao_id = v_pereg.id and c.ponto_checkin_id = v_ponto_id
+  ) then
+    return new;
+  end if;
+
+  insert into public.checkins (peregrinacao_id, user_id, ponto_checkin_id, latitude, longitude)
+  values (v_pereg.id, v_pereg.user_id, v_ponto_id, new.latitude, new.longitude);
+
+  return new;
+end;
+$function$;
+
+create or replace function public.preencher_checkins_intermediarios()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_rota uuid;
+  v_cidade_inicio text;
+  v_ordem_novo integer;
+  v_ordem_inicio integer;
+begin
+  -- Só reage ao check-in "de verdade", não aos que ela mesma insere.
+  -- (os inseridos aqui têm completado_automaticamente = true; o check-in
+  -- automático por localização, que também vem de um gatilho, conta).
+  if new.ponto_checkin_id is null or new.completado_automaticamente or new.municipio_ibge is not null then
+    return null;
+  end if;
+
+  select p.rota_id, p.cidade_inicio into v_rota, v_cidade_inicio
+  from public.peregrinacoes p where p.id = new.peregrinacao_id;
+  if v_rota is null then
+    return null;
+  end if;
+
+  select pc.ordem into v_ordem_novo
+  from public.pontos_checkin pc where pc.id = new.ponto_checkin_id and pc.rota_id = v_rota;
+  if v_ordem_novo is null then
+    return null;
+  end if;
+
+  select min(pc.ordem) into v_ordem_inicio
+  from public.pontos_checkin pc
+  where pc.rota_id = v_rota and pc.cidade = v_cidade_inicio;
+
+  if v_ordem_inicio is null then
+    select min(pc.ordem) into v_ordem_inicio
+    from public.checkins c join public.pontos_checkin pc on pc.id = c.ponto_checkin_id
+    where c.peregrinacao_id = new.peregrinacao_id and pc.rota_id = v_rota;
+  end if;
+  if v_ordem_inicio is null or v_ordem_novo - v_ordem_inicio < 2 then
+    return null;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('checkin_auto:' || new.peregrinacao_id::text));
+
+  insert into public.checkins
+    (peregrinacao_id, user_id, ponto_checkin_id, latitude, longitude, criado_em, completado_automaticamente)
+  select new.peregrinacao_id, new.user_id, pc.id, pc.latitude, pc.longitude,
+         new.criado_em - (v_ordem_novo - pc.ordem) * interval '1 second', true
+  from public.pontos_checkin pc
+  where pc.rota_id = v_rota
+    and pc.ordem > v_ordem_inicio
+    and pc.ordem < v_ordem_novo
+    and not exists (
+      select 1 from public.checkins c
+      where c.peregrinacao_id = new.peregrinacao_id and c.ponto_checkin_id = pc.id
+    )
+  order by pc.ordem;
+
+  return null;
+end;
+$function$;
+
+-- FIM DA MIGRATION 64

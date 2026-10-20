@@ -47,16 +47,15 @@ export default async function CadernoPage() {
     // Rodada 74 — check-ins nas cidades viram carimbos também.
     supabase
       .from("checkins")
-      .select("id, peregrinacao_id, criado_em, pontos_checkin(cidade)")
+      .select("id, peregrinacao_id, criado_em, cidade, pontos_checkin(cidade)")
       .eq("user_id", user.id)
-      .not("ponto_checkin_id", "is", null)
       .order("criado_em", { ascending: true }),
   ]);
   const checkins = (checkinsData ?? []).map((c) => ({
     id: c.id as string,
     peregrinacao_id: c.peregrinacao_id as string,
     criado_em: c.criado_em as string,
-    cidade: cidadeDoCheckin(c.pontos_checkin),
+    cidade: cidadeDoCheckin(c.pontos_checkin, c.cidade),
   }));
   const comCertificado = new Set(((certificadosData ?? []) as { peregrinacao_id: string }[]).map((c) => c.peregrinacao_id));
   const normalizar = (t: string | null | undefined) =>

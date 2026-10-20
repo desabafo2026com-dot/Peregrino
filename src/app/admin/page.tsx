@@ -1,4 +1,5 @@
 import ArtesRomariaPlusResumo, { type ResumoArtes } from "@/components/ArtesRomariaPlusResumo";
+import AdminContornosMunicipios from "@/components/AdminContornosMunicipios";
 import AcessosSiteResumo, { type EstatisticasAcessos } from "@/components/AcessosSiteResumo";
 import { createClient } from "@/lib/supabase/server";
 import { nomeRota, avisoVisivelPublicamente, papAtivoHoje, ehPeregrinacaoTeste } from "@/lib/constants";
@@ -139,6 +140,9 @@ export default async function AdminDashboardPage() {
   let acessos: EstatisticasAcessos | null = null;
   // Rodada 75 — fotos/artes criadas, grátis e pagas.
   let resumoArtes: ResumoArtes | null = null;
+  // Rodada 76 — quantos contornos de municípios já estão no banco (null =
+  // Migration 64 ainda não rodada).
+  let municipiosCarregados: number | null = null;
 
   if (isAdmin) {
     const [
@@ -239,6 +243,11 @@ export default async function AdminDashboardPage() {
         }
       }
       resumoArtes = r;
+    }
+
+    {
+      const { count, error } = await supabase.from("municipios").select("ibge", { count: "exact", head: true });
+      municipiosCarregados = error ? null : (count ?? 0);
     }
 
     papsPreCadastroAtivosMapa = posicionarPapsPreCadastro({
@@ -612,6 +621,7 @@ export default async function AdminDashboardPage() {
 
       {isAdmin && <AcessosSiteResumo dados={acessos} />}
       {isAdmin && resumoArtes && <ArtesRomariaPlusResumo dados={resumoArtes} />}
+      {isAdmin && <AdminContornosMunicipios carregados={municipiosCarregados} />}
 
       {isAdmin && (
         <AdminDrilldownClient

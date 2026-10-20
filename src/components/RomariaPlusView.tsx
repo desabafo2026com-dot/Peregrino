@@ -1293,8 +1293,10 @@ export default function RomariaPlusView({
     }
     return lista;
   })();
+  // Rodada 76 — origem gravada como "Cidade - UF": no carimbo vai só o nome.
+  const origemSemUf = origem ? origem.replace(/\s*[-/]\s*[A-Za-z]{2}\s*$/, "").trim() : null;
   const origemCarimbo =
-    origem && !ehAparecida(origem) ? origem.trim() : (cidadesUnicas[0] ?? null);
+    origemSemUf && !ehAparecida(origemSemUf) ? origemSemUf : (cidadesUnicas[0] ?? null);
   const carimbos = cidadesUnicas
     .filter((cidade) => !origemCarimbo || normalizar(cidade) !== normalizar(origemCarimbo))
     .slice(0, 15);

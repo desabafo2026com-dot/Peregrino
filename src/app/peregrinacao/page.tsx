@@ -12,7 +12,7 @@ import TempoNoCaminho from "@/components/TempoNoCaminho";
 import { perfilAltimetria, subidaEntre } from "@/lib/altimetria";
 import { previsaoCaminho } from "@/lib/tempo-caminho";
 import { CloudSun, Mountain } from "lucide-react";
-import { kmPertenceARota, avisoVisivelPublicamente, hojeISO } from "@/lib/constants";
+import { kmPertenceARota, avisoVisivelPublicamente, hojeISO, CIDADE_ENTRADA_DUTRA } from "@/lib/constants";
 import { posicionarPapsPreCadastro } from "@/lib/pap-pre-cadastro-mapa";
 import type { Peregrinacao, PontoApoio, PontoCheckin, PontoRisco, RiscoInformado, Profile, Rota, PapPreCadastro } from "@/types/database";
 
@@ -210,9 +210,8 @@ export default async function PeregrinacaoPage() {
         : Promise.resolve(null),
       supabase
         .from("checkins")
-        .select("id, ponto_checkin_id, criado_em, pontos_checkin(cidade)")
+        .select("id, ponto_checkin_id, criado_em, cidade, pontos_checkin(cidade)")
         .eq("peregrinacao_id", peregrinacao.id)
-        .not("ponto_checkin_id", "is", null)
         // Na ordem em que foram feitos — o mapa numera os check-ins nessa
         // sequência (Rodada 46).
         .order("criado_em", { ascending: true }),
@@ -237,7 +236,7 @@ export default async function PeregrinacaoPage() {
     checkinsCaderno = (feitos ?? []).map((f) => ({
       id: f.id as string,
       criado_em: f.criado_em as string,
-      cidade: cidadeDoCheckin(f.pontos_checkin),
+      cidade: cidadeDoCheckin(f.pontos_checkin, f.cidade),
     }));
   }
 
@@ -270,16 +269,22 @@ export default async function PeregrinacaoPage() {
     const pontosRotaOrdenados = todosPontosCheckin
       .filter((p) => p.rota_id === peregrinacao.rota_id)
       .sort((a, b) => a.ordem - b.ordem);
+    // Rodada 76 — altimetria só do trecho da Dutra (rotas de acesso, como
+    // a D. Pedro I e a BR-459, entram na Dutra no meio do caminho).
+    const slugRota = ((rotas ?? []) as Rota[]).find((r) => r.id === peregrinacao.rota_id)?.slug ?? "";
+    const entradaDutra = CIDADE_ENTRADA_DUTRA[slugRota];
+    const idxEntradaDutra = entradaDutra ? pontosRotaOrdenados.findIndex((p) => p.cidade === entradaDutra) : -1;
+    const pontosDutra = idxEntradaDutra > 0 ? pontosRotaOrdenados.slice(idxEntradaDutra) : pontosRotaOrdenados;
     const feitos = new Set(checkinsFeitosIds);
     const ultimoFeito = [...pontosRotaOrdenados].reverse().find((p) => feitos.has(p.id)) ?? null;
     const ordemBase = ultimoFeito?.ordem ?? pontosCheckin[0]?.ordem ?? 1;
     const aFrente = pontosRotaOrdenados.filter((p) => p.ordem >= ordemBase).slice(0, 6);
     [perfilAlt, previsoes] = await Promise.all([
-      perfilAltimetria(pontosRotaOrdenados),
+      perfilAltimetria(pontosDutra),
       previsaoCaminho(aFrente.map((p) => ({ cidade: p.cidade, lat: p.latitude, lng: p.longitude }))),
     ]);
     if (perfilAlt && peregrinacao.status === "em_andamento" && ultimoFeito) {
-      const idx = pontosRotaOrdenados.findIndex((p) => p.id === ultimoFeito.id);
+      const idx = pontosDutra.findIndex((p) => p.id === ultimoFeito.id);
       kmAtual = perfilAlt.cidades[idx]?.km ?? null;
       if (kmAtual != null && kmAtual < perfilAlt.kmTotal) {
         proximos = { km: 10, ...subidaEntre(perfilAlt, kmAtual, kmAtual + 10) };
