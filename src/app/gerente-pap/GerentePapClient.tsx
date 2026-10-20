@@ -248,7 +248,8 @@ export default function GerentePapClient({
                 <Link
                   href={`/gerente-pap/pap/${p.id}/qrcode`}
                   className="rounded-lg p-2 text-amber-700 hover:bg-amber-50 dark:text-amber-500 dark:hover:bg-amber-950/40"
-                  aria-label="QR code do PAP para imprimir"
+                  aria-label="QR code e carimbo virtual do PAP"
+                  title="QR code e carimbo virtual"
                 >
                   <QrCode size={18} />
                 </Link>

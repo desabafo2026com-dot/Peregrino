@@ -1,3 +1,4 @@
+import ImagemCarimbo from "@/components/ImagemCarimbo";
 import { dataHoraCarimbo, giroCarimbo, svgCarimbo, svgCarimboCidade, type DadosCarimbo } from "@/lib/carimbo-svg";
 
 // Rodada 68 — carimbo do caderno de bordo: nome do PAP em volta, km no
@@ -15,9 +16,8 @@ export default function CarimboPap({ carimbo, girar = true }: { carimbo: DadosCa
   if (carimbo.imagem_url) {
     return (
       <div role="img" aria-label={rotulo} className="flex w-full flex-col items-center" style={{ transform }}>
-        {/* Rodada 74 — "multiply" some com o fundo branco de imagens antigas. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={carimbo.imagem_url} alt="" className="aspect-square w-full object-contain" style={{ mixBlendMode: "multiply" }} />
+        {/* Rodada 77 — o branco de imagens antigas some na hora de mostrar. */}
+        <ImagemCarimbo src={carimbo.imagem_url} />
         <span className="mt-0.5 text-[10px] font-bold text-neutral-600" style={{ textAlign: "center" }}>
           {data} · {hora}
         </span>

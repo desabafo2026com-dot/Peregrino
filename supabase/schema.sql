@@ -7546,3 +7546,115 @@ end;
 $function$;
 
 -- FIM DA MIGRATION 64
+
+
+-- ======================= peregrino_migration_65.sql (Rodada 77) =======================
+-- =====================================================================
+-- Migration 65 (Rodada 77)
+-- O gerente do PAP também pode definir o carimbo virtual do seu PAP (foto
+-- do carimbo de verdade ou uma imagem, que o app transforma em carimbo).
+-- - carimbo_do_meu_pap(pap): token e imagem atual (gerente do PAP ou admin)
+-- - gerente_definir_carimbo(pap, url): troca a imagem (ou volta ao padrão)
+-- - o gerente pode enviar imagens só para a própria pasta no bucket
+--   "carimbos" (gerente/<id do usuário>/...).
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 64.
+-- =====================================================================
+
+create or replace function public.carimbo_do_meu_pap(p_pap_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_pa public.pontos_apoio;
+  v_q public.paps_qr;
+begin
+  select * into v_pa from public.pontos_apoio where id = p_pap_id;
+  if not found or not (public.is_admin() or coalesce(v_pa.gerente_id = auth.uid(), false)) then
+    return null;
+  end if;
+  select * into v_q from public.paps_qr where pap_id = v_pa.id limit 1;
+  if v_q.id is null and v_pa.pre_cadastro_id is not null then
+    select * into v_q from public.paps_qr where pre_cadastro_id = v_pa.pre_cadastro_id limit 1;
+  end if;
+  if v_q.id is null then
+    return null;
+  end if;
+  return jsonb_build_object('token', v_q.token, 'carimbo_url', v_q.carimbo_url);
+end;
+$$;
+
+revoke all on function public.carimbo_do_meu_pap(uuid) from public;
+grant execute on function public.carimbo_do_meu_pap(uuid) to authenticated;
+
+create or replace function public.gerente_definir_carimbo(p_pap_id uuid, p_url text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_pa public.pontos_apoio;
+  v_url text := nullif(trim(coalesce(p_url, '')), '');
+begin
+  select * into v_pa from public.pontos_apoio where id = p_pap_id;
+  if not found or not (public.is_admin() or coalesce(v_pa.gerente_id = auth.uid(), false)) then
+    raise exception 'Somente o gerente deste PAP.';
+  end if;
+  -- só imagens enviadas pelo próprio gerente (pasta dele no bucket carimbos)
+  if v_url is not null and not public.is_admin()
+     and v_url not like '%/storage/v1/object/public/carimbos/gerente/' || auth.uid()::text || '/%' then
+    raise exception 'Imagem inválida.';
+  end if;
+  update public.paps_qr set carimbo_url = v_url
+  where pap_id = v_pa.id
+     or (v_pa.pre_cadastro_id is not null and pre_cadastro_id = v_pa.pre_cadastro_id);
+end;
+$$;
+
+revoke all on function public.gerente_definir_carimbo(uuid, text) from public;
+grant execute on function public.gerente_definir_carimbo(uuid, text) to authenticated;
+
+drop policy if exists "carimbos_insert_gerente" on storage.objects;
+create policy "carimbos_insert_gerente" on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'carimbos'
+    and (storage.foldername(name))[1] = 'gerente'
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+-- Correção: com PAP sem gerente, a comparação dava "nulo" e a função
+-- seguia em frente; agora só o gerente do PAP (ou o admin) recebe o token.
+create or replace function public.token_qr_do_pap(p_pap_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_pa public.pontos_apoio;
+  v_token text;
+begin
+  select * into v_pa from public.pontos_apoio where id = p_pap_id;
+  if not found then
+    return null;
+  end if;
+  if not (public.is_admin() or coalesce(v_pa.gerente_id = auth.uid(), false)) then
+    return null;
+  end if;
+  select q.token into v_token from public.paps_qr q where q.pap_id = v_pa.id limit 1;
+  if v_token is null and v_pa.pre_cadastro_id is not null then
+    select q.token into v_token from public.paps_qr q where q.pre_cadastro_id = v_pa.pre_cadastro_id limit 1;
+  end if;
+  return v_token;
+end;
+$$;
+
+revoke all on function public.token_qr_do_pap(uuid) from public;
+grant execute on function public.token_qr_do_pap(uuid) to authenticated;
+
+-- FIM DA MIGRATION 65

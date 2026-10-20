@@ -3,7 +3,7 @@
 // carimbos dos PAPs separados por cidade e, no fim, o carimbo de Nossa
 // Senhora Aparecida ("Ela me protegeu com seu manto" · "Aparecida-SP").
 // Tudo gerado no próprio aparelho (sem servidor e sem custo).
-import { removerFundoClaro } from "@/lib/fundo-transparente";
+import { limparBrancoTodo } from "@/lib/efeito-carimbo";
 import { dataHoraCarimbo, giroCarimbo, svgCarimbo, svgCarimboCidade, svgCarimboSaida, svgCarimboSanta, type DadosCarimbo } from "@/lib/carimbo-svg";
 
 export interface CapaCaderno {
@@ -46,12 +46,12 @@ async function imagemParaPng(url: string, lado: number, giroGraus = 0): Promise<
   ctx.translate(lado / 2, lado / 2);
   ctx.rotate((giroGraus * Math.PI) / 180);
   const escala = (lado * 0.86) / Math.max(img.width, img.height);
-  // Rodada 74 — tira o fundo branco antes de girar (imagens antigas).
+  // Rodada 74/77 — tira o branco (fundo e interior) antes de girar (imagens antigas).
   const base = document.createElement("canvas");
   base.width = Math.round(img.width * escala);
   base.height = Math.round(img.height * escala);
   base.getContext("2d")!.drawImage(img, 0, 0, base.width, base.height);
-  removerFundoClaro(base);
+  limparBrancoTodo(base);
   ctx.drawImage(base, -base.width / 2, -base.height / 2);
   return canvas.toDataURL("image/png");
 }
