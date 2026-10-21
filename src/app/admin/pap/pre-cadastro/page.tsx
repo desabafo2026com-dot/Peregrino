@@ -25,7 +25,7 @@ export default async function PreCadastroAdminPage() {
   return (
     <div>
       <VoltarButton href="/admin/pap" />
-      <h2 className="mb-1 text-xl font-bold">PAP pré-cadastrados — posição no mapa</h2>
+      <h2 className="mb-1 text-xl font-bold">PAP pré-cadastrados — dados, datas e posição no mapa</h2>
       <p className="mb-6 text-sm text-neutral-500">
         Lista pública de PAP reais que ainda não têm um gerente vinculado. Sem posição marcada,
         eles aparecem no mapa só pela aproximação da cidade — use &quot;Reposicionar&quot; para

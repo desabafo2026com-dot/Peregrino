@@ -7,6 +7,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Rodada 78 — arquivos estáticos (dados, artes, fontes, ícones) não
+    // passam pela checagem de login: cada passagem consultava o Supabase.
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons|dados/|arte/|fonts/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json|woff2?|txt|xml|pdf|mp4)$).*)",
   ],
 };

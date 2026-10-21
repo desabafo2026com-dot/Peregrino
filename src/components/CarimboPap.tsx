@@ -18,7 +18,15 @@ export default function CarimboPap({ carimbo, girar = true }: { carimbo: DadosCa
       <div role="img" aria-label={rotulo} className="flex w-full flex-col items-center" style={{ transform }}>
         {/* Rodada 77 — o branco de imagens antigas some na hora de mostrar. */}
         <ImagemCarimbo src={carimbo.imagem_url} />
-        <span className="mt-0.5 text-[10px] font-bold text-neutral-600" style={{ textAlign: "center" }}>
+        {/* Rodada 78 — o carimbo próprio também mostra a cidade e o km. */}
+        {(carimbo.cidade || carimbo.km != null) && (
+          <span className="mt-0.5 text-[10px] font-extrabold tracking-wide text-neutral-700 uppercase" style={{ textAlign: "center" }}>
+            {[carimbo.cidade, carimbo.km != null ? `km ${Number(carimbo.km).toLocaleString("pt-BR")}` : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        )}
+        <span className="text-[10px] font-bold text-neutral-600" style={{ textAlign: "center" }}>
           {data} · {hora}
         </span>
       </div>

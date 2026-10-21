@@ -288,9 +288,18 @@ export async function exportarCadernoPdf(carimbos: DadosCarimbo[], capa: CapaCad
       pdf.addImage(png, "PNG", xc, y, LADO, LADO);
       if (c.imagem_url && c.tipo !== "cidade") {
         const { data, hora } = dataHoraCarimbo(c.carimbado_em);
+        // Rodada 78 — cidade e km também no carimbo próprio.
+        const local = [c.cidade, c.km != null ? `km ${Number(c.km).toLocaleString("pt-BR")}` : null]
+          .filter(Boolean)
+          .join(" · ")
+          .toUpperCase();
         pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(8);
         pdf.setTextColor(90, 70, 40);
+        if (local) {
+          pdf.setFontSize(7.5);
+          pdf.text(local, xc + LADO / 2, y + LADO - 1.8, { align: "center", maxWidth: LADO });
+        }
+        pdf.setFontSize(8);
         pdf.text(`${data} · ${hora}`, xc + LADO / 2, y + LADO + 1.5, { align: "center" });
       }
     }

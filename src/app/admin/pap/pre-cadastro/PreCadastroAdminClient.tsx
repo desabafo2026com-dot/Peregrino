@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, MapPinned, MapPin, CheckCircle2, CalendarDays } from "lucide-react";
+import { Search, MapPinned, MapPin, CheckCircle2, CalendarDays, Pencil } from "lucide-react";
 import { SENTIDO_PISTA_LABELS } from "@/lib/constants";
 import type { PapPreCadastro } from "@/types/database";
 
@@ -62,6 +62,15 @@ export default function PreCadastroAdminClient({ itensIniciais }: { itensIniciai
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
+                {/* Rodada 78 — editar os dados do PAP ainda sem gerente. */}
+                {!item.reivindicado_por && (
+                  <Link
+                    href={`/admin/pap/pre-cadastro/${item.id}/editar`}
+                    className="flex items-center gap-1 rounded-lg border border-amber-300 px-2 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/40"
+                  >
+                    <Pencil size={14} /> Editar
+                  </Link>
+                )}
                 <Link
                   href={`/admin/pap/pre-cadastro/${item.id}/datas`}
                   className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
