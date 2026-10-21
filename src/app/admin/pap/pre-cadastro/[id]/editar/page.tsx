@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import VoltarButton from "@/components/VoltarButton";
 import EditarPreCadastroClient from "./EditarPreCadastroClient";
+import DatasPreCadastroClient from "../datas/DatasPreCadastroClient";
 import type { PapPreCadastro } from "@/types/database";
 
 // Rodada 78 — a administração corrige os dados de um PAP pré-cadastrado
@@ -34,6 +35,13 @@ export default async function EditarPreCadastroPage({ params }: { params: Promis
         As mudanças aparecem no mapa, na lista de PAPs, no cartaz e no carimbo do QR code deste PAP.
       </p>
       <EditarPreCadastroClient item={item as PapPreCadastro} />
+
+      <h3 className="mt-8 mb-1 text-lg font-bold">Datas de funcionamento</h3>
+      <p className="mb-3 text-sm text-neutral-500" style={{ textAlign: "left" }}>
+        Marque os dias em que o PAP vai funcionar (de qualquer ano). Só nesses dias ele aparece como ativo no mapa e
+        na contagem da home.
+      </p>
+      <DatasPreCadastroClient item={item as PapPreCadastro} />
     </div>
   );
 }

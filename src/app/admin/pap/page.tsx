@@ -35,7 +35,7 @@ export default async function AdminPapPage() {
             href="/admin/pap/pre-cadastro"
             className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
           >
-            <MapPin size={16} /> Posição dos PAP pré-cadastrados
+            <MapPin size={16} /> PAPs sem gerente: editar, datas e posição
           </Link>
         </div>
       </div>
