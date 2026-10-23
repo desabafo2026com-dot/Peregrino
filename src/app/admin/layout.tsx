@@ -24,6 +24,7 @@ import {
   QrCode,
   SearchCheck,
   Siren,
+  Footprints,
 } from "lucide-react";
 
 // "Locais de risco" fica só perto do mapa (mesmo destino de "Cadastrar PAP"
@@ -47,6 +48,7 @@ const ADMIN_LINK_GROUPS = [
     links: [
       { href: "/admin", label: "Painel", icon: LayoutDashboard },
       { href: "/admin/analytics", label: "Dashboard de métricas", icon: BarChart3 },
+      { href: "/admin/movimento", label: "Pessoas por cidade (real e simulada)", icon: Footprints },
     ],
   },
   {

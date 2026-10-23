@@ -7658,3 +7658,184 @@ revoke all on function public.token_qr_do_pap(uuid) from public;
 grant execute on function public.token_qr_do_pap(uuid) to authenticated;
 
 -- FIM DA MIGRATION 65
+
+
+-- ======================= peregrino_migration_66.sql (Rodada 80) =======================
+-- =====================================================================
+-- Migration 66 (Rodada 80)
+-- Movimento por cidade (Admin → Geral → Pessoas por cidade): uma função só
+-- de leitura, exclusiva do administrador, que devolve para um dia:
+--   - as peregrinações que estavam na estrada naquele dia (com grupo e
+--     tamanho do grupo declarados ao planejar);
+--   - os check-ins por cidade delas (com a cidade e uma coordenada da cidade);
+--   - a última posição de quem está caminhando agora, já com a cidade
+--     (contorno dos municípios da Rodada 76);
+--   - as Romarias cadastradas em execução naquele dia.
+-- A tela calcula no navegador, para qualquer horário da régua, em que
+-- cidade cada peregrino estava (último check-in até aquele horário) e a
+-- estimativa com o resto do grupo. Não devolve nome, telefone nem e-mail.
+-- (idempotente — pode ser executado novamente sem problema)
+-- RODAR DEPOIS DA MIGRATION 65.
+-- =====================================================================
+
+create or replace function public.admin_movimento_cidades(p_dia date)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_ini timestamptz;
+  v_fim timestamptz;
+  v_res jsonb;
+begin
+  if not public.is_admin() then
+    raise exception 'apenas administradores';
+  end if;
+
+  v_ini := (p_dia::timestamp at time zone 'America/Sao_Paulo');
+  v_fim := v_ini + interval '1 day';
+
+  with pereg as (
+    select
+      p.id,
+      p.status,
+      p.data_inicio,
+      case
+        when p.status = 'em_andamento' then null
+        else coalesce(p.data_fim, p.data_inicio)
+      end as fim,
+      p.em_grupo,
+      nullif(trim(p.nome_grupo), '') as nome_grupo,
+      p.tamanho_grupo,
+      p.cidade_inicio,
+      p.cidade_origem,
+      p.motivo,
+      p.motivo_outro_desc,
+      pr.motivo::text as perfil_motivo,
+      pr.motivo_outro_desc as perfil_motivo_outro_desc
+    from public.peregrinacoes p
+    left join public.profiles pr on pr.id = p.user_id
+    where p.data_inicio is not null
+      and p.status <> 'planejada'
+      and p.data_inicio < v_fim
+      and (
+        p.status = 'em_andamento'
+        or coalesce(p.data_fim, p.data_inicio) >= v_ini
+      )
+  ),
+  pereg_json as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'id', g.id,
+      'status', g.status,
+      'inicio', g.data_inicio,
+      'fim', g.fim,
+      'em_grupo', g.em_grupo,
+      'nome_grupo', g.nome_grupo,
+      'tamanho_grupo', g.tamanho_grupo,
+      'cidade_inicio', g.cidade_inicio,
+      'cidade_origem', g.cidade_origem,
+      'inicio_lat', ci.lat,
+      'inicio_lon', ci.lon,
+      'motivo', g.motivo,
+      'motivo_outro_desc', g.motivo_outro_desc,
+      'perfil_motivo', g.perfil_motivo,
+      'perfil_motivo_outro_desc', g.perfil_motivo_outro_desc
+    )), '[]'::jsonb) as j
+    from pereg g
+    left join lateral (
+      select x.lat, x.lon from (
+        select pc.latitude as lat, pc.longitude as lon, 1 as prio
+        from public.pontos_checkin pc
+        where g.cidade_inicio is not null and lower(pc.cidade) = lower(g.cidade_inicio)
+        union all
+        select st_y(st_pointonsurface(m.geom)), st_x(st_pointonsurface(m.geom)), 2
+        from public.municipios m
+        where g.cidade_inicio is not null and lower(m.nome) = lower(g.cidade_inicio)
+      ) x order by x.prio limit 1
+    ) ci on true
+  ),
+  eventos as (
+    select
+      c.peregrinacao_id,
+      c.criado_em as em,
+      coalesce(nullif(trim(c.cidade), ''), pc.cidade, m.nome) as cidade,
+      c.municipio_ibge as ibge,
+      coalesce(pcn.latitude, pc.latitude, st_y(st_pointonsurface(m.geom)), c.latitude) as lat,
+      coalesce(pcn.longitude, pc.longitude, st_x(st_pointonsurface(m.geom)), c.longitude) as lon,
+      'checkin'::text as tipo
+    from public.checkins c
+    join pereg g on g.id = c.peregrinacao_id
+    left join public.pontos_checkin pc on pc.id = c.ponto_checkin_id
+    left join public.municipios m on m.ibge = c.municipio_ibge
+    left join lateral (
+      select p2.latitude, p2.longitude from public.pontos_checkin p2
+      where c.ponto_checkin_id is null and c.cidade is not null and lower(p2.cidade) = lower(c.cidade)
+      limit 1
+    ) pcn on true
+    where c.criado_em < v_fim
+    union all
+    select
+      l.peregrinacao_id,
+      l.atualizado_em,
+      m.nome,
+      m.ibge,
+      coalesce(pcn.latitude, st_y(st_pointonsurface(m.geom))),
+      coalesce(pcn.longitude, st_x(st_pointonsurface(m.geom))),
+      'agora'::text
+    from public.localizacoes_ativas l
+    join pereg g on g.id = l.peregrinacao_id
+    left join lateral (
+      select m1.* from public.municipios m1
+      where st_contains(m1.geom, st_setsrid(st_makepoint(l.longitude, l.latitude), 4326))
+      limit 1
+    ) m on true
+    left join lateral (
+      select p2.latitude, p2.longitude from public.pontos_checkin p2
+      where m.nome is not null and lower(p2.cidade) = lower(m.nome)
+      limit 1
+    ) pcn on true
+    where l.atualizado_em < v_fim
+  ),
+  eventos_json as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'peregrinacao_id', e.peregrinacao_id,
+      'em', e.em,
+      'cidade', e.cidade,
+      'ibge', e.ibge,
+      'lat', e.lat,
+      'lon', e.lon,
+      'tipo', e.tipo
+    ) order by e.em), '[]'::jsonb) as j
+    from eventos e
+  ),
+  romarias_json as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'id', r.id,
+      'nome', r.nome,
+      'cidade_origem', r.cidade_origem,
+      'quantidade', r.quantidade,
+      'data_inicio', r.data_inicio,
+      'previsao_dias', r.previsao_dias
+    ) order by r.nome), '[]'::jsonb) as j
+    from public.romarias_grupo r
+    where r.status = 'aprovado'
+      and p_dia between r.data_inicio and r.data_inicio + (r.previsao_dias - 1)
+  )
+  select jsonb_build_object(
+    'dia', p_dia,
+    'gerado_em', now(),
+    'peregrinacoes', (select j from pereg_json),
+    'eventos', (select j from eventos_json),
+    'romarias', (select j from romarias_json)
+  ) into v_res;
+
+  return v_res;
+end;
+$$;
+
+revoke all on function public.admin_movimento_cidades(date) from public;
+grant execute on function public.admin_movimento_cidades(date) to authenticated;
+
+-- FIM DA MIGRATION 66

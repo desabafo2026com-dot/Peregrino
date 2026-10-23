@@ -286,6 +286,37 @@ export default function PeregrinacaoClient({
   const [emGrupo, setEmGrupo] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
   const [tamanhoGrupo, setTamanhoGrupo] = useState("");
+  // Rodada 80 — sugestões de nome do grupo: Romarias cadastradas em execução
+  // ou próximas. Mesmo nome entre os do grupo = o grupo é contado uma vez só
+  // na estimativa de pessoas por cidade da administração.
+  const [romariasSugeridas, setRomariasSugeridas] = useState<{ nome: string; quantidade: number }[] | null>(null);
+  useEffect(() => {
+    if (!emGrupo || romariasSugeridas) return;
+    let cancelado = false;
+    const hojeStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+    const limite = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+    const desde = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    createClient()
+      .from("romarias_grupo_publico")
+      .select("nome, quantidade, data_inicio, previsao_dias")
+      .gte("data_inicio", desde)
+      .lte("data_inicio", limite)
+      .order("data_inicio", { ascending: true })
+      .then(({ data }) => {
+        if (cancelado) return;
+        const lista = ((data ?? []) as { nome: string; quantidade: number; data_inicio: string; previsao_dias: number }[])
+          .filter((r) => {
+            const fim = new Date(`${r.data_inicio}T12:00:00-03:00`);
+            fim.setDate(fim.getDate() + Math.max(1, r.previsao_dias) - 1);
+            return fim.toISOString().slice(0, 10) >= hojeStr;
+          })
+          .map((r) => ({ nome: r.nome, quantidade: r.quantidade }));
+        setRomariasSugeridas(lista);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [emGrupo, romariasSugeridas]);
   // Sempre em branco (Rodada 32, mesmo motivo do "motivo" logo abaixo): não
   // reaproveita o valor salvo no perfil de uma peregrinação anterior — cada
   // peregrinação nova começa com a pergunta em aberto, mesmo que a pessoa já
@@ -1280,9 +1311,23 @@ export default function PeregrinacaoClient({
               <input
                 className="input"
                 value={nomeGrupo}
-                onChange={(e) => setNomeGrupo(e.target.value)}
+                list="romarias-sugeridas"
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  setNomeGrupo(valor);
+                  const romaria = romariasSugeridas?.find((r) => r.nome === valor);
+                  if (romaria && !tamanhoGrupo) setTamanhoGrupo(String(romaria.quantidade));
+                }}
                 placeholder="Ex: Grupo Nossa Senhora Aparecida"
               />
+              <datalist id="romarias-sugeridas">
+                {(romariasSugeridas ?? []).map((r, i) => (
+                  <option key={`${r.nome}-${i}`} value={r.nome} />
+                ))}
+              </datalist>
+              <p className="mt-1 text-xs text-neutral-500">
+                Se outras pessoas do grupo também usam o app, usem o mesmo nome. Se o grupo é uma Romaria cadastrada, escolha na lista.
+              </p>
             </div>
           )}
           {/* Rodada 74 — pedido ou agradecimento (opcional) no plano. */}
