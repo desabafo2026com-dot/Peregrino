@@ -127,7 +127,13 @@ export default function MovimentoClient() {
           setPasso(maxPassoDoDia(dia));
         } else {
           // Dia passado: abre no horário de pico da estimativa.
-          const motorDia = new MotorMovimento(d.peregrinacoes, d.eventos, d.romarias);
+          const motorDia = new MotorMovimento(
+            d.peregrinacoes.filter(
+              (p) => !ehPeregrinacaoTeste(p, { motivo: p.perfil_motivo, motivo_outro_desc: p.perfil_motivo_outro_desc })
+            ),
+            d.eventos,
+            d.romarias
+          );
           let melhor = 48;
           let maior = -1;
           for (let p = 0; p < PASSOS_DIA; p++) {
@@ -444,7 +450,8 @@ export default function MovimentoClient() {
       {/* Grupos */}
       {resultado && resultado.grupos.some((g) => g.grupo.como !== "sozinho") && (
         <div className="card overflow-x-auto">
-          <p className="mb-2 text-sm font-semibold">Grupos na estrada às {rotuloHorario}</p>
+          <p className="text-sm font-semibold">Grupos na estrada às {rotuloHorario}</p>
+          <p className="mb-2 text-xs text-neutral-500">Nome e tamanho digitados pelo peregrino em &quot;Vou em grupo&quot; ao planejar.</p>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500 dark:border-neutral-800">
@@ -474,6 +481,26 @@ export default function MovimentoClient() {
                 ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {motor && motor.paradas.length > 0 && (
+        <div className="card text-sm">
+          <p className="mb-1 font-semibold">Peregrinações abertas sem sinal há mais de 24 horas</p>
+          <p className="mb-2 text-xs text-neutral-500">
+            Continuam &quot;em andamento&quot; no app, mas sem check-in nem posição há mais de 24 h (provavelmente não foram
+            finalizadas). Contam só até 24 h depois do último sinal.
+          </p>
+          <ul className="list-disc pl-5">
+            {motor.paradas.map((p) => (
+              <li key={p.id}>
+                {p.grupo}
+                {p.tamanho ? ` (${fmt(p.tamanho)} ${p.tamanho === 1 ? "pessoa" : "pessoas"})` : ""} — início{" "}
+                {new Date(p.inicio).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}, último sinal{" "}
+                {new Date(p.ultimoSinal).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

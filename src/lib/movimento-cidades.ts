@@ -84,6 +84,17 @@ export interface ResultadoMomento {
 }
 
 export const SEM_CIDADE = "__sem_cidade__";
+// Peregrinação "em andamento" sem nenhum sinal (check-in ou posição) há mais
+// que isto deixa de contar como na estrada: muita gente não finaliza no app.
+export const HORAS_SEM_SINAL = 24;
+
+export interface PeregParada {
+  id: string;
+  grupo: string;
+  tamanho: number | null;
+  inicio: string;
+  ultimoSinal: string;
+}
 export const MINUTOS_PASSO = 15;
 export const PASSOS_DIA = (24 * 60) / MINUTOS_PASSO;
 
@@ -179,8 +190,10 @@ export class MotorMovimento {
   private peregs: Map<string, PeregMov>;
   private eventos: Map<string, { t: number; ev: EventoMov }[]>;
   readonly grupos: Grupo[];
+  readonly paradas: PeregParada[] = [];
+  private fimEfetivo = new Map<string, number>();
 
-  constructor(peregs: PeregMov[], eventos: EventoMov[], romarias: RomariaMov[]) {
+  constructor(peregs: PeregMov[], eventos: EventoMov[], romarias: RomariaMov[], agora = Date.now()) {
     this.peregs = new Map(peregs.map((p) => [p.id, p]));
     this.eventos = new Map();
     for (const ev of eventos) {
@@ -190,6 +203,27 @@ export class MotorMovimento {
       this.eventos.set(ev.peregrinacao_id, lista);
     }
     for (const lista of this.eventos.values()) lista.sort((a, b) => a.t - b.t);
+    for (const p of peregs) {
+      const inicio = new Date(p.inicio).getTime();
+      if (p.fim) {
+        this.fimEfetivo.set(p.id, new Date(p.fim).getTime());
+        continue;
+      }
+      const lista = this.eventos.get(p.id) ?? [];
+      const ultimo = Math.max(inicio, lista.length ? lista[lista.length - 1].t : inicio);
+      const limite = ultimo + HORAS_SEM_SINAL * 3600 * 1000;
+      if (limite < agora) {
+        this.fimEfetivo.set(p.id, limite);
+        this.paradas.push({
+          id: p.id,
+          grupo: p.em_grupo ? (p.nome_grupo?.trim() || "Grupo sem nome") : "Sozinho",
+          tamanho: p.em_grupo ? p.tamanho_grupo : 1,
+          inicio: p.inicio,
+          ultimoSinal: new Date(ultimo).toISOString(),
+        });
+      }
+    }
+    this.paradas.sort((a, b) => a.ultimoSinal.localeCompare(b.ultimoSinal));
     this.grupos = montarGrupos(peregs, romarias);
   }
 
@@ -197,7 +231,8 @@ export class MotorMovimento {
     const p = this.peregs.get(id);
     if (!p) return null;
     if (t < new Date(p.inicio).getTime()) return null;
-    if (p.fim && t > new Date(p.fim).getTime()) return null;
+    const fim = this.fimEfetivo.get(id);
+    if (fim != null && t > fim) return null;
     const lista = this.eventos.get(id) ?? [];
     let ultimo: EventoMov | null = null;
     for (const item of lista) {
